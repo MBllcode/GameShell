@@ -36,6 +36,17 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Komunikaty pokazuja sie po probie zapisu/nawigacji lub blur, i znikaja od razu po korekcie.
 - Ograniczenie do 2 ekranow pozostaje osobnym inline warningiem `LIMIT`.
 
+## Krok Skroty profilu
+
+- Walidacja duplikatu hotkey ma byc lokalna, czerwona i osadzona bezposrednio przy polu hotkey.
+- Podczas `NASLUCHIWANIE` pole zachowuje stan bledu (`aria-invalid`) i nie moze byc zagluszone przez globalny hotkey hosta.
+- Nowy profil nie dziedziczy hotkeya po poprzednio wybranym profilu.
+
+## Zachowanie aplikacji
+
+- `Startuj z Windows` i `Startuj zminimalizowany do tray` sa ustawieniami runtime, nie tylko dekoracja UI.
+- `Startuj zminimalizowany do tray` moze byc wlaczone tylko gdy autostart jest wlaczony.
+
 ## Responsywnosc
 
 - UI musi dzialac czytelnie dla 1280x720 i 1600x900.

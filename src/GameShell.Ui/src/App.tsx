@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { sendBridgeCommand, subscribeBridgeEvent } from './services/webViewBridge';
 import type {
   AppSettings,
@@ -190,6 +190,7 @@ export function App() {
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [isEditingSection, setIsEditingSection] = useState(false);
   const [isCreatingProfileFlow, setIsCreatingProfileFlow] = useState(false);
+  const [hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [pendingNavigationAction, setPendingNavigationAction] = useState<PendingNavigationAction | null>(null);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -213,6 +214,7 @@ export function App() {
   const [pcGamingProfileBehaviours, setPcGamingProfileBehaviours] = useState<PcGamingProfileBehaviourMap>({});
   const [pcGamingProfileLaunchers, setPcGamingProfileLaunchers] = useState<PcGamingProfileLauncherMap>({});
   const [pcGamingProfileHotkeys, setPcGamingProfileHotkeys] = useState<PcGamingProfileHotkeysMap>({});
+  const [profileHotkeyValidationError, setProfileHotkeyValidationError] = useState<string | null>(null);
   const [selectedPcGamingBehaviourProfileName, setSelectedPcGamingBehaviourProfileName] = useState('');
   const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', pcGamingMode: '', workMode: '' });
   const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
@@ -238,6 +240,10 @@ export function App() {
   const handleDisplayValidationStateChange = useCallback((state: DisplayValidationState) => {
     setDisplayValidationState(state);
   }, []);
+
+  useEffect(() => {
+    setProfileHotkeyValidationError(null);
+  }, [selectedPcGamingBehaviourProfileName]);
 
   useEffect(() => {
     let isMounted = true;
@@ -333,7 +339,7 @@ export function App() {
           const nextHotkeys = pcGamingProfileHotkeys[fallbackProfileName] ?? defaultProfileHotkeys;
           return {
             ...current,
-            pcGamingMode: nextHotkeys.enterProfile
+            pcGamingMode: normalizeHotkeyForDisplay(nextHotkeys.enterProfile)
           };
         });
       }
@@ -347,7 +353,7 @@ export function App() {
       const nextHotkeys = pcGamingProfileHotkeys[selectedPcGamingBehaviourProfileName] ?? defaultProfileHotkeys;
       return {
         ...current,
-        pcGamingMode: nextHotkeys.enterProfile
+        pcGamingMode: normalizeHotkeyForDisplay(nextHotkeys.enterProfile)
       };
     });
   }, [
@@ -374,7 +380,7 @@ export function App() {
     const nextProfileBehaviours = buildProfileBehaviourMap(loadedProfiles, loadedProfileConfigurations, loadedProfileBehaviours, defaultBehaviour);
     const nextProfileLaunchers = buildProfileLauncherMap(loadedProfiles, loadedProfileConfigurations, defaultLauncher);
     const nextProfileHotkeys = buildProfileHotkeysMap(loadedProfiles, loadedProfileConfigurations, {
-      enterProfile: loadedSettings.hotkeys?.pcGamingMode ?? ''
+      enterProfile: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.pcGamingMode ?? '')
     });
     const selectedProfileName = activeProfile?.name ?? loadedProfiles[0]?.name ?? '';
 
@@ -388,9 +394,9 @@ export function App() {
     setSelectedPcGamingBehaviourProfileName(selectedProfileName);
     setPcGamingLayout(activeProfile?.layout ?? loadedSettings.display?.pcGamingLayout ?? null);
     setHotkeys({
-      consoleMode: loadedSettings.hotkeys?.consoleMode || '',
-      pcGamingMode: loadedSettings.hotkeys?.pcGamingMode || '',
-      workMode: loadedSettings.hotkeys?.workMode || ''
+      consoleMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.consoleMode || ''),
+      pcGamingMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.pcGamingMode || ''),
+      workMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.workMode || '')
     });
     setLauncher(nextProfileLaunchers[selectedProfileName] ?? defaultLauncher);
     setConsoleBehaviour({
@@ -471,17 +477,20 @@ export function App() {
   }
 
   function updateProfileHotkey(profileName: string, key: keyof ProfileHotkeysState, value: string) {
-    if (key === 'enterProfile' && isDuplicateProfileEnterHotkey(profileName, value, pcGamingProfileHotkeys)) {
-      setError('Ten hotkey wejścia jest już przypisany do innego profilu. Wybierz inną kombinację.');
+    const normalizedValue = normalizeHotkeyForDisplay(value);
+
+    if (key === 'enterProfile' && isDuplicateProfileEnterHotkey(profileName, normalizedValue, pcGamingProfileHotkeys)) {
+      setProfileHotkeyValidationError('Ten skrót jest już przypisany do innego profilu. Wybierz inną kombinację.');
       return;
     }
 
+    setProfileHotkeyValidationError(null);
     setError(null);
     setPcGamingProfileHotkeys((current) => ({
       ...current,
       [profileName]: {
         ...(current[profileName] ?? defaultProfileHotkeys),
-        [key]: value
+        [key]: normalizedValue
       }
     }));
     markUnsavedChanges();
@@ -489,7 +498,7 @@ export function App() {
     if (selectedPcGamingBehaviourProfileName === profileName) {
       setHotkeys((current) => ({
         ...current,
-        pcGamingMode: key === 'enterProfile' ? value : current.pcGamingMode
+        pcGamingMode: key === 'enterProfile' ? normalizedValue : current.pcGamingMode
       }));
     }
   }
@@ -540,7 +549,7 @@ export function App() {
             targetDisplayId: selectedConsoleDisplay?.monitorDevicePath ?? null
           },
           hotkeys: {
-            enterProfile: (effectivePcGamingProfileHotkeys[profile.name]?.enterProfile ?? savedHotkeys.enterProfile ?? '').trim(),
+            enterProfile: normalizeHotkeyForDisplay(effectivePcGamingProfileHotkeys[profile.name]?.enterProfile ?? savedHotkeys.enterProfile ?? ''),
             enterWorkMode: ''
           }
         })),
@@ -579,9 +588,9 @@ export function App() {
       },
       controller: settings?.controller ?? { enabled: false, consoleMode: null, pcGamingMode: null, workMode: null },
       hotkeys: {
-        consoleMode: hotkeys.consoleMode.trim(),
-        pcGamingMode: (savedHotkeys.enterProfile || hotkeys.pcGamingMode).trim(),
-        workMode: hotkeys.workMode.trim()
+        consoleMode: normalizeHotkeyForDisplay(hotkeys.consoleMode),
+        pcGamingMode: normalizeHotkeyForDisplay(savedHotkeys.enterProfile || hotkeys.pcGamingMode),
+        workMode: normalizeHotkeyForDisplay(hotkeys.workMode)
       },
       startup: {
         startWithWindows: finishOptions.startWithWindows,
@@ -672,6 +681,16 @@ export function App() {
       return;
     }
 
+    if (isCreatingProfileFlow && action === 'goBack') {
+      void executeNavigation(action);
+      return;
+    }
+
+    if (isCreatingProfileFlow && action === 'returnToDashboard' && !hasAdvancedInCreateProfileFlow) {
+      void executeNavigation(action);
+      return;
+    }
+
     if (!hasUnsavedChanges) {
       void executeNavigation(action);
       return;
@@ -735,6 +754,9 @@ export function App() {
     const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
     if (typeof nextIndex === 'number') {
       setStepIndex(nextIndex);
+      if (isCreatingProfileFlow) {
+        setHasAdvancedInCreateProfileFlow(true);
+      }
     }
     setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
   }
@@ -748,6 +770,9 @@ export function App() {
     const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
     if (typeof nextIndex === 'number') {
       setStepIndex(nextIndex);
+      if (isCreatingProfileFlow) {
+        setHasAdvancedInCreateProfileFlow(true);
+      }
     }
     setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
   }
@@ -873,6 +898,7 @@ export function App() {
     setError(null);
     setIsEditingSection(false);
     setIsCreatingProfileFlow(false);
+    setHasAdvancedInCreateProfileFlow(false);
     setIsSetupComplete(true);
     syncDisplayProfileDraft({ profileName: '', identities: [] });
     setShowOverwriteProfileDialog(false);
@@ -1021,9 +1047,13 @@ export function App() {
     };
     const nextProfileHotkeys: PcGamingProfileHotkeysMap = {
       ...pcGamingProfileHotkeys,
-      [resolvedProfileName]: pcGamingProfileHotkeys[resolvedProfileName] ?? {
-        enterProfile: hotkeys.pcGamingMode
-      }
+      [resolvedProfileName]: existingProfile
+        ? (pcGamingProfileHotkeys[resolvedProfileName] ?? {
+          enterProfile: hotkeys.pcGamingMode
+        })
+        : {
+          enterProfile: ''
+        }
     };
 
     setPcGamingProfiles(nextProfiles);
@@ -1170,8 +1200,14 @@ export function App() {
           const targetIndex = steps.findIndex((step) => step.id === 'gaming-display');
           setIsEditingSection(false);
           setIsCreatingProfileFlow(true);
+          setHasAdvancedInCreateProfileFlow(false);
           setIsSetupComplete(false);
           syncDisplayProfileDraft({ profileName: '', identities: [] });
+          setProfileHotkeyValidationError(null);
+          setHotkeys((current) => ({
+            ...current,
+            pcGamingMode: ''
+          }));
           setShowOverwriteProfileDialog(false);
           setStepIndex(targetIndex >= 0 ? targetIndex : 0);
           setMessage('Dodaj nowy profil i przejdź przez kroki profilu.');
@@ -1180,6 +1216,7 @@ export function App() {
           const targetIndex = steps.findIndex((step) => step.id === stepId);
           setIsEditingSection(true);
           setIsCreatingProfileFlow(false);
+          setHasAdvancedInCreateProfileFlow(false);
           setIsSetupComplete(false);
           if (stepId === 'gaming-display') {
             const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedPcGamingBehaviourProfileName) ?? null;
@@ -1205,7 +1242,7 @@ export function App() {
             <img className="brand-mark" src="/assets/GameShell.png" alt="" aria-hidden="true" />
             <div>
               <p>GameShell Setup</p>
-              <small>lokalny kreator Windows</small>
+              <small>lokalne profile gamingowe</small>
             </div>
           </div>
           <ol className="step-list">
@@ -1311,6 +1348,7 @@ export function App() {
                 pcGamingProfiles={pcGamingProfiles}
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
                 hotkeys={hotkeys}
+                hotkeyValidationError={profileHotkeyValidationError}
                 onChangeHotkey={(key, value) => {
                   const profileName = selectedPcGamingBehaviourProfileName;
                   if (!profileName) {
@@ -1554,7 +1592,7 @@ function Dashboard({
             <img className="brand-mark" src="/assets/GameShell.png" alt="" aria-hidden="true" />
             <div>
               <p>GameShell</p>
-              <small>tryby lokalne Windows</small>
+              <small>lokalne profile gamingowe</small>
             </div>
           </header>
 
@@ -1609,8 +1647,9 @@ function Dashboard({
           <header className="masthead">
             <div>
               <h1 id="app-title">GameShell</h1>
-              <p className="intro">Wybierz następny tryb albo popraw konkretną część konfiguracji.</p>
+              <p className="intro">Wybierz profil gamingowy albo dostosuj konfigurację GameShell.</p>
             </div>
+            <span className="status-pill">PANEL GŁÓWNY</span>
           </header>
 
           <section className="setup-page">
@@ -1620,52 +1659,56 @@ function Dashboard({
                   <div className="profile-module-header">
                     <div className="profile-module-title-wrap">
                       <h2 id="dashboard-modes-title" className="profile-module-title">Zapisane profile ekranów</h2>
+                    </div>
+                    <div className="profile-module-header-actions">
                       <small className="profile-module-count">
                         {pcGamingProfiles.length} {profileCountLabel}
                       </small>
+                      <button
+                        className="secondary-button compact add-profile-head-button"
+                        type="button"
+                        onClick={createProfile}
+                        disabled={isRemovingProfile}
+                      >
+                        + Dodaj profil
+                      </button>
                     </div>
-                    <button
-                      className="secondary-button compact add-profile-head-button"
-                      type="button"
-                      onClick={createProfile}
-                      disabled={isRemovingProfile}
-                    >
-                      + Dodaj profil
-                    </button>
                   </div>
 
-                  <div className="profile-quick-list" role="listbox" aria-label="Lista profili PC Gaming">
-                    {pcGamingProfiles.map((profile) => {
-                      const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
-                      const isProfileConfiguredAsActive = activeProfileName === profile.name;
-                      const isProfileSelectedForEditing = selectedProfileName === profile.name;
-                      const isPcGamingNow = status.currentMode === 'PcGaming';
-                      const stateLabel = isPcGamingNow && isProfileConfiguredAsActive
-                        ? 'AKTYWNY'
-                        : isProfileSelectedForEditing
-                          ? 'ZAZNACZONY'
-                          : 'GOTOWY';
+                  <div className="profile-list-shell">
+                    <div className="profile-quick-list" role="listbox" aria-label="Lista profili PC Gaming">
+                      {pcGamingProfiles.map((profile) => {
+                        const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
+                        const isProfileConfiguredAsActive = activeProfileName === profile.name;
+                        const isProfileSelectedForEditing = selectedProfileName === profile.name;
+                        const isPcGamingNow = status.currentMode === 'PcGaming';
+                        const stateLabel = isPcGamingNow && isProfileConfiguredAsActive
+                          ? 'AKTYWNY'
+                          : isProfileSelectedForEditing
+                            ? 'ZAZNACZONY'
+                            : 'GOTOWY';
 
-                      return (
-                        <button
-                          className={`profile-quick-row ${isProfileSelectedForEditing ? 'selected' : ''} ${isPcGamingNow && isProfileConfiguredAsActive ? 'active' : ''}`}
-                          type="button"
-                          key={profile.name}
-                          disabled={isModeSwitching || isRemovingProfile}
-                          onClick={() => selectProfile(profile.name)}
-                          role="option"
-                          aria-selected={isProfileSelectedForEditing}
-                        >
-                          <div className="profile-quick-main">
-                            <strong>{profile.name}</strong>
-                            <small>{summarizeLayout(profile.layout)} · {profileLauncher}</small>
-                          </div>
-                          <div className="profile-quick-meta">
-                            <span className="profile-quick-state">{stateLabel}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            className={`profile-quick-row ${isProfileSelectedForEditing ? 'selected' : ''} ${isPcGamingNow && isProfileConfiguredAsActive ? 'active' : ''}`}
+                            type="button"
+                            key={profile.name}
+                            disabled={isModeSwitching || isRemovingProfile}
+                            onClick={() => selectProfile(profile.name)}
+                            role="option"
+                            aria-selected={isProfileSelectedForEditing}
+                          >
+                            <div className="profile-quick-main">
+                              <strong>{profile.name}</strong>
+                              <small>{summarizeLayout(profile.layout)} · {profileLauncher}</small>
+                            </div>
+                            <div className="profile-quick-meta">
+                              <span className="profile-quick-state">{stateLabel}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="profile-actions profile-module-footer">
@@ -1690,7 +1733,7 @@ function Dashboard({
                 {pcGamingProfiles.length === 0 ? <p className="hint-line">Brak zapisanych profili. Dodaj profil w sekcji Ekrany.</p> : null}
               </section>
 
-              <section className="dashboard-band" aria-label="Konfiguracja">
+              <section className="dashboard-band dashboard-config-section" aria-label="Konfiguracja">
                 <div className="dashboard-section-head compact">
                   <div>
                     <p className="eyebrow">Konfiguracja</p>
@@ -1881,7 +1924,6 @@ function DisplaysStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Ekrany</h2>
       <section className="settings-section">
-        <h3>Wykryte ekrany</h3>
         <p>Wybierz ekrany należące do profilu.</p>
         <DisplayDiagnosticsPanel
           displays={displays}
@@ -1964,11 +2006,10 @@ function DisplayDiagnosticsPanel({
   }
 
   return (
-    <section className="display-diagnostics" aria-labelledby="display-diagnostics-title">
-      <div className="display-diagnostics-head">
+    <section className="display-diagnostics display-module" aria-label="Dostępne ekrany">
+      <div className="display-diagnostics-head display-module-header">
         <div>
-          <h3 id="display-diagnostics-title">Wykryte ekrany</h3>
-          <p>Lista monitorów wykrytych przez Windows, także tych chwilowo wyłączonych.</p>
+          <p>Lista ekranów wykrytych przez Windows, także tych chwilowo wyłączonych.</p>
         </div>
         <div className="display-diagnostics-actions">
           <button className="secondary-button compact" type="button" disabled={isRefreshing} onClick={refreshDisplays}>
@@ -1976,85 +2017,101 @@ function DisplayDiagnosticsPanel({
           </button>
         </div>
       </div>
-      <label className="profile-input-group">
-        Nazwa profilu
-        <input
-          className="text-input"
-          type="text"
-          value={profileName}
-          onChange={(event) => setProfileName(event.target.value)}
-          onBlur={() => {
-            const shouldShowNameError = profileName.trim().length === 0;
-            onValidationStateChange({
-              ...validationState,
-              showNameError: shouldShowNameError
-            });
-          }}
-          aria-invalid={showNameError}
-          aria-describedby={showNameError ? 'profile-name-validation-error' : undefined}
-          placeholder="np. Salon TV + biurko"
-        />
-      </label>
-      {showNameError ? (
-        <div id="profile-name-validation-error" className="field-validation-error" role="alert">
-          Podaj nazwę profilu.
-        </div>
-      ) : null}
-      {displayLimitMessage ? (
-        <div className="inline-notice inline-notice-warning" role="alert" aria-live="assertive">
-          <span className="inline-notice-label">LIMIT</span>
-          <div className="inline-notice-copy">
-            <strong>{displayLimitMessage}</strong>
-            <span>Obsługa większej liczby monitorów zostanie dodana później.</span>
+      <div className="display-module-body">
+        <div className="profile-name-section">
+          <div className="profile-name-header">
+            <label className="profile-name-label" htmlFor="profile-name-input">Nazwa profilu</label>
+            <span className="selection-count" aria-live="polite">
+              Wybrano <strong>{selectedDisplays.length}/{MAX_PROFILE_DISPLAYS}</strong>
+            </span>
           </div>
+          <input
+            id="profile-name-input"
+            className="text-input profile-name-input"
+            type="text"
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+            onBlur={() => {
+              const shouldShowNameError = profileName.trim().length === 0;
+              onValidationStateChange({
+                ...validationState,
+                showNameError: shouldShowNameError
+              });
+            }}
+            aria-invalid={showNameError}
+            aria-describedby={showNameError ? 'profile-name-validation-error' : undefined}
+            placeholder="np. Salon TV + biurko"
+          />
         </div>
-      ) : null}
-      {showSelectionError ? (
-        <div className="selection-validation-error" role="alert">
-          Wybierz co najmniej jeden ekran.
-        </div>
-      ) : null}
-      {error ? <p className="error-line display-error">{error}</p> : null}
-      {!error && displays.length === 0 ? <p className="hint-line">Nie wykryto ekranów.</p> : null}
-      {displays.length > 0 ? (
-        <div className="display-list">
-          {displays.map((display) => {
-            const isSelected = selectedDisplays.some((selectedDisplay) => sameIdentity(selectedDisplay, display.identity));
-            const displayState = isSelected ? 'selected' : display.isEnabled ? 'available' : 'inactive';
-            const feedbackKey = display.id || `${display.adapterLuid}:${display.targetId}`;
-            return (
-              <article
-                className={`display-item ${displayState} ${limitFeedbackKey === feedbackKey ? 'limit-hit' : ''}`}
-                key={feedbackKey}
-                role="button"
-                tabIndex={0}
-                aria-pressed={isSelected}
-                aria-label={`Ekran ${display.name || 'Nieznany ekran'}`}
-                onClick={() => handleDisplayToggle(display)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') {
-                    return;
-                  }
+        {showNameError ? (
+          <div id="profile-name-validation-error" className="field-validation-error" role="alert">
+            Podaj nazwę profilu.
+          </div>
+        ) : null}
+        {displayLimitMessage ? (
+          <div className="inline-notice inline-notice-warning" role="alert" aria-live="assertive">
+            <span className="inline-notice-label">LIMIT</span>
+            <div className="inline-notice-copy">
+              <strong>{displayLimitMessage}</strong>
+              <span>Obsługa większej liczby ekranów zostanie dodana później.</span>
+            </div>
+          </div>
+        ) : null}
+        {showSelectionError ? (
+          <div className="selection-validation-error" role="alert">
+            Wybierz co najmniej jeden ekran.
+          </div>
+        ) : null}
+        {error ? <p className="error-line display-error">{error}</p> : null}
+        {!error && displays.length === 0 ? <p className="hint-line">Nie wykryto ekranów.</p> : null}
+        {displays.length > 0 ? (
+          <div className="display-grid">
+            {displays.map((display) => {
+              const isSelected = selectedDisplays.some((selectedDisplay) => sameIdentity(selectedDisplay, display.identity));
+              const feedbackKey = display.id || `${display.adapterLuid}:${display.targetId}`;
+              const displayClasses = [
+                'display-card',
+                display.isEnabled ? 'is-available' : 'is-inactive',
+                isSelected ? 'is-selected' : '',
+                limitFeedbackKey === feedbackKey ? 'limit-hit' : ''
+              ].filter(Boolean).join(' ');
 
-                  event.preventDefault();
-                  handleDisplayToggle(display);
-                }}
-              >
-                <div className="display-item-main">
-                  <strong>{display.name || 'Nieznany ekran'}</strong>
-                  <span>
+              return (
+                <article
+                  className={displayClasses}
+                  key={feedbackKey}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  aria-label={`Ekran ${display.name || 'Nieznany ekran'}`}
+                  onClick={() => handleDisplayToggle(display)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    handleDisplayToggle(display);
+                  }}
+                >
+                  <div className="display-card-title-line">
+                    <strong>{display.name || 'Nieznany ekran'}</strong>
+                    <div className="display-card-badges">
+                      {display.isEnabled && display.isPrimary ? <span className="display-state-badge">GŁÓWNY</span> : null}
+                      {!display.isEnabled ? <span className="display-state-badge inactive">NIEAKTYWNY</span> : null}
+                    </div>
+                  </div>
+                  <span className="display-tech-line">
                     {formatDisplayResolution(display)} · {formatDisplayRefresh(display)}
-                    {display.isEnabled && display.isPrimary ? ' · Główny' : ''}
-                    {!display.isEnabled ? ' · Nieaktywny' : ''}
                   </span>
+                  {display.connectionTechnology ? <small>{display.connectionTechnology}</small> : null}
                   <small>Pozycja: {display.positionX}, {display.positionY}</small>
-                  {display.connectionTechnology ? <small>Połączenie: {display.connectionTechnology}</small> : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -2134,11 +2191,11 @@ function ConsoleBehaviourStep({
             <strong>{selectedProfileLabel}</strong>
           </div>
         </div>
-        <div className="check-list">
+        <div className="settings-group">
           {pcGamingBehaviourOptions.map((option) => (
-            <CheckRow
+            <SettingRow
               key={option.key}
-              label={option.label}
+              title={option.label}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasProfiles}
@@ -2168,16 +2225,16 @@ function WorkBehaviourStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie Work Mode</h2>
       <p>Work Mode przywraca układ roboczy oraz standardowy wygląd pulpitu.</p>
-      <div className="check-list">
-        <CheckRow label="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
-        <CheckRow label="Pokaż paski zadań" checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
-        <CheckRow label="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
-        <CheckRow label="Nie minimalizuj istniejących okien" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
+      <div className="settings-group">
+        <SettingRow title="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
+        <SettingRow title="Pokaż paski zadań" checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
+        <SettingRow title="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
+        <SettingRow title="Nie minimalizuj istniejących okien" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
       </div>
       <div className="field-grid">
         <label>
           Globalny skrót do przejścia w Work Mode
-          <HotkeyInput value={globalWorkModeHotkey} onChange={onChangeGlobalWorkModeHotkey} placeholder="np. Ctrl+Alt+W" />
+          <HotkeyField value={globalWorkModeHotkey} onChange={onChangeGlobalWorkModeHotkey} placeholder="np. Ctrl+Alt+W" />
         </label>
       </div>
     </div>
@@ -2189,12 +2246,14 @@ function ControllerStep({
   pcGamingProfiles,
   selectedProfileName,
   hotkeys,
+  hotkeyValidationError,
   onChangeHotkey
 }: {
   stepNumber: number;
   pcGamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   hotkeys: HotkeySettingsState;
+  hotkeyValidationError: string | null;
   onChangeHotkey: (key: 'enterProfile', value: string) => void;
 }) {
   const hasProfiles = pcGamingProfiles.length > 0;
@@ -2216,7 +2275,13 @@ function ControllerStep({
         <div className="field-grid">
           <label>
             Hotkey uruchomienia profilu
-            <HotkeyInput value={hotkeys.pcGamingMode} onChange={(value) => onChangeHotkey('enterProfile', value)} placeholder="np. Ctrl+Alt+P" disabled={!hasProfiles} />
+            <HotkeyField
+              value={hotkeys.pcGamingMode}
+              onChange={(value) => onChangeHotkey('enterProfile', value)}
+              placeholder="np. Ctrl+Alt+P"
+              disabled={!hasProfiles}
+              error={hotkeyValidationError}
+            />
           </label>
         </div>
       </section>
@@ -2238,9 +2303,9 @@ function AppBehaviourStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie aplikacji</h2>
       <p>Te ustawienia dotyczą całej aplikacji i obowiązują dla wszystkich profili.</p>
-      <div className="check-list">
-        <CheckRow
-          label="Startuj z Windows"
+      <div className="settings-group">
+        <SettingRow
+          title="Startuj z Windows"
           checked={finishOptions.startWithWindows}
           onChange={(value) => setFinishOptions({
             ...finishOptions,
@@ -2248,19 +2313,19 @@ function AppBehaviourStep({
             startMinimized: value ? finishOptions.startMinimized : false
           })}
         />
-        <CheckRow
-          label="Startuj zminimalizowany do tray"
+        <SettingRow
+          title="Startuj zminimalizowany do tray"
           checked={finishOptions.startMinimized}
           disabled={!finishOptions.startWithWindows}
           onChange={(value) => setFinishOptions({ ...finishOptions, startMinimized: value })}
         />
-        <CheckRow
-          label="Utwórz skrót w menu Start"
+        <SettingRow
+          title="Utwórz skrót w menu Start"
           checked={finishOptions.startMenuShortcut}
           onChange={(value) => setFinishOptions({ ...finishOptions, startMenuShortcut: value })}
         />
-        <CheckRow
-          label="Utwórz skrót na pulpicie"
+        <SettingRow
+          title="Utwórz skrót na pulpicie"
           checked={finishOptions.desktopShortcut}
           onChange={(value) => setFinishOptions({ ...finishOptions, desktopShortcut: value })}
         />
@@ -2313,64 +2378,151 @@ function FinishStep({
   );
 }
 
-function CheckRow({
-  label,
+function GameShellCheckbox({
+  checked,
+  disabled,
+  onChange
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <>
+      <input
+        className="setting-checkbox-native"
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') {
+            return;
+          }
+
+          event.preventDefault();
+          onChange(!checked);
+        }}
+      />
+      <span className="setting-checkbox-visual" aria-hidden="true" />
+    </>
+  );
+}
+
+function SettingRow({
+  title,
+  description,
   checked,
   onChange,
   disabled = false
 }: {
-  label: string;
+  title: string;
+  description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
 }) {
   return (
-    <label className="check-row">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
+    <label className={`setting-row ${disabled ? 'is-disabled' : ''}`}>
+      <GameShellCheckbox checked={checked} disabled={disabled} onChange={onChange} />
+      <span className="setting-row-content">
+        <span className="setting-row-title">{title}</span>
+        {description ? <span className="setting-row-description">{description}</span> : null}
+      </span>
     </label>
   );
 }
 
-function HotkeyInput({
+function HotkeyField({
   value,
   onChange,
   placeholder,
-  disabled = false
+  disabled = false,
+  error = null
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   disabled?: boolean;
+  error?: string | null;
 }) {
+  const hintId = useId();
+  const errorId = useId();
+  const [isListening, setIsListening] = useState(false);
+  const hasValue = value.trim().length > 0;
+
+  useEffect(() => {
+    return () => {
+      void sendBridgeCommand('setHotkeyCaptureActive', { active: false }).catch(() => {
+        // Ignore bridge teardown errors.
+      });
+    };
+  }, []);
+
+  const helperText = isListening
+    ? 'Naciśnij kombinację klawiszy…'
+    : hasValue
+      ? 'Zapisany skrót klawiaturowy.'
+      : 'Kliknij i naciśnij skrót';
+
   return (
-    <input
-      className="hotkey-input"
-      value={value}
-      readOnly
-      disabled={disabled}
-      placeholder={placeholder}
-      onFocus={(event) => event.currentTarget.select()}
-      onKeyDown={(event) => {
-        if (disabled) {
-          return;
-        }
+    <div className={`hotkey-field ${isListening ? 'is-listening' : ''} ${disabled ? 'is-disabled' : ''}`}>
+      <div className="hotkey-field-input-wrap">
+        <input
+          className="hotkey-input"
+          value={value}
+          readOnly
+          disabled={disabled}
+          placeholder={placeholder}
+          aria-invalid={error ? 'true' : 'false'}
+          aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+          onMouseDown={() => {
+            void sendBridgeCommand('setHotkeyCaptureActive', { active: true }).catch(() => {
+              // Bridge may be unavailable (e.g. preview mode); ignore.
+            });
+          }}
+          onFocus={(event) => {
+            void sendBridgeCommand('setHotkeyCaptureActive', { active: true }).catch(() => {
+              // Bridge may be unavailable (e.g. preview mode); ignore and keep local capture behavior.
+            });
+            setIsListening(true);
+            event.currentTarget.select();
+          }}
+          onBlur={() => {
+            void sendBridgeCommand('setHotkeyCaptureActive', { active: false }).catch(() => {
+              // Ignore bridge sync errors.
+            });
+            setIsListening(false);
+          }}
+          onKeyDown={(event) => {
+            if (disabled) {
+              return;
+            }
 
-        event.preventDefault();
-        event.stopPropagation();
-        if (isClearHotkeyEvent(event)) {
-          onChange('');
-          return;
-        }
+            event.preventDefault();
+            event.stopPropagation();
+            if (isClearHotkeyEvent(event)) {
+              onChange('');
+              return;
+            }
 
-        const hotkey = formatHotkey(event);
-        if (hotkey) {
-          onChange(hotkey);
-        }
-      }}
-      onPaste={(event) => event.preventDefault()}
-      onDrop={(event) => event.preventDefault()}
-    />
+            const hotkey = formatHotkey(event);
+            if (hotkey) {
+              onChange(hotkey);
+            }
+          }}
+          onPaste={(event) => event.preventDefault()}
+          onDrop={(event) => event.preventDefault()}
+        />
+        {isListening ? <span className="hotkey-listening-badge">NASŁUCHIWANIE</span> : null}
+      </div>
+      <p id={hintId} className="hotkey-field-hint">{helperText}</p>
+      {error ? (
+        <div id={errorId} className="field-validation-error" role="alert">
+          {error}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -2379,7 +2531,7 @@ function isClearHotkeyEvent(event: KeyboardEvent<HTMLInputElement>) {
 }
 
 function formatHotkey(event: KeyboardEvent<HTMLInputElement>) {
-  const key = normalizeHotkeyKey(event.key);
+  const key = normalizeHotkeyKey(event.key, event.code);
   if (!key) {
     return null;
   }
@@ -2394,13 +2546,22 @@ function formatHotkey(event: KeyboardEvent<HTMLInputElement>) {
   return modifiers.length === 0 ? null : [...modifiers, key].join('+');
 }
 
-function normalizeHotkeyKey(key: string) {
+function normalizeHotkeyKey(key: string, code: string) {
   if (['Control', 'Shift', 'Alt', 'Meta', 'OS'].includes(key)) {
     return null;
   }
 
+  // Use physical key code for letters/digits so AltGr/locale variants (e.g. Ę) map to base keys.
+  if (/^Key[A-Z]$/.test(code)) {
+    return code.slice(3);
+  }
+
+  if (/^Digit[0-9]$/.test(code)) {
+    return code.slice(5);
+  }
+
   if (key.length === 1) {
-    return key.toUpperCase();
+    return removeDiacritics(key).toUpperCase();
   }
 
   const aliases: Record<string, string> = {
@@ -2415,6 +2576,12 @@ function normalizeHotkeyKey(key: string) {
   };
 
   return aliases[key] ?? key;
+}
+
+function removeDiacritics(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 function getLauncherSettings(launcher: LauncherType) {
@@ -2581,7 +2748,7 @@ function buildProfileHotkeysMap(
   profiles.forEach((profile) => {
     const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
     map[profile.name] = {
-      enterProfile: configured?.hotkeys?.enterProfile ?? fallbackHotkeys.enterProfile
+      enterProfile: normalizeHotkeyForDisplay(configured?.hotkeys?.enterProfile ?? fallbackHotkeys.enterProfile)
     };
   });
 
@@ -2589,7 +2756,37 @@ function buildProfileHotkeysMap(
 }
 
 function normalizeHotkeyValue(value: string) {
-  return value.trim().toUpperCase();
+  return removeDiacritics(value.trim()).toUpperCase();
+}
+
+function normalizeHotkeyForDisplay(value: string) {
+  if (!value.trim()) {
+    return '';
+  }
+
+  const parts = value
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return '';
+  }
+
+  const keyToken = removeDiacritics(parts[parts.length - 1]).toUpperCase();
+  const lowerModifiers = new Set(parts.slice(0, -1).map((part) => removeDiacritics(part).toLowerCase()));
+  const normalizedModifiers = [
+    lowerModifiers.has('ctrl') || lowerModifiers.has('control') ? 'Ctrl' : null,
+    lowerModifiers.has('alt') ? 'Alt' : null,
+    lowerModifiers.has('shift') ? 'Shift' : null,
+    lowerModifiers.has('win') || lowerModifiers.has('windows') || lowerModifiers.has('meta') ? 'Win' : null
+  ].filter((modifier): modifier is string => Boolean(modifier));
+
+  if (normalizedModifiers.length === 0 || !keyToken) {
+    return '';
+  }
+
+  return [...normalizedModifiers, keyToken].join('+');
 }
 
 function isDuplicateProfileEnterHotkey(

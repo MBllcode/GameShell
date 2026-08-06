@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GameShell.Core.Interfaces;
@@ -45,6 +46,7 @@ public sealed class WebViewBridge
         "restorePreviousDisplayLayout",
         "openDependencyDownloadPage",
         "selectDependencyPath",
+        "setHotkeyCaptureActive",
         "enterGameShell",
         "enterGameShellWithProfile",
         "enterWorkMode"
@@ -77,6 +79,7 @@ public sealed class WebViewBridge
     }
 
     public event EventHandler? SettingsSaved;
+    public event EventHandler<bool>? HotkeyCaptureStateChanged;
 
     public void Attach(CoreWebView2 coreWebView)
     {
@@ -146,6 +149,7 @@ public sealed class WebViewBridge
                 "restorePreviousDisplayLayout" => await _displayTransitionService.RestorePreviousLayoutAsync(),
                 "openDependencyDownloadPage" => await OpenDependencyDownloadPageAsync(message.Payload),
                 "selectDependencyPath" => await SelectDependencyPathAsync(message.Payload),
+                "setHotkeyCaptureActive" => SetHotkeyCaptureActive(message.Payload),
                 "enterGameShell" => await _modeCommandService.EnterGameShellAsync(),
                 "enterGameShellWithProfile" => await _modeCommandService.EnterGameShellWithDisplayProfileAsync(ReadOptionalProfileName(message.Payload) ?? "PcGaming"),
                 "enterWorkMode" => await _modeCommandService.EnterWorkModeAsync(),
@@ -187,6 +191,13 @@ public sealed class WebViewBridge
 
         await SaveAndApplySettingsAsync(settings);
         return settings;
+    }
+
+    private object SetHotkeyCaptureActive(JsonElement? payload)
+    {
+        var isActive = ReadHotkeyCaptureState(payload);
+        HotkeyCaptureStateChanged?.Invoke(this, isActive);
+        return new { active = isActive };
     }
 
     private async Task<IReadOnlyList<DisplayDeviceInfo>> GetDisplaysAsync()
@@ -529,29 +540,29 @@ public sealed class WebViewBridge
 
     private static void ApplyWindowsIntegration(AppSettings settings)
     {
-        var executablePath = Process.GetCurrentProcess().MainModule?.FileName
-            ?? Environment.ProcessPath
-            ?? throw new InvalidOperationException("GameShell executable path is not available.");
+        var startupRegistration = ResolveStartupRegistration();
 
-        ApplyStartup(settings.Startup.StartWithWindows, executablePath);
+        ApplyStartup(settings.Startup.StartWithWindows, startupRegistration.RunCommand);
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "GameShellShortcut.ico");
 
         ApplyShortcut(
             Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
             "GameShell.lnk",
             settings.Startup.CreateDesktopShortcut,
-            executablePath,
+            startupRegistration.ShortcutTargetPath,
+            startupRegistration.ShortcutArguments,
             iconPath);
 
         ApplyShortcut(
             Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
             Path.Combine("Programs", "GameShell.lnk"),
             settings.Startup.CreateStartMenuShortcut,
-            executablePath,
+            startupRegistration.ShortcutTargetPath,
+            startupRegistration.ShortcutArguments,
             iconPath);
     }
 
-    private static void ApplyStartup(bool enabled, string executablePath)
+    private static void ApplyStartup(bool enabled, string runCommand)
     {
         const string runKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         using var runKey = Registry.CurrentUser.OpenSubKey(runKeyPath, writable: true)
@@ -559,14 +570,14 @@ public sealed class WebViewBridge
 
         if (enabled)
         {
-            runKey.SetValue("GameShell", $"\"{executablePath}\"");
+            runKey.SetValue("GameShell", runCommand);
             return;
         }
 
         runKey.DeleteValue("GameShell", throwOnMissingValue: false);
     }
 
-    private static void ApplyShortcut(string baseDirectory, string relativeShortcutPath, bool enabled, string executablePath, string iconPath)
+    private static void ApplyShortcut(string baseDirectory, string relativeShortcutPath, bool enabled, string targetPath, string arguments, string iconPath)
     {
         var shortcutPath = Path.Combine(baseDirectory, relativeShortcutPath);
 
@@ -581,10 +592,10 @@ public sealed class WebViewBridge
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(shortcutPath)!);
-        CreateShortcut(shortcutPath, executablePath, iconPath);
+        CreateShortcut(shortcutPath, targetPath, arguments, iconPath);
     }
 
-    private static void CreateShortcut(string shortcutPath, string executablePath, string iconPath)
+    private static void CreateShortcut(string shortcutPath, string targetPath, string arguments, string iconPath)
     {
         var shellType = Type.GetTypeFromProgID("WScript.Shell")
             ?? throw new InvalidOperationException("Windows shortcut service is not available.");
@@ -592,12 +603,43 @@ public sealed class WebViewBridge
         dynamic shell = Activator.CreateInstance(shellType)
             ?? throw new InvalidOperationException("Windows shortcut service could not be created.");
         dynamic shortcut = shell.CreateShortcut(shortcutPath);
-        shortcut.TargetPath = executablePath;
-        shortcut.WorkingDirectory = Path.GetDirectoryName(executablePath);
+        shortcut.TargetPath = targetPath;
+        shortcut.Arguments = arguments;
+        shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
         shortcut.Description = "GameShell";
-        shortcut.IconLocation = File.Exists(iconPath) ? $"{iconPath},0" : $"{executablePath},0";
+        shortcut.IconLocation = File.Exists(iconPath) ? $"{iconPath},0" : $"{targetPath},0";
         shortcut.Save();
     }
+
+    private static StartupRegistration ResolveStartupRegistration()
+    {
+        var processPath = Environment.ProcessPath
+            ?? Process.GetCurrentProcess().MainModule?.FileName
+            ?? throw new InvalidOperationException("GameShell executable path is not available.");
+
+        var appHostPath = Path.Combine(AppContext.BaseDirectory, "GameShell.exe");
+        if (File.Exists(appHostPath))
+        {
+            return new StartupRegistration(appHostPath, string.Empty, $"\"{appHostPath}\"");
+        }
+
+        var entryAssemblyPath = Assembly.GetEntryAssembly()?.Location;
+        var processFileName = Path.GetFileName(processPath);
+        var isDotnetHost = string.Equals(processFileName, "dotnet", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(processFileName, "dotnet.exe", StringComparison.OrdinalIgnoreCase);
+
+        if (isDotnetHost
+            && !string.IsNullOrWhiteSpace(entryAssemblyPath)
+            && entryAssemblyPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            var arguments = $"\"{entryAssemblyPath}\"";
+            return new StartupRegistration(processPath, arguments, $"\"{processPath}\" {arguments}");
+        }
+
+        return new StartupRegistration(processPath, string.Empty, $"\"{processPath}\"");
+    }
+
+    private sealed record StartupRegistration(string ShortcutTargetPath, string ShortcutArguments, string RunCommand);
 
     private async Task<DependencyActionResult> OpenDependencyDownloadPageAsync(JsonElement? payload)
     {
@@ -670,6 +712,21 @@ public sealed class WebViewBridge
         }
 
         return dependencyName;
+    }
+
+    private static bool ReadHotkeyCaptureState(JsonElement? payload)
+    {
+        if (payload is null || payload.Value.ValueKind is not JsonValueKind.Object || !payload.Value.TryGetProperty("active", out var activeElement))
+        {
+            throw new InvalidOperationException("Hotkey capture state is required.");
+        }
+
+        return activeElement.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new InvalidOperationException("Hotkey capture state is invalid.")
+        };
     }
 
     private static DisplayIdentity ReadDisplayIdentity(JsonElement? payload)

@@ -1,4 +1,6 @@
 using GameShell.Core.Models;
+using System.Globalization;
+using System.Text;
 
 namespace GameShell.Core.Services;
 
@@ -240,9 +242,78 @@ public static class AppSettingsValidator
 
     private static string NormalizeHotkey(string value)
     {
-        return string.IsNullOrWhiteSpace(value)
-            ? string.Empty
-            : value.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var parts = value
+            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        if (parts.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var keyPart = RemoveDiacritics(parts[^1]).ToUpperInvariant();
+        var modifierParts = parts
+            .Take(parts.Count - 1)
+            .Select(part => RemoveDiacritics(part).ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        var normalizedModifiers = new List<string>();
+        if (modifierParts.Contains("ctrl") || modifierParts.Contains("control"))
+        {
+            normalizedModifiers.Add("Ctrl");
+        }
+
+        if (modifierParts.Contains("alt"))
+        {
+            normalizedModifiers.Add("Alt");
+        }
+
+        if (modifierParts.Contains("shift"))
+        {
+            normalizedModifiers.Add("Shift");
+        }
+
+        if (modifierParts.Contains("win") || modifierParts.Contains("windows") || modifierParts.Contains("meta"))
+        {
+            normalizedModifiers.Add("Win");
+        }
+
+        if (normalizedModifiers.Count == 0 || string.IsNullOrWhiteSpace(keyPart))
+        {
+            return string.Empty;
+        }
+
+        normalizedModifiers.Add(keyPart);
+        return string.Join('+', normalizedModifiers);
+    }
+
+    private static string RemoveDiacritics(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var normalized = value.Normalize(NormalizationForm.FormD);
+        var filtered = new char[normalized.Length];
+        var index = 0;
+
+        foreach (var character in normalized)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            filtered[index++] = character;
+        }
+
+        return new string(filtered, 0, index).Normalize(NormalizationForm.FormC);
     }
 
     private static PcGamingProfileConfiguration? ResolveProfileConfiguration(IEnumerable<PcGamingProfileConfiguration> candidates, string profileName)

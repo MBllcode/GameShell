@@ -25,6 +25,16 @@ Aktualne, robocze podsumowanie stanu projektu.
   - pokazuje te bledy lokalnie i niezaleznie (osobne komunikaty),
   - ogranicza profil do maksymalnie 2 ekranow (inline warning LIMIT).
 - Draft konfiguracji ekranow jest commitowany deterministycznie przed zapisem i przy kluczowej nawigacji.
+- Przy tworzeniu nowego profilu hotkey profilu startuje zawsze jako pusty.
+- Cofanie `Wroc` w flow tworzenia profilu nie pokazuje modala o niezapisanych zmianach.
+- Modal niezapisanych zmian przy tworzeniu profilu pojawia sie dopiero przy probie wyjscia do `Panel glowny` po co najmniej jednym przejsciu `Dalej`.
+
+## Hotkeye profili
+
+- Kazdy profil ma wlasny hotkey wejscia.
+- Kombinacje sa normalizowane do kanonicznej postaci, bez polskich znakow diakrytycznych.
+- Ta sama kombinacja nie moze byc przypisana do dwoch roznych profili.
+- Podczas `NASLUCHIWANIE` globalne hotkeye aplikacji sa chwilowo wyrejestrowane, aby UI moglo przechwycic klawisze i pokazac lokalna walidacje duplikatu.
 
 ## Zachowanie zapisu
 
@@ -38,6 +48,8 @@ Aktualne, robocze podsumowanie stanu projektu.
 - CLI: `--gaming`, `--pcgaming`, `--work`.
 - Single-instance forwarding: druga instancja przekazuje komende do dzialajacej.
 - Domyslny rozmiar okna: 1360x860, minimum 1040x720, z zapamietywaniem i bezpiecznym clampem pozycji.
+- `Startuj z Windows` ustawia wpis autostartu Windows dla aktualnej formy uruchomienia aplikacji.
+- `Startuj zminimalizowany do tray` jest stosowane przy zwyklym starcie aplikacji, nie tylko w fallback scenariuszach.
 
 ## Build, test, package
 
@@ -51,3 +63,4 @@ Aktualne, robocze podsumowanie stanu projektu.
 
 - Trzymamy aktualne bundlowane assety UI w `src/GameShell.Desktop/wwwroot`.
 - Fallback EXE z timestampem (`artifacts/installer/GameShell-*.exe`) sa traktowane jako tymczasowe artefakty i sa ignorowane przez git.
+- Aktualny screenshot dashboardu trzymamy jako `docs/panel-glowny.png`.

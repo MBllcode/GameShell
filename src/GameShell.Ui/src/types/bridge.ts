@@ -21,6 +21,7 @@ export type BridgeCommand =
   | 'restorePreviousDisplayLayout'
   | 'openDependencyDownloadPage'
   | 'selectDependencyPath'
+  | 'setHotkeyCaptureActive'
   | 'enterGameShell'
   | 'enterGameShellWithProfile'
   | 'enterWorkMode';

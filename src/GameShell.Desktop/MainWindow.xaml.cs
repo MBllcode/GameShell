@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private NotifyIcon? _notifyIcon;
     private HwndSource? _source;
     private bool _isExitRequested;
+    private bool _isHotkeyCaptureActive;
 
     public MainWindow(
         ILogger<MainWindow> logger,
@@ -58,6 +59,7 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         InitializeTray();
         _webViewBridge.SettingsSaved += OnSettingsSaved;
+        _webViewBridge.HotkeyCaptureStateChanged += OnHotkeyCaptureStateChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -86,10 +88,10 @@ public partial class MainWindow : Window
                     CoreWebView2HostResourceAccessKind.Allow);
 
                 WebView.Source = new Uri("https://app.gameshell.local/index.html");
-                return;
             }
-
-            WebView.NavigateToString("""
+            else
+            {
+                WebView.NavigateToString("""
                 <!doctype html>
                 <html lang="en">
                   <head>
@@ -115,6 +117,7 @@ public partial class MainWindow : Window
                   </body>
                 </html>
                 """);
+                        }
         }
         catch (Exception ex)
         {
@@ -404,7 +407,17 @@ public partial class MainWindow : Window
 
         if (_profileEnterHotkeys.TryGetValue(hotkeyId, out var profileName))
         {
+            if (_isHotkeyCaptureActive)
+            {
+                return IntPtr.Zero;
+            }
+
             _ = RunPcGamingHotkeyAsync(profileName);
+            return IntPtr.Zero;
+        }
+
+        if (_isHotkeyCaptureActive)
+        {
             return IntPtr.Zero;
         }
 
@@ -567,12 +580,39 @@ public partial class MainWindow : Window
     {
         await SaveWindowBoundsAsync();
         _webViewBridge.SettingsSaved -= OnSettingsSaved;
+        _webViewBridge.HotkeyCaptureStateChanged -= OnHotkeyCaptureStateChanged;
         UnregisterProfileHotkeys();
         UnregisterHotkey(HotkeyConsoleModeId);
         UnregisterHotkey(HotkeyPcGamingModeId);
         UnregisterHotkey(HotkeyWorkModeId);
         _source?.RemoveHook(OnWindowMessage);
         _notifyIcon?.Dispose();
+    }
+
+    private async void OnHotkeyCaptureStateChanged(object? sender, bool isActive)
+    {
+        if (_isHotkeyCaptureActive == isActive)
+        {
+            return;
+        }
+
+        _isHotkeyCaptureActive = isActive;
+
+        if (_source is null)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            UnregisterHotkey(HotkeyConsoleModeId);
+            UnregisterHotkey(HotkeyPcGamingModeId);
+            UnregisterHotkey(HotkeyWorkModeId);
+            UnregisterProfileHotkeys();
+            return;
+        }
+
+        await RegisterConfiguredHotkeysAsync();
     }
 
     [DllImport("user32.dll", SetLastError = true)]
