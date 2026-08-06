@@ -4,10 +4,10 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="GameShell"
         Icon="Assets/GameShell.ico"
-        Height="900"
-        MinHeight="720"
-        MinWidth="1040"
-        Width="1360"
+        Height="820"
+        MinHeight="820"
+        MinWidth="1300"
+        Width="1300"
         Background="#0E1116">
     <Grid>
         <wv2:WebView2 x:Name="WebView" />

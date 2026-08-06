@@ -1,42 +1,25 @@
 # GameShell
 
-GameShell is a local Windows app for switching between a normal desktop work setup and console-like gaming modes.
+GameShell is a local Windows app for switching the PC between gaming-focused and work-focused desktop modes.
 
-The final distributable is a single self-contained file:
+Main runtime/storage paths:
 
 ```text
 artifacts\installer\GameShell.exe
-```
-
-It does not require the target PC to have .NET installed. User settings are stored under:
-
-```text
 %LOCALAPPDATA%\GameShell\settings.json
+%LOCALAPPDATA%\GameShell\state.json
 ```
 
-## What It Does
+## Core capabilities
 
-- Enters `Console Mode` by activating only the selected Console display.
-- Enters optional `PC Gaming` mode with a saved monitor layout.
-- Enters `Work Mode` by restoring the layout captured before the gaming session.
-- Uses native Windows DisplayConfig APIs for display detection and layout application.
-- Hides/restores desktop icons and taskbar through the existing workflow scripts.
-- Starts the configured launcher, such as Playnite, Steam Big Picture, Xbox App, a custom executable, or no launcher.
-- Supports tray menu commands and global hotkeys for full GameShell modes.
+- `Console Mode`: activates only the selected console display.
+- `PC Gaming`: applies a saved gaming display profile (falls back to Console Mode if not configured).
+- `Work Mode`: restores the desktop layout captured before the gaming session.
+- Native display control through Windows DisplayConfig APIs (`QueryDisplayConfig`, `SetDisplayConfig`).
+- Tray menu + global hotkeys + single-instance command forwarding.
+- Per-profile launcher, mode behavior, and shortcut configuration in the UI wizard/dashboard.
 
-## Display Modes
-
-GameShell has one native display workflow:
-
-- `Console Mode`: activates only the configured Console display, moves it to `0,0`, and makes it primary.
-- `PC Gaming`: applies the optional saved desktop-gaming layout. If no layout is saved, it falls back to `Console Mode`.
-- `Work Mode`: restores `WorkReturnLayout`, captured before entering a gaming mode.
-
-Configuration tests use a 15-second confirmation window. Normal mode switches do not show confirmation prompts.
-
-## Commands
-
-The executable accepts command-line mode commands:
+## Command-line modes
 
 ```powershell
 GameShell.exe --gaming
@@ -44,21 +27,7 @@ GameShell.exe --pcgaming
 GameShell.exe --work
 ```
 
-If GameShell is already running in the tray, a second launch forwards the command to the existing instance instead of opening another tray process.
-
-## Hotkeys
-
-Global hotkeys are configured in `Kontroler i skróty`.
-
-Supported format examples:
-
-```text
-Ctrl+Alt+G
-Ctrl+Alt+P
-Ctrl+Alt+W
-```
-
-Hotkeys trigger full GameShell workflows.
+When GameShell is already running in tray, a second process forwards the mode command to the existing instance.
 
 ## Build
 
@@ -66,7 +35,12 @@ Hotkeys trigger full GameShell workflows.
 .\build.ps1
 ```
 
-The build script restores/builds the .NET solution, builds the React/Vite UI, and copies the UI output to the WPF host.
+What it does:
+
+- restore .NET solution,
+- build React/Vite UI,
+- copy UI bundle to `src\GameShell.Desktop\wwwroot`,
+- build solution.
 
 ## Package
 
@@ -74,13 +48,22 @@ The build script restores/builds the .NET solution, builds the React/Vite UI, an
 .\package.ps1
 ```
 
-Output:
+What it does:
 
-```text
-artifacts\installer\GameShell.exe
-```
+- rebuild UI and sync desktop `wwwroot`,
+- publish self-contained single-file WPF app,
+- write final artifact to `artifacts\installer\GameShell.exe`.
 
-## Project Layout
+If the destination EXE is locked (running process), script writes a timestamped fallback EXE in `artifacts\installer\`.
+
+## UI/UX status
+
+- Dashboard + profile flow is active after first-run wizard.
+- Work Mode is moved out of quick-switch cards into the sidebar profile module.
+- Step `Ekrany` validates profile name and display selection as separate local errors.
+- Profile display drafts are committed deterministically before save/navigation.
+
+## Project layout
 
 ```text
 src/
@@ -88,6 +71,8 @@ src/
   GameShell.Desktop/
   GameShell.Ui/
   GameShell.Windows/
+tests/
+  GameShell.Core.Tests/
 scripts/
 docs/
 ```

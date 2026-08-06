@@ -6,5 +6,5 @@ dist/
 *.user
 *.suo
 *.log
-src/ConsoleMode.Desktop/wwwroot/
-src/ConsoleMode.Ui/tsconfig.tsbuildinfo
+src/GameShell.Ui/tsconfig.tsbuildinfo
+artifacts/installer/GameShell-*.exe
