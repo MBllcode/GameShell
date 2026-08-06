@@ -1,0 +1,398 @@
+using System.Diagnostics;
+using GameShell.Core.Interfaces;
+using GameShell.Core.Models;
+using Microsoft.Extensions.Logging;
+
+namespace GameShell.Core.Services;
+
+public sealed class ModeOrchestrator : IModeOrchestrator
+{
+    private readonly ISettingsService _settingsService;
+    private readonly IModeWorkflowService _modeWorkflowService;
+    private readonly IDisplayTransitionService _displayTransitionService;
+    private readonly IRuntimeStateService _runtimeStateService;
+    private readonly ILogger<ModeOrchestrator> _logger;
+    private readonly SemaphoreSlim _operationLock = new(1, 1);
+    private readonly object _statusGate = new();
+
+    private ModeState _state = ModeState.Unknown;
+    private GameShellMode? _currentMode;
+    private string? _lastOperation;
+    private long? _lastOperationDurationMs;
+    private string? _lastError;
+
+    public ModeOrchestrator(
+        ISettingsService settingsService,
+        IModeWorkflowService modeWorkflowService,
+        IDisplayTransitionService displayTransitionService,
+        IRuntimeStateService runtimeStateService,
+        ILogger<ModeOrchestrator> logger)
+    {
+        _settingsService = settingsService;
+        _modeWorkflowService = modeWorkflowService;
+        _displayTransitionService = displayTransitionService;
+        _runtimeStateService = runtimeStateService;
+        _logger = logger;
+    }
+
+    public async Task<AppStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var settings = await _settingsService.LoadAsync(cancellationToken);
+        var runtimeState = await _runtimeStateService.LoadAsync(cancellationToken);
+        if (_currentMode is null && runtimeState.CurrentMode is not null)
+        {
+            _currentMode = runtimeState.CurrentMode;
+        }
+
+        return CreateStatus(settings);
+    }
+
+    public Task<ModeResult> EnterGameShellAsync(CancellationToken cancellationToken = default)
+    {
+        return RunModeAsync(
+            operationName: "Enter Console Mode",
+            switchingState: ModeState.SwitchingToConsole,
+            completedState: ModeState.GameShell,
+            transition: settings => _displayTransitionService.EnterConsoleModeAsync(GetConsoleDisplays(settings), cancellationToken),
+            workflow: settings => _modeWorkflowService.RunGamingWorkflowAsync(settings, GameShellMode.Console, cancellationToken),
+            completionDelay: settings => TimeSpan.FromSeconds(settings.GameShell.CompletionDelaySeconds),
+            runtimeMode: GameShellMode.Console,
+            cancellationToken);
+    }
+
+    public Task<ModeResult> EnterGameShellWithDisplayProfileAsync(string profileName, CancellationToken cancellationToken = default)
+    {
+        return RunPcGamingModeAsync(profileName, cancellationToken);
+    }
+
+    public Task<ModeResult> RunPcGamingModeAsync(CancellationToken cancellationToken = default)
+    {
+        return RunPcGamingModeAsync(null, cancellationToken);
+    }
+
+    private Task<ModeResult> RunPcGamingModeAsync(string? profileName, CancellationToken cancellationToken = default)
+    {
+        return RunModeAsync(
+            operationName: "Enter PC Gaming",
+            switchingState: ModeState.SwitchingToConsole,
+            completedState: ModeState.GameShell,
+            transition: settings => _displayTransitionService.EnterPcGamingModeAsync(
+                ResolvePcGamingLayout(settings.Display, profileName),
+                GetConsoleDisplays(settings),
+                cancellationToken),
+            workflow: settings => _modeWorkflowService.RunGamingWorkflowAsync(
+                BuildEffectivePcGamingSettings(settings, profileName),
+                GameShellMode.PcGaming,
+                cancellationToken),
+            completionDelay: settings => TimeSpan.FromSeconds(ResolvePcGamingBehaviour(settings.Display, settings.PcGaming, profileName).CompletionDelaySeconds),
+            runtimeMode: GameShellMode.PcGaming,
+            cancellationToken);
+    }
+
+    public Task<ModeResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
+    {
+        return RunModeAsync(
+            operationName: "Enter Work Mode",
+            switchingState: ModeState.SwitchingToWork,
+            completedState: ModeState.WorkMode,
+            transition: _ => _displayTransitionService.EnterWorkModeAsync(cancellationToken),
+            workflow: settings => _modeWorkflowService.RunWorkWorkflowAsync(settings, cancellationToken),
+            completionDelay: _ => TimeSpan.Zero,
+            runtimeMode: GameShellMode.Work,
+            cancellationToken,
+            scriptFailureIsWarning: true);
+    }
+
+    private async Task<ModeResult> RunModeAsync(
+        string operationName,
+        ModeState switchingState,
+        ModeState completedState,
+        Func<AppSettings, Task<DisplayTransitionResult>> transition,
+        Func<AppSettings, Task<ModeWorkflowResult>> workflow,
+        Func<AppSettings, TimeSpan> completionDelay,
+        GameShellMode runtimeMode,
+        CancellationToken cancellationToken,
+        bool scriptFailureIsWarning = false)
+    {
+        if (!await _operationLock.WaitAsync(0, cancellationToken))
+        {
+            _logger.LogWarning("{OperationName} rejected because another operation is running.", operationName);
+            return new ModeResult
+            {
+                Status = ModeResultStatus.AlreadyRunning,
+                CurrentState = GetState(),
+                Message = "Inna operacja przełączania już trwa."
+            };
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        var displayTransitionSucceeded = false;
+
+        try
+        {
+            var settings = await _settingsService.LoadAsync(cancellationToken);
+            SetStatus(switchingState, operationName, null, null);
+            _logger.LogInformation("{OperationName} started with native DisplayConfig workflow.", operationName);
+
+            var transitionResult = await transition(settings);
+            if (!transitionResult.Success)
+            {
+                stopwatch.Stop();
+                var message = transitionResult.UserMessage ?? "Nie udało się przełączyć ekranów.";
+                SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, message);
+                await SaveRuntimeResultAsync(runtimeMode, "DisplayFailed", cancellationToken);
+
+                return new ModeResult
+                {
+                    Status = transitionResult.ErrorCode is "ConsoleDisplayMissing" ? ModeResultStatus.InvalidConfiguration : ModeResultStatus.Failed,
+                    CurrentState = ModeState.Error,
+                    Message = message,
+                    DurationMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+
+            displayTransitionSucceeded = true;
+
+            var workflowResult = await workflow(settings);
+            if (!workflowResult.Success)
+            {
+                stopwatch.Stop();
+                var message = workflowResult.Message ?? $"{operationName} workflow failed.";
+                if (scriptFailureIsWarning)
+                {
+                    SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, message, runtimeMode);
+                    await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", cancellationToken);
+
+                    return new ModeResult
+                    {
+                        Status = ModeResultStatus.Success,
+                        CurrentState = completedState,
+                        Message = "Ekrany zostaly przelaczone. Dodatkowy krok Work Mode nie zakonczyl sie poprawnie.",
+                        DurationMs = stopwatch.ElapsedMilliseconds
+                    };
+                }
+
+                SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, message);
+                await SaveRuntimeResultAsync(runtimeMode, "Failed", cancellationToken);
+
+                return new ModeResult
+                {
+                    Status = ModeResultStatus.Failed,
+                    CurrentState = ModeState.Error,
+                    Message = message,
+                    DurationMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+
+            var delay = completionDelay(settings);
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+
+            stopwatch.Stop();
+            SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, null, runtimeMode);
+            await SaveRuntimeResultAsync(runtimeMode, "Success", cancellationToken);
+            _logger.LogInformation("{OperationName} completed in {DurationMs} ms.", operationName, stopwatch.ElapsedMilliseconds);
+
+            return new ModeResult
+            {
+                Status = ModeResultStatus.Success,
+                CurrentState = completedState,
+                Message = transitionResult.UserMessage ?? $"{operationName} completed.",
+                DurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            SetStatus(ModeState.Unknown, operationName, stopwatch.ElapsedMilliseconds, "Operation cancelled.");
+            await SaveRuntimeResultAsync(runtimeMode, "Cancelled", CancellationToken.None);
+            _logger.LogWarning("{OperationName} cancelled.", operationName);
+
+            return new ModeResult
+            {
+                Status = ModeResultStatus.Cancelled,
+                CurrentState = ModeState.Unknown,
+                Message = "Operacja została anulowana.",
+                DurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            if (scriptFailureIsWarning && displayTransitionSucceeded)
+            {
+                SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, ex.Message, runtimeMode);
+                await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", CancellationToken.None);
+                _logger.LogWarning(ex, "{OperationName} completed display transition but a later workflow step failed.", operationName);
+
+                return new ModeResult
+                {
+                    Status = ModeResultStatus.Success,
+                    CurrentState = completedState,
+                    Message = "Ekrany zostaly przelaczone. Dodatkowy krok Work Mode nie zakonczyl sie poprawnie.",
+                    DurationMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+
+            SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, ex.Message);
+            await SaveRuntimeResultAsync(runtimeMode, "Failed", CancellationToken.None);
+            _logger.LogError(ex, "{OperationName} failed.", operationName);
+
+            return new ModeResult
+            {
+                Status = ModeResultStatus.Failed,
+                CurrentState = ModeState.Error,
+                Message = ex.Message,
+                DurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+        finally
+        {
+            _operationLock.Release();
+        }
+    }
+
+    private async Task SaveRuntimeResultAsync(GameShellMode requestedMode, string result, CancellationToken cancellationToken)
+    {
+        var state = await _runtimeStateService.LoadAsync(cancellationToken);
+        state.LastRequestedMode = requestedMode.ToString();
+        state.LastCompletedAt = DateTimeOffset.Now;
+        state.LastResult = result;
+        if (result.StartsWith("Success", StringComparison.Ordinal))
+        {
+            state.CurrentMode = requestedMode;
+        }
+
+        await _runtimeStateService.SaveAsync(state, cancellationToken);
+    }
+
+    private AppStatus CreateStatus(AppSettings settings)
+    {
+        lock (_statusGate)
+        {
+            return new AppStatus
+            {
+                State = _state,
+                CurrentMode = _currentMode?.ToString(),
+                IsBusy = _state is ModeState.SwitchingToConsole or ModeState.SwitchingToWork,
+                DisplayMode = "NativeDisplayConfig",
+                SelectedConsoleDisplay = GetConsoleDisplays(settings).FirstOrDefault()?.FriendlyName,
+                HasPcGamingLayout = ResolvePcGamingLayout(settings.Display, null) is not null,
+                ActiveLauncher = settings.Launcher.Type,
+                LastOperation = _lastOperation,
+                LastOperationDurationMs = _lastOperationDurationMs,
+                LastError = _lastError,
+                SettingsPath = _settingsService.SettingsPath
+            };
+        }
+    }
+
+    private static IReadOnlyCollection<DisplayIdentity> GetConsoleDisplays(AppSettings settings)
+    {
+        if (settings.Display.ConsoleDisplays.Count > 0)
+        {
+            return settings.Display.ConsoleDisplays;
+        }
+
+        return settings.Display.ConsoleDisplay is null
+            ? []
+            : [settings.Display.ConsoleDisplay];
+    }
+
+    private static DisplayLayoutSnapshot? ResolvePcGamingLayout(DisplaySettings display, string? profileName)
+    {
+        if (!string.IsNullOrWhiteSpace(profileName)
+            && !string.Equals(profileName, "PcGaming", StringComparison.OrdinalIgnoreCase))
+        {
+            var namedProfile = display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
+            if (namedProfile is not null)
+            {
+                return namedProfile.Layout;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName))
+        {
+            var activeProfile = display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
+            if (activeProfile is not null)
+            {
+                return activeProfile.Layout;
+            }
+        }
+
+        return display.PcGamingLayout;
+    }
+
+    private static AppSettings BuildEffectivePcGamingSettings(AppSettings settings, string? profileName)
+    {
+        return new AppSettings
+        {
+            Display = settings.Display,
+            Launcher = settings.Launcher,
+            GameShell = settings.GameShell,
+            PcGaming = ResolvePcGamingBehaviour(settings.Display, settings.PcGaming, profileName),
+            WorkMode = settings.WorkMode,
+            Audio = settings.Audio,
+            Controller = settings.Controller,
+            Hotkeys = settings.Hotkeys,
+            Startup = settings.Startup,
+            Ui = settings.Ui
+        };
+    }
+
+    private static PcGamingSettings ResolvePcGamingBehaviour(DisplaySettings display, PcGamingSettings defaultBehaviour, string? profileName)
+    {
+        var resolvedProfileName = ResolvePcGamingProfileName(display, profileName);
+        if (string.IsNullOrWhiteSpace(resolvedProfileName))
+        {
+            return defaultBehaviour;
+        }
+
+        var profileBehaviour = display.PcGamingProfileBehaviours.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase));
+        return profileBehaviour?.Behaviour ?? defaultBehaviour;
+    }
+
+    private static string? ResolvePcGamingProfileName(DisplaySettings display, string? requestedProfileName)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedProfileName)
+            && !string.Equals(requestedProfileName, "PcGaming", StringComparison.OrdinalIgnoreCase)
+            && display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, requestedProfileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return requestedProfileName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName)
+            && display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return display.ActivePcGamingProfileName;
+        }
+
+        return display.PcGamingProfiles.FirstOrDefault()?.Name;
+    }
+
+    private ModeState GetState()
+    {
+        lock (_statusGate)
+        {
+            return _state;
+        }
+    }
+
+    private void SetStatus(ModeState state, string? lastOperation, long? durationMs, string? error, GameShellMode? currentMode = null)
+    {
+        lock (_statusGate)
+        {
+            _state = state;
+            if (currentMode is not null)
+            {
+                _currentMode = currentMode;
+            }
+
+            _lastOperation = lastOperation;
+            _lastOperationDurationMs = durationMs;
+            _lastError = error;
+        }
+    }
+}

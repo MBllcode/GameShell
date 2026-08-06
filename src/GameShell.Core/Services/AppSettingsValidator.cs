@@ -1,0 +1,214 @@
+using GameShell.Core.Models;
+
+namespace GameShell.Core.Services;
+
+public static class AppSettingsValidator
+{
+    public static AppSettings Validate(AppSettings settings)
+    {
+        settings.Display ??= new DisplaySettings();
+        settings.Display.PcGamingProfiles ??= [];
+        settings.Display.PcGamingProfileBehaviours ??= [];
+        settings.Launcher ??= new LauncherSettings();
+        settings.GameShell ??= new GameShellSettings();
+        settings.PcGaming ??= new PcGamingSettings();
+        settings.WorkMode ??= new WorkModeSettings();
+        settings.Audio ??= new AudioSettings();
+        settings.Controller ??= new ControllerSettings();
+        settings.Hotkeys ??= new HotkeySettings();
+        settings.Startup ??= new StartupSettings();
+        settings.Ui ??= new UiSettings();
+
+        settings.GameShell.CompletionDelaySeconds = Math.Clamp(settings.GameShell.CompletionDelaySeconds, 0, 600);
+        settings.GameShell.ProtectedProcessNames ??= [];
+        settings.GameShell.CloseOnlyProcessNames ??= [];
+        MigrateLegacyPcGamingDefaults(settings.PcGaming);
+        settings.PcGaming.CompletionDelaySeconds = Math.Clamp(settings.PcGaming.CompletionDelaySeconds, 0, 600);
+        settings.PcGaming.ProtectedProcessNames ??= [];
+        settings.PcGaming.CloseOnlyProcessNames ??= [];
+        settings.WorkMode.TaskbarRestoreDelaySeconds = Math.Clamp(settings.WorkMode.TaskbarRestoreDelaySeconds, 0, 600);
+        settings.WorkMode.DesktopIconsDelaySeconds = Math.Clamp(settings.WorkMode.DesktopIconsDelaySeconds, 0, 600);
+        settings.WorkMode.CompletionDelaySeconds = Math.Clamp(settings.WorkMode.CompletionDelaySeconds, 0, 600);
+        settings.Ui.WindowWidth = ValidateWindowDimension(settings.Ui.WindowWidth, 1040, 10000);
+        settings.Ui.WindowHeight = ValidateWindowDimension(settings.Ui.WindowHeight, 720, 10000);
+        settings.Ui.WindowLeft = ValidateWindowCoordinate(settings.Ui.WindowLeft);
+        settings.Ui.WindowTop = ValidateWindowCoordinate(settings.Ui.WindowTop);
+        if (string.IsNullOrWhiteSpace(settings.Audio.ConsoleAudioDeviceId))
+        {
+            settings.Audio.ConsoleAudioDeviceId = null;
+            settings.Audio.ConsoleAudioDeviceName = null;
+        }
+
+        ValidateControllerShortcut(settings.Controller.ConsoleMode);
+        ValidateControllerShortcut(settings.Controller.PcGamingMode);
+        ValidateControllerShortcut(settings.Controller.WorkMode);
+
+        NormalizePcGamingProfiles(settings.Display);
+        NormalizePcGamingProfileBehaviours(settings.Display, settings.PcGaming);
+
+        return settings;
+    }
+
+    private static double? ValidateWindowDimension(double? value, double minimum, double maximum)
+    {
+        return value is null || double.IsNaN(value.Value) || double.IsInfinity(value.Value)
+            ? null
+            : Math.Clamp(value.Value, minimum, maximum);
+    }
+
+    private static double? ValidateWindowCoordinate(double? value)
+    {
+        return value is null || double.IsNaN(value.Value) || double.IsInfinity(value.Value)
+            ? null
+            : Math.Clamp(value.Value, -100000, 100000);
+    }
+
+    private static void ValidateControllerShortcut(ControllerShortcutSettings? shortcut)
+    {
+        if (shortcut is null)
+        {
+            return;
+        }
+
+        shortcut.HoldDurationMs = Math.Clamp(shortcut.HoldDurationMs, 300, 3000);
+        if (shortcut.Buttons.Count <= 1)
+        {
+            return;
+        }
+
+        shortcut.Buttons = shortcut.Buttons.Distinct().ToList();
+    }
+
+    private static void MigrateLegacyPcGamingDefaults(PcGamingSettings settings)
+    {
+        if (settings.HideDesktopIcons
+            || settings.HideTaskbar
+            || !settings.CloseVisibleWindows
+            || settings.MinimizeRemainingWindows
+            || settings.MoveCursorToCorner
+            || !settings.HideCursor
+            || settings.StartLauncher
+            || settings.BringLauncherToForeground)
+        {
+            return;
+        }
+
+        settings.HideDesktopIcons = true;
+        settings.HideTaskbar = true;
+        settings.CloseVisibleWindows = false;
+        settings.MoveCursorToCorner = true;
+        settings.HideCursor = false;
+        settings.StartLauncher = true;
+        settings.BringLauncherToForeground = true;
+    }
+
+    private static void NormalizePcGamingProfiles(DisplaySettings display)
+    {
+        var normalizedProfiles = new List<DisplayLayoutProfile>();
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in display.PcGamingProfiles.Where(profile => profile.Layout is not null))
+        {
+            var baseName = string.IsNullOrWhiteSpace(candidate.Name) ? "Profil" : candidate.Name.Trim();
+            var uniqueName = baseName;
+            var suffix = 2;
+
+            while (!usedNames.Add(uniqueName))
+            {
+                uniqueName = $"{baseName} {suffix++}";
+            }
+
+            normalizedProfiles.Add(new DisplayLayoutProfile
+            {
+                Name = uniqueName,
+                Layout = candidate.Layout
+            });
+        }
+
+        if (normalizedProfiles.Count == 0 && display.PcGamingLayout is not null)
+        {
+            normalizedProfiles.Add(new DisplayLayoutProfile
+            {
+                Name = "Domyslny",
+                Layout = display.PcGamingLayout
+            });
+        }
+
+        display.PcGamingProfiles = normalizedProfiles;
+
+        if (display.PcGamingProfiles.Count == 0)
+        {
+            display.ActivePcGamingProfileName = null;
+            display.PcGamingLayout = null;
+            return;
+        }
+
+        var activeProfile = !string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName)
+            ? display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        activeProfile ??= display.PcGamingProfiles[0];
+        display.ActivePcGamingProfileName = activeProfile.Name;
+        display.PcGamingLayout = activeProfile.Layout;
+    }
+
+    private static void NormalizePcGamingProfileBehaviours(DisplaySettings display, PcGamingSettings defaultBehaviour)
+    {
+        if (display.PcGamingProfiles.Count == 0)
+        {
+            display.PcGamingProfileBehaviours = [];
+            return;
+        }
+
+        var normalized = new List<PcGamingProfileBehaviour>();
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var profile in display.PcGamingProfiles)
+        {
+            var behaviour = ResolveProfileBehaviour(display.PcGamingProfileBehaviours, profile.Name)
+                ?? ClonePcGamingSettings(defaultBehaviour);
+
+            MigrateLegacyPcGamingDefaults(behaviour);
+            behaviour.CompletionDelaySeconds = Math.Clamp(behaviour.CompletionDelaySeconds, 0, 600);
+            behaviour.ProtectedProcessNames ??= [];
+            behaviour.CloseOnlyProcessNames ??= [];
+
+            if (!usedNames.Add(profile.Name))
+            {
+                continue;
+            }
+
+            normalized.Add(new PcGamingProfileBehaviour
+            {
+                ProfileName = profile.Name,
+                Behaviour = behaviour
+            });
+        }
+
+        display.PcGamingProfileBehaviours = normalized;
+    }
+
+    private static PcGamingSettings? ResolveProfileBehaviour(IEnumerable<PcGamingProfileBehaviour> candidates, string profileName)
+    {
+        var matched = candidates.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
+        return matched?.Behaviour;
+    }
+
+    private static PcGamingSettings ClonePcGamingSettings(PcGamingSettings source)
+    {
+        return new PcGamingSettings
+        {
+            HideDesktopIcons = source.HideDesktopIcons,
+            HideTaskbar = source.HideTaskbar,
+            CloseVisibleWindows = source.CloseVisibleWindows,
+            MinimizeRemainingWindows = source.MinimizeRemainingWindows,
+            MoveCursorToCorner = source.MoveCursorToCorner,
+            HideCursor = source.HideCursor,
+            StartLauncher = source.StartLauncher,
+            BringLauncherToForeground = source.BringLauncherToForeground,
+            ProtectedProcessNames = source.ProtectedProcessNames is null ? [] : [..source.ProtectedProcessNames],
+            CloseOnlyProcessNames = source.CloseOnlyProcessNames is null ? [] : [..source.CloseOnlyProcessNames],
+            CompletionDelaySeconds = source.CompletionDelaySeconds
+        };
+    }
+}

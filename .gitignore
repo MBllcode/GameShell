@@ -1,0 +1,10 @@
+bin/
+obj/
+node_modules/
+dist/
+.vs/
+*.user
+*.suo
+*.log
+src/ConsoleMode.Desktop/wwwroot/
+src/ConsoleMode.Ui/tsconfig.tsbuildinfo
