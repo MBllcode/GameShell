@@ -56,6 +56,9 @@ type SettingsPayloadOverrides = {
   pcGamingProfileHotkeys?: PcGamingProfileHotkeysMap;
 };
 
+const MAX_PROFILE_DISPLAYS = 2;
+const PROFILE_DISPLAY_LIMIT_MESSAGE = 'Obsługa profili z więcej niż 2 monitorami będzie dostępna wkrótce. Na razie wybierz maksymalnie 2 ekrany.';
+
 const initialStatus: AppStatus = {
   state: 'Unknown',
   currentMode: null,
@@ -75,19 +78,27 @@ const steps: SetupStep[] = [
   { id: 'gaming-display', title: 'Ekrany', subtitle: 'Tworzenie profili ekranow' },
   { id: 'launcher', title: 'Launcher profilu', subtitle: 'Launcher per profil' },
   { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Pulpit i okna per profil' },
-  { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Powrót pulpitu' },
   { id: 'controller', title: 'Skróty profilu', subtitle: 'Hotkeye per profil' },
+  { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Powrót pulpitu' },
   { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Ustawienia globalne' },
   { id: 'finish', title: 'Zakończenie', subtitle: 'Podsumowanie profilu' }
 ];
 
-const createProfileFlowStepIds: StepId[] = [
+const profileSettingsStepIds: StepId[] = [
   'gaming-display',
   'launcher',
   'console-behaviour',
-  'controller',
-  'finish'
+  'controller'
 ];
+
+const globalSettingsStepIds: StepId[] = [
+  'work-behaviour',
+  'app-behaviour'
+];
+
+function isGlobalSettingsStep(stepId: StepId) {
+  return globalSettingsStepIds.includes(stepId);
+}
 
 const defaultConsoleBehaviour = {
   hideDesktopIcons: true,
@@ -169,6 +180,7 @@ export function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [activeModeAction, setActiveModeAction] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isVeryFirstConfiguration, setIsVeryFirstConfiguration] = useState(true);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [isEditingSection, setIsEditingSection] = useState(false);
   const [isCreatingProfileFlow, setIsCreatingProfileFlow] = useState(false);
@@ -259,7 +271,17 @@ export function App() {
     });
   }, []);
 
-  const activeStepIds = isCreatingProfileFlow ? createProfileFlowStepIds : steps.map((step) => step.id);
+  const indexedStep = steps[stepIndex] ?? steps[0];
+  const isNonFirstRunEditingSession = !isVeryFirstConfiguration && isEditingSection;
+  const activeStepIds = isVeryFirstConfiguration
+    ? steps.map((step) => step.id)
+    : isCreatingProfileFlow
+      ? profileSettingsStepIds
+      : isEditingSection
+        ? isGlobalSettingsStep(indexedStep.id)
+          ? globalSettingsStepIds
+          : profileSettingsStepIds
+        : steps.map((step) => step.id);
   const activeSteps = activeStepIds
     .map((id) => steps.find((step) => step.id === id) ?? null)
     .filter((step): step is SetupStep => step !== null);
@@ -273,6 +295,7 @@ export function App() {
   const canGoBack = resolvedFlowPosition > 0;
   const isModeSwitching = activeModeAction !== null;
   const footerMessage = error || status.lastError || message;
+  const canSelectSidebarStep = !isVeryFirstConfiguration && !isSaving;
 
   useEffect(() => {
     syncSelectionsWithActiveDisplays(displays);
@@ -379,6 +402,7 @@ export function App() {
       startMenuShortcut: loadedSettings.startup?.createStartMenuShortcut ?? true,
       desktopShortcut: loadedSettings.startup?.createDesktopShortcut ?? false
     });
+    setIsVeryFirstConfiguration(!loadedSettings.ui?.isFirstRunCompleted);
     setIsSetupComplete(loadedSettings.ui?.isFirstRunCompleted ?? false);
     setHasUnsavedChanges(false);
     pendingSettingsOverrideRef.current = null;
@@ -574,8 +598,21 @@ export function App() {
     setMessage(isEditingSection ? 'Zapisywanie zmian...' : 'Zapisywanie konfiguracji...');
 
     try {
+      const preferredProfileName = resolvePreferredProfileNameForPostSaveSelection(
+        displayProfileDraftRef.current.profileName,
+        selectedPcGamingBehaviourProfileName
+      );
       const savedSettings = await saveCurrentSettings(true, pendingSettingsOverrideRef.current ?? undefined);
       pendingSettingsOverrideRef.current = null;
+
+      const savedProfiles = savedSettings.display?.pcGamingProfiles ?? [];
+      const matchedPreferred = preferredProfileName
+        ? savedProfiles.find((profile) => profile.name.toLowerCase() === preferredProfileName.toLowerCase())?.name ?? null
+        : null;
+      if (matchedPreferred) {
+        setSelectedPcGamingBehaviourProfileName(matchedPreferred);
+      }
+
       setIsEditingSection(false);
       setIsCreatingProfileFlow(false);
       setIsSetupComplete(savedSettings.ui.isFirstRunCompleted);
@@ -588,7 +625,7 @@ export function App() {
   }
 
   async function saveAndReturnToDashboard() {
-    if (currentStep.id === 'gaming-display') {
+    if (isCreatingProfileFlow || currentStep.id === 'gaming-display') {
       const committed = await commitGamingDisplayDraft(false, 'save');
       if (!committed) {
         return;
@@ -602,6 +639,11 @@ export function App() {
   }
 
   function requestNavigation(action: PendingNavigationAction) {
+    if (isVeryFirstConfiguration) {
+      void executeNavigation(action);
+      return;
+    }
+
     if (action === 'goNext') {
       void executeNavigation(action);
       return;
@@ -670,6 +712,12 @@ export function App() {
     const profileName = latestDraft.profileName.trim();
     const identities = latestDraft.identities;
     const hasDraft = profileName.length > 0 && identities.length > 0;
+    const hasPartialDraft = profileName.length > 0 || identities.length > 0;
+
+    if (hasPartialDraft && !hasDraft) {
+      setError('Uzupełnij nazwę nowego profilu i wybierz co najmniej jeden ekran.');
+      return false;
+    }
 
     if (isCreatingProfileFlow && !hasDraft) {
       setError('Uzupełnij nazwę nowego profilu i wybierz co najmniej jeden ekran.');
@@ -678,6 +726,11 @@ export function App() {
 
     if (!hasDraft && pcGamingProfiles.length === 0) {
       setError('Musisz dodać pierwszy profil ekranów, aby kontynuować.');
+      return false;
+    }
+
+    if (hasDraft && identities.length > MAX_PROFILE_DISPLAYS) {
+      setError(PROFILE_DISPLAY_LIMIT_MESSAGE);
       return false;
     }
 
@@ -850,8 +903,13 @@ export function App() {
 
   async function saveSelectedPcGamingLayout(profileName: string, identities: DisplayIdentity[]) {
     const trimmedName = profileName.trim();
-    if (!trimmedName) {
-      setError('Nazwa profilu jest wymagana.');
+    if (!trimmedName || identities.length === 0) {
+      setError('Uzupełnij nazwę nowego profilu i wybierz co najmniej jeden ekran.');
+      return;
+    }
+
+    if (identities.length > MAX_PROFILE_DISPLAYS) {
+      setError(PROFILE_DISPLAY_LIMIT_MESSAGE);
       return;
     }
 
@@ -1024,7 +1082,37 @@ export function App() {
           </div>
           <ol className="step-list">
             {activeSteps.map((step, index) => (
-              <li className={`step-item ${index === resolvedFlowPosition ? 'active' : ''} ${index < resolvedFlowPosition ? 'done' : ''}`} key={step.id}>
+              <li
+                className={`step-item ${index === resolvedFlowPosition ? 'active' : ''} ${index < resolvedFlowPosition ? 'done' : ''} ${canSelectSidebarStep ? 'clickable' : ''}`}
+                key={step.id}
+                role={canSelectSidebarStep ? 'button' : undefined}
+                tabIndex={canSelectSidebarStep ? 0 : undefined}
+                onClick={() => {
+                  if (!canSelectSidebarStep) {
+                    return;
+                  }
+
+                  const targetIndex = steps.findIndex((entry) => entry.id === step.id);
+                  if (targetIndex >= 0) {
+                    setError(null);
+                    setStepIndex(targetIndex);
+                    setMessage('Edytujesz wybraną sekcję.');
+                  }
+                }}
+                onKeyDown={(event: KeyboardEvent<HTMLLIElement>) => {
+                  if (!canSelectSidebarStep || (event.key !== 'Enter' && event.key !== ' ')) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  const targetIndex = steps.findIndex((entry) => entry.id === step.id);
+                  if (targetIndex >= 0) {
+                    setError(null);
+                    setStepIndex(targetIndex);
+                    setMessage('Edytujesz wybraną sekcję.');
+                  }
+                }}
+              >
                 <span>{step.title}</span>
                 <small>{step.subtitle}</small>
               </li>
@@ -1045,7 +1133,7 @@ export function App() {
             {currentStep.id === 'welcome' ? <WelcomeStep stepNumber={stepIndex + 1} /> : null}
             {currentStep.id === 'gaming-display' ? (
               <DisplaysStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 displays={displays}
                 pcGamingProfiles={pcGamingProfiles}
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
@@ -1058,7 +1146,7 @@ export function App() {
             ) : null}
             {currentStep.id === 'launcher' ? (
               <LauncherStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 pcGamingProfiles={pcGamingProfiles}
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
                 launcher={launcher}
@@ -1076,7 +1164,7 @@ export function App() {
             ) : null}
             {currentStep.id === 'console-behaviour' ? (
               <ConsoleBehaviourStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 pcGamingProfiles={pcGamingProfiles}
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
                 pcGamingBehaviour={pcGamingBehaviour}
@@ -1085,7 +1173,7 @@ export function App() {
             ) : null}
             {currentStep.id === 'work-behaviour' ? (
               <WorkBehaviourStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 globalWorkModeHotkey={hotkeys.workMode}
                 onChangeGlobalWorkModeHotkey={(value) => {
                   setHotkeys((current) => ({
@@ -1103,7 +1191,7 @@ export function App() {
             ) : null}
             {currentStep.id === 'controller' ? (
               <ControllerStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 pcGamingProfiles={pcGamingProfiles}
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
                 hotkeys={hotkeys}
@@ -1123,7 +1211,7 @@ export function App() {
             ) : null}
             {currentStep.id === 'app-behaviour' ? (
               <AppBehaviourStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 finishOptions={finishOptions}
                 setFinishOptions={(options) => {
                   setFinishOptions(options);
@@ -1133,7 +1221,7 @@ export function App() {
             ) : null}
             {currentStep.id === 'finish' ? (
               <FinishStep
-                stepNumber={stepIndex + 1}
+                stepNumber={resolvedFlowPosition + 1}
                 launcher={launcher}
                 pcGamingLayout={pcGamingLayout}
                 pcGamingProfileLaunchers={pcGamingProfileLaunchers}
@@ -1144,7 +1232,21 @@ export function App() {
           </section>
 
           <footer className="setup-footer">
-            {isEditingSection ? (
+            {isNonFirstRunEditingSession ? (
+              <>
+                <div className="footer-actions-left">
+                  <button className="secondary-button" type="button" disabled={isSaving} onClick={() => requestNavigation('returnToDashboard')}>
+                    Panel główny
+                  </button>
+                </div>
+                <p className={error || status.lastError ? 'error-line' : 'operation-line'}>{footerMessage}</p>
+                <div className="footer-actions-right">
+                  <button className="primary-button" type="button" disabled={isSaving} onClick={saveAndReturnToDashboard}>
+                    {isSaving ? 'Zapisywanie...' : 'Zapisz zmiany'}
+                  </button>
+                </div>
+              </>
+            ) : isEditingSection ? (
               <>
                 <div className="footer-actions-left">
                   <button className="secondary-button" type="button" disabled={!canGoBack || isSaving} onClick={() => requestNavigation('goBack')}>
@@ -1415,31 +1517,42 @@ function Dashboard({
                     <h2 id="dashboard-config-title">Dostosuj ustawienia</h2>
                   </div>
                 </div>
-                <div className="section-shortcuts" aria-label="Edycja konfiguracji">
-                  <button type="button" onClick={() => editSettings('gaming-display')}>
-                    <span>Ekrany</span>
-                    <small>Tworzenie i wybór układów ekranów</small>
-                  </button>
-                  <button type="button" onClick={() => editSettings('launcher')}>
-                    <span>Launcher profilu</span>
-                    <small>Konfiguracja launchera dla każdego profilu</small>
-                  </button>
-                  <button type="button" onClick={() => editSettings('console-behaviour')}>
-                    <span>Zachowanie profilu</span>
-                    <small>Ikony, taskbar, okna i kursor per profil</small>
-                  </button>
-                  <button type="button" onClick={() => editSettings('work-behaviour')}>
-                    <span>Zachowanie Work Mode</span>
-                    <small>Przywracanie pulpitu po graniu</small>
-                  </button>
-                  <button type="button" onClick={() => editSettings('controller')}>
-                    <span>Skróty profilu</span>
-                    <small>Hotkeye wejścia i wyjścia dla profilu</small>
-                  </button>
-                  <button type="button" onClick={() => editSettings('app-behaviour')}>
-                    <span>Uruchamianie aplikacji</span>
-                    <small>Autostart, tray i skróty systemowe</small>
-                  </button>
+                <div className="dashboard-shortcut-groups" aria-label="Edycja konfiguracji">
+                  <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
+                    <h3 id="profile-settings-title">Ustawienia profilu</h3>
+                    <div className="section-shortcuts">
+                      <button type="button" onClick={() => editSettings('gaming-display')}>
+                        <span>Ekrany</span>
+                        <small>Tworzenie i wybór układów ekranów</small>
+                      </button>
+                      <button type="button" onClick={() => editSettings('launcher')}>
+                        <span>Launcher profilu</span>
+                        <small>Konfiguracja launchera dla każdego profilu</small>
+                      </button>
+                      <button type="button" onClick={() => editSettings('console-behaviour')}>
+                        <span>Zachowanie profilu</span>
+                        <small>Ikony, taskbar, okna i kursor per profil</small>
+                      </button>
+                      <button type="button" onClick={() => editSettings('controller')}>
+                        <span>Skróty profilu</span>
+                        <small>Hotkey wejścia dla wybranego profilu</small>
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="dashboard-shortcut-group" aria-labelledby="global-settings-title">
+                    <h3 id="global-settings-title">Ustawienia globalne</h3>
+                    <div className="section-shortcuts section-shortcuts-global">
+                      <button type="button" onClick={() => editSettings('work-behaviour')}>
+                        <span>Zachowanie Work Mode</span>
+                        <small>Globalne przywracanie pulpitu po graniu</small>
+                      </button>
+                      <button type="button" onClick={() => editSettings('app-behaviour')}>
+                        <span>Uruchamianie aplikacji</span>
+                        <small>Autostart, tray i skróty systemowe</small>
+                      </button>
+                    </div>
+                  </section>
                 </div>
               </section>
             </div>
@@ -1490,6 +1603,7 @@ function DisplaysStep({
 }) {
   const [newProfileName, setNewProfileName] = useState('');
   const [selectedDisplays, setSelectedDisplays] = useState<DisplayIdentity[]>([]);
+  const [displayLimitMessage, setDisplayLimitMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!prefillFromSelectedProfile || !selectedProfileName) {
@@ -1504,6 +1618,7 @@ function DisplaysStep({
     const profileIdentities = extractDisplayIdentities(selectedProfile.layout);
     setNewProfileName(selectedProfile.name);
     setSelectedDisplays(profileIdentities);
+    setDisplayLimitMessage(profileIdentities.length > MAX_PROFILE_DISPLAYS ? PROFILE_DISPLAY_LIMIT_MESSAGE : null);
     onDraftChange(selectedProfile.name, profileIdentities);
   }, [pcGamingProfiles, prefillFromSelectedProfile, selectedProfileName]);
 
@@ -1513,9 +1628,19 @@ function DisplaysStep({
   function toggleSelectedDisplay(identity: DisplayIdentity) {
     setSelectedDisplays((current) => {
       const alreadySelected = current.some((selected) => sameIdentity(selected, identity));
+
+      if (!alreadySelected && current.length >= MAX_PROFILE_DISPLAYS) {
+        setDisplayLimitMessage(PROFILE_DISPLAY_LIMIT_MESSAGE);
+        return current;
+      }
+
       const next = alreadySelected
         ? current.filter((selected) => !sameIdentity(selected, identity))
         : [...current, identity];
+
+      if (next.length <= MAX_PROFILE_DISPLAYS) {
+        setDisplayLimitMessage(null);
+      }
 
       onDraftChange(newProfileName, next);
       return next;
@@ -1542,6 +1667,7 @@ function DisplaysStep({
             onDraftChange(nextName, selectedDisplays);
           }}
           canEditSelection={canEditSelection}
+          displayLimitMessage={displayLimitMessage}
         />
       </section>
     </div>
@@ -1557,7 +1683,8 @@ function DisplayDiagnosticsPanel({
   refreshDisplays,
   profileName,
   setProfileName,
-  canEditSelection
+  canEditSelection,
+  displayLimitMessage
 }: {
   displays: DisplayDeviceInfo[];
   selectedDisplays: DisplayIdentity[];
@@ -1568,7 +1695,10 @@ function DisplayDiagnosticsPanel({
   profileName: string;
   setProfileName: (value: string) => void;
   canEditSelection: boolean;
+  displayLimitMessage: string | null;
 }) {
+  const selectionMessage = displayLimitMessage ?? (!canEditSelection ? 'Uzupełnij nazwę profilu i wybierz co najmniej jeden ekran.' : null);
+
   return (
     <section className="display-diagnostics" aria-labelledby="display-diagnostics-title">
       <div className="display-diagnostics-head">
@@ -1592,7 +1722,11 @@ function DisplayDiagnosticsPanel({
           placeholder="np. TV + monitor biurkowy"
         />
       </label>
-      {!canEditSelection ? <p className="hint-line">Uzupełnij nazwę profilu i wybierz co najmniej jeden ekran.</p> : null}
+      {selectionMessage ? (
+        <p className={`${displayLimitMessage ? 'error-line display-error' : 'hint-line'} display-selection-message`}>
+          {selectionMessage}
+        </p>
+      ) : null}
       {error ? <p className="error-line display-error">{error}</p> : null}
       {!error && displays.length === 0 ? <p className="hint-line">Nie wykryto ekranów.</p> : null}
       {displays.length > 0 ? (
@@ -2229,6 +2363,16 @@ function areIdentitySetsEqual(left: DisplayIdentity[], right: DisplayIdentity[])
   }
 
   return left.every((identity) => right.some((candidate) => sameIdentity(identity, candidate)));
+}
+
+function resolvePreferredProfileNameForPostSaveSelection(draftProfileName: string, selectedProfileName: string) {
+  const trimmedDraft = draftProfileName.trim();
+  if (trimmedDraft.length > 0) {
+    return trimmedDraft;
+  }
+
+  const trimmedSelected = selectedProfileName.trim();
+  return trimmedSelected.length > 0 ? trimmedSelected : '';
 }
 
 function formatDisplayResolution(display: DisplayDeviceInfo) {

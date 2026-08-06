@@ -7,7 +7,7 @@ namespace GameShell.Windows.Detection;
 
 public sealed class DependencyDetectionService : IDependencyDetectionService
 {
-    private const string PlayniteDownloadUrl = "https://playnite.link/download/";
+    private const string PlayniteDownloadUrl = "https://playnite.link/download/PlayniteInstaller.exe";
     private const string SteamDownloadUrl = "https://store.steampowered.com/about/";
     private const string XboxAppDownloadUrl = "https://www.xbox.com/en-us/apps/xbox-app-on-pc";
 

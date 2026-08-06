@@ -22,6 +22,9 @@ Ten rozdzial jest zrodlem prawdy dla stylu komponentow w GameShell. Jesli nizsza
 - Krok `Ekrany`, `Launcher`, `Zachowanie profilu` i `Skroty profilu` pracuja na profilu zaznaczonym w panelu glownym.
 - Po zmianie ekranow dla zaznaczonego profilu, `Zapisz zmiany` musi aktualizowac konfiguracje tego profilu (nie poprzedni snapshot stanu).
 - Dla tego przypadku zapis nie moze polegac tylko na asynchronicznym `setState`; commit draftu profilu musi byc uwzgledniony w payloadzie `saveSettings`.
+- Nowy profil nie moze zostac utworzony bez nazwy ani bez wybranego co najmniej jednego ekranu.
+- Aktualnie profile ekranow obsluguja maksymalnie 2 monitory; proba zaznaczenia wiekszej liczby pokazuje komunikat o funkcji dostepnej wkrotce i nie moze zostac zapisana.
+- W kroku `Launcher`, gdy Playnite nie jest zainstalowany, pokazuj komunikat: [Pobierz Playnite z oficjalnej strony](https://playnite.link/download/PlayniteInstaller.exe) (URL ma byc ukryty pod tekstem linku).
 
 ### Ustawienia globalne aplikacji
 
@@ -34,6 +37,15 @@ Ten rozdzial jest zrodlem prawdy dla stylu komponentow w GameShell. Jesli nizsza
 
 - Po kliknieciu `Zapisz zmiany` nie pokazujemy dodatkowych modali potwierdzajacych.
 - Wyjatek: modal nadpisania przy realnym konflikcie nazwy z innym profilem.
+- W `very first configuration` przyciski `Wstecz` i `Dalej` dzialaja swobodnie i nie pokazuja modala o niezapisanych zmianach.
+
+### Flow konfiguracji
+
+- `Very first configuration` uzywa pelnego flow i nie pozwala klikac w sidebar.
+- W `very first configuration` kolejnosc kluczowych krokow to: `Zachowanie profilu` -> `Skroty profilu` -> `Zachowanie Work Mode`.
+- Podczas `very first configuration` profil jest trzymany jako draft i jest tworzony dopiero po kliknieciu `Zakoncz i wroc do panelu`.
+- Po kliknieciu `Dodaj profil` uzytkownik przechodzi przez tylko profilowe kroki z klasyczna nawigacja `Wstecz` / `Dalej`, a zapis nastepuje dopiero na koncu flow.
+- Po wejsciu w edycje istniejacej sekcji po pierwszej konfiguracji sidebar pokazuje tylko kroki z danej grupy (`profil` albo `globalne`), sidebar jest klikalny, a footer pokazuje `Panel glowny` po lewej i `Zapisz zmiany` po prawej.
 
 za dużo kart i ramek,
 za dużo zaokrągleń,

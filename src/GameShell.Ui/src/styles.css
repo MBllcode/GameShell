@@ -158,6 +158,20 @@ button {
   font-size: 0.82rem;
 }
 
+.step-item.clickable {
+  cursor: pointer;
+}
+
+.step-item.clickable:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-panel);
+}
+
+.step-item.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .step-item::before {
   counter-increment: setup-step;
   content: counter(setup-step);
@@ -718,6 +732,34 @@ h1 {
   background: transparent;
 }
 
+.dashboard-shortcut-groups {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.dashboard-shortcut-group {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-shortcut-group h3 {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dashboard-shortcut-group .section-shortcuts {
+  margin-top: 0;
+}
+
+.section-shortcuts-global {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .section-shortcuts button {
   min-width: 0;
   min-height: 88px;
@@ -1099,6 +1141,14 @@ h1 {
 
 .display-error {
   margin-top: 9px;
+}
+
+.display-selection-message {
+  margin: 5px 0 0 !important;
+  padding: 0;
+  text-align: left;
+  max-width: none;
+  font-weight: 700;
 }
 
 .display-list {
@@ -1518,6 +1568,12 @@ h1 {
   font-size: 0.82rem;
   font-weight: 600;
   text-align: center;
+}
+
+.display-diagnostics .display-selection-message {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  text-align: left !important;
 }
 
 .validation-note-line,
