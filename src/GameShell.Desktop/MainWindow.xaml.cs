@@ -9,6 +9,7 @@ using GameShell.Core.Models;
 using GameShell.Desktop.WebView;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
 using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private const int HotkeyConsoleModeId = 0x4701;
     private const int HotkeyPcGamingModeId = 0x4702;
     private const int HotkeyWorkModeId = 0x4703;
+    private const int HotkeyProfileEnterBaseId = 0x4800;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
@@ -31,6 +33,7 @@ public partial class MainWindow : Window
     private readonly ISettingsService _settingsService;
     private readonly IModeCommandService _modeCommandService;
     private readonly IDisplayTransitionService _displayTransitionService;
+    private readonly Dictionary<int, string> _profileEnterHotkeys = new();
     private NotifyIcon? _notifyIcon;
     private HwndSource? _source;
     private bool _isExitRequested;
@@ -323,12 +326,38 @@ public partial class MainWindow : Window
         UnregisterHotkey(HotkeyConsoleModeId);
         UnregisterHotkey(HotkeyPcGamingModeId);
         UnregisterHotkey(HotkeyWorkModeId);
+        UnregisterProfileHotkeys();
 
         try
         {
             var settings = await _settingsService.LoadAsync();
             RegisterHotkey(HotkeyConsoleModeId, settings.Hotkeys?.ConsoleMode ?? "");
-            RegisterHotkey(HotkeyPcGamingModeId, settings.Hotkeys?.PcGamingMode ?? "");
+
+            var profileConfigurations = settings.Display.PcGamingProfileConfigurations;
+            var hasProfileEnterHotkeys = false;
+
+            for (var index = 0; index < profileConfigurations.Count; index++)
+            {
+                var configuration = profileConfigurations[index];
+                var profileName = configuration.ProfileName;
+                if (string.IsNullOrWhiteSpace(profileName))
+                {
+                    continue;
+                }
+
+                var enterId = HotkeyProfileEnterBaseId + index;
+                if (RegisterHotkey(enterId, configuration.Hotkeys?.EnterProfile ?? ""))
+                {
+                    _profileEnterHotkeys[enterId] = profileName;
+                    hasProfileEnterHotkeys = true;
+                }
+            }
+
+            if (!hasProfileEnterHotkeys)
+            {
+                RegisterHotkey(HotkeyPcGamingModeId, settings.Hotkeys?.PcGamingMode ?? "");
+            }
+
             RegisterHotkey(HotkeyWorkModeId, settings.Hotkeys?.WorkMode ?? "");
         }
         catch (Exception ex)
@@ -337,18 +366,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RegisterHotkey(int id, string hotkey)
+    private bool RegisterHotkey(int id, string hotkey)
     {
         if (!TryParseHotkey(hotkey, out var modifiers, out var virtualKey))
         {
-            return;
+            return false;
         }
 
         var handle = new WindowInteropHelper(this).Handle;
         if (!RegisterHotKey(handle, id, modifiers, virtualKey))
         {
             _logger.LogWarning("Failed to register hotkey {Hotkey}.", hotkey);
+            return false;
         }
+
+        return true;
     }
 
     private void UnregisterHotkey(int id)
@@ -368,10 +400,18 @@ public partial class MainWindow : Window
         }
 
         handled = true;
-        _ = wParam.ToInt32() switch
+        var hotkeyId = wParam.ToInt32();
+
+        if (_profileEnterHotkeys.TryGetValue(hotkeyId, out var profileName))
+        {
+            _ = RunPcGamingHotkeyAsync(profileName);
+            return IntPtr.Zero;
+        }
+
+        _ = hotkeyId switch
         {
             HotkeyConsoleModeId => RunTrayCommandAsync(() => _modeCommandService.EnterGameShellAsync()),
-            HotkeyPcGamingModeId => RunPcGamingHotkeyAsync(),
+            HotkeyPcGamingModeId => RunPcGamingHotkeyAsync(null),
             HotkeyWorkModeId => RunTrayCommandAsync(() => _modeCommandService.EnterWorkModeAsync()),
             _ => Task.CompletedTask
         };
@@ -379,14 +419,15 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
-    private async Task RunPcGamingHotkeyAsync()
+    private async Task RunPcGamingHotkeyAsync(string? forcedProfileName)
     {
         try
         {
             var settings = await _settingsService.LoadAsync();
+            var profileName = ResolveRequestedProfileName(settings, forcedProfileName);
             if (settings.Display.PcGamingLayout is not null || settings.Display.PcGamingProfiles.Count > 0)
             {
-                await _modeCommandService.EnterGameShellWithDisplayProfileAsync("PcGaming");
+                await _modeCommandService.EnterGameShellWithDisplayProfileAsync(profileName ?? "PcGaming");
             }
             else
             {
@@ -401,6 +442,33 @@ public partial class MainWindow : Window
         {
             _webViewBridge.NotifyStatusChanged();
         }
+    }
+
+    private static string? ResolveRequestedProfileName(AppSettings settings, string? forcedProfileName)
+    {
+        if (!string.IsNullOrWhiteSpace(forcedProfileName)
+            && settings.Display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, forcedProfileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return forcedProfileName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.Display.ActivePcGamingProfileName)
+            && settings.Display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, settings.Display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return settings.Display.ActivePcGamingProfileName;
+        }
+
+        return settings.Display.PcGamingProfiles.FirstOrDefault()?.Name;
+    }
+
+    private void UnregisterProfileHotkeys()
+    {
+        foreach (var hotkeyId in _profileEnterHotkeys.Keys.ToList())
+        {
+            UnregisterHotkey(hotkeyId);
+        }
+
+        _profileEnterHotkeys.Clear();
     }
 
     private static bool TryParseHotkey(string? value, out uint modifiers, out uint virtualKey)
@@ -499,6 +567,7 @@ public partial class MainWindow : Window
     {
         await SaveWindowBoundsAsync();
         _webViewBridge.SettingsSaved -= OnSettingsSaved;
+        UnregisterProfileHotkeys();
         UnregisterHotkey(HotkeyConsoleModeId);
         UnregisterHotkey(HotkeyPcGamingModeId);
         UnregisterHotkey(HotkeyWorkModeId);

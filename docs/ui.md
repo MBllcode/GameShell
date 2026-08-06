@@ -1,3 +1,40 @@
+## Aktualny standard komponentow UI (obowiazujacy)
+
+Ten rozdzial jest zrodlem prawdy dla stylu komponentow w GameShell. Jesli nizsza czesc pliku zawiera starsze notatki warsztatowe, traktuj je jako archiwum, a nie aktywna specyfikacje.
+
+### Potwierdzenia i dialogi
+
+- Wszystkie potwierdzenia akcji destrukcyjnych lub nadpisujacych musza byc renderowane jako modal w stylu aplikacji.
+- Uzywaj wspolnych klas: `.dialog-backdrop`, `.dialog-panel`, `.dialog-actions`.
+- Nie uzywaj natywnych okien przegladarki: `window.confirm`, `window.alert`, `window.prompt`.
+- Kolejnosc przyciskow w dialogu: akcja bezpieczna (`Anuluj`) po lewej, akcja glowna po prawej.
+
+### Spojnosc komponentow
+
+- Przyciski: `primary-button`, `secondary-button`, `danger-button`.
+- Pola: `text-input`, `hotkey-input`.
+- Komponenty stanu i chipy: statusy i badge korzystaja z tej samej palety tokenow CSS.
+- Promien rogow pozostaje techniczny i maly (do 2 px).
+
+### Kontekst profili
+
+- Krok `Ekrany` nie pokazuje osobnej listy "zapisanych profili".
+- Krok `Ekrany`, `Launcher`, `Zachowanie profilu` i `Skroty profilu` pracuja na profilu zaznaczonym w panelu glownym.
+- Po zmianie ekranow dla zaznaczonego profilu, `Zapisz zmiany` musi aktualizowac konfiguracje tego profilu (nie poprzedni snapshot stanu).
+- Dla tego przypadku zapis nie moze polegac tylko na asynchronicznym `setState`; commit draftu profilu musi byc uwzgledniony w payloadzie `saveSettings`.
+
+### Ustawienia globalne aplikacji
+
+- Ustawienia globalne aplikacji sa w osobnym kroku `Zachowanie aplikacji`, a nie w kroku `Zakonczenie`.
+- `Startuj zminimalizowany do tray` jest zalezny od `Startuj z Windows`:
+  - gdy `Startuj z Windows` jest wylaczone, opcja startu zminimalizowanego jest automatycznie wylaczana,
+  - gdy `Startuj z Windows` jest wylaczone, checkbox startu zminimalizowanego jest nieaktywny.
+
+### Reguly modali
+
+- Po kliknieciu `Zapisz zmiany` nie pokazujemy dodatkowych modali potwierdzajacych.
+- Wyjatek: modal nadpisania przy realnym konflikcie nazwy z innym profilem.
+
 za dużo kart i ramek,
 za dużo zaokrągleń,
 zbyt wiele kolorów akcentów naraz,

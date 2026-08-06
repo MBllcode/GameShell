@@ -55,6 +55,22 @@ public sealed class ModeOrchestratorTests
 
     private sealed class FakeModeWorkflowService : IModeWorkflowService
     {
+        public Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
+            AppSettings settings,
+            GameShellMode mode,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(ModeWorkflowResult.Ok());
+        }
+
+        public Task<ModeWorkflowResult> CompleteGamingWorkflowAsync(
+            AppSettings settings,
+            GameShellMode mode,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(ModeWorkflowResult.Ok());
+        }
+
         public Task<ModeWorkflowResult> RunGamingWorkflowAsync(
             AppSettings settings,
             GameShellMode mode,

@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { sendBridgeCommand, subscribeBridgeEvent } from './services/webViewBridge';
 import type {
   AppSettings,
@@ -17,7 +17,7 @@ type StepId =
   | 'console-behaviour'
   | 'work-behaviour'
   | 'controller'
-  | 'test'
+  | 'app-behaviour'
   | 'finish';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
@@ -28,10 +28,32 @@ type HotkeySettingsState = {
   workMode: string;
 };
 
+type ProfileHotkeysState = {
+  enterProfile: string;
+};
+
 type SetupStep = {
   id: StepId;
   title: string;
   subtitle: string;
+};
+
+type PendingNavigationAction = 'goBack' | 'goNext' | 'returnToDashboard';
+
+type DisplayProfileDraft = {
+  profileName: string;
+  identities: DisplayIdentity[];
+};
+
+type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
+
+type SettingsPayloadOverrides = {
+  pcGamingProfiles?: DisplayLayoutProfile[];
+  activePcGamingProfileName?: string | null;
+  pcGamingLayout?: DisplayLayoutSnapshot | null;
+  pcGamingProfileBehaviours?: PcGamingProfileBehaviourMap;
+  pcGamingProfileLaunchers?: PcGamingProfileLauncherMap;
+  pcGamingProfileHotkeys?: PcGamingProfileHotkeysMap;
 };
 
 const initialStatus: AppStatus = {
@@ -50,13 +72,21 @@ const initialStatus: AppStatus = {
 
 const steps: SetupStep[] = [
   { id: 'welcome', title: 'Start', subtitle: 'Co skonfigurujemy' },
-  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Profile ekranow i Gaming Mode' },
-  { id: 'launcher', title: 'Launcher', subtitle: 'Co uruchamiać' },
-  { id: 'console-behaviour', title: 'Zachowanie Gaming Mode', subtitle: 'Pulpit i okna' },
+  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Tworzenie profili ekranow' },
+  { id: 'launcher', title: 'Launcher profilu', subtitle: 'Launcher per profil' },
+  { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Pulpit i okna per profil' },
   { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Powrót pulpitu' },
-  { id: 'controller', title: 'Skróty klawiatury i kontrolera', subtitle: 'Hotkeye trybów' },
-  { id: 'test', title: 'Test', subtitle: 'Sprawdzenie przełączania' },
-  { id: 'finish', title: 'Zakończenie', subtitle: 'Gotowe do zapisu' }
+  { id: 'controller', title: 'Skróty profilu', subtitle: 'Hotkeye per profil' },
+  { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Ustawienia globalne' },
+  { id: 'finish', title: 'Zakończenie', subtitle: 'Podsumowanie profilu' }
+];
+
+const createProfileFlowStepIds: StepId[] = [
+  'gaming-display',
+  'launcher',
+  'console-behaviour',
+  'controller',
+  'finish'
 ];
 
 const defaultConsoleBehaviour = {
@@ -84,6 +114,8 @@ const defaultPcGamingBehaviour = {
 type PcGamingBehaviourState = typeof defaultPcGamingBehaviour;
 type PcGamingBehaviourKey = keyof PcGamingBehaviourState;
 type PcGamingProfileBehaviourMap = Record<string, PcGamingBehaviourState>;
+type PcGamingProfileLauncherMap = Record<string, LauncherType>;
+type PcGamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
 
 const pcGamingBehaviourOptions: Array<{ key: PcGamingBehaviourKey; label: string }> = [
   { key: 'hideDesktopIcons', label: 'Ukryj ikony pulpitu' },
@@ -103,6 +135,31 @@ const defaultWorkBehaviour = {
   doNotMinimizeWindows: true
 };
 
+const launcherOptions: Array<{ value: LauncherType; title: string; description: string; badge: string }> = [
+  {
+    value: 'Playnite Fullscreen',
+    title: 'Playnite Fullscreen',
+    description: 'Najlepszy wybór dla biblioteki wielu launcherów i obsługi pada na TV.',
+    badge: 'Polecany'
+  },
+  {
+    value: 'Steam Big Picture',
+    title: 'Steam Big Picture',
+    description: 'Bezpośrednie wejście w tryb kanapowy Steam.',
+    badge: 'Steam'
+  },
+  {
+    value: 'Xbox App',
+    title: 'Xbox App',
+    description: 'Szybki start aplikacji Xbox i biblioteki Game Pass.',
+    badge: 'Xbox'
+  }
+];
+
+const defaultProfileHotkeys: ProfileHotkeysState = {
+  enterProfile: ''
+};
+
 export function App() {
   const [status, setStatus] = useState<AppStatus>(initialStatus);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -114,6 +171,15 @@ export function App() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [isEditingSection, setIsEditingSection] = useState(false);
+  const [isCreatingProfileFlow, setIsCreatingProfileFlow] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [pendingNavigationAction, setPendingNavigationAction] = useState<PendingNavigationAction | null>(null);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [showOverwriteProfileDialog, setShowOverwriteProfileDialog] = useState(false);
+  const [pendingOverwriteProfileAction, setPendingOverwriteProfileAction] = useState<OverwriteProfileAction | null>(null);
+  const [displayProfileDraft, setDisplayProfileDraft] = useState<DisplayProfileDraft>({ profileName: '', identities: [] });
+  const displayProfileDraftRef = useRef<DisplayProfileDraft>({ profileName: '', identities: [] });
+  const pendingSettingsOverrideRef = useRef<SettingsPayloadOverrides | null>(null);
   const [displays, setDisplays] = useState<DisplayDeviceInfo[]>([]);
   const [isRefreshingDisplays, setIsRefreshingDisplays] = useState(false);
   const [displayListError, setDisplayListError] = useState<string | null>(null);
@@ -123,6 +189,8 @@ export function App() {
   const [pcGamingProfiles, setPcGamingProfiles] = useState<DisplayLayoutProfile[]>([]);
   const [activePcGamingProfileName, setActivePcGamingProfileName] = useState<string | null>(null);
   const [pcGamingProfileBehaviours, setPcGamingProfileBehaviours] = useState<PcGamingProfileBehaviourMap>({});
+  const [pcGamingProfileLaunchers, setPcGamingProfileLaunchers] = useState<PcGamingProfileLauncherMap>({});
+  const [pcGamingProfileHotkeys, setPcGamingProfileHotkeys] = useState<PcGamingProfileHotkeysMap>({});
   const [selectedPcGamingBehaviourProfileName, setSelectedPcGamingBehaviourProfileName] = useState('');
   const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', pcGamingMode: '', workMode: '' });
   const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
@@ -135,6 +203,15 @@ export function App() {
     startMenuShortcut: true,
     desktopShortcut: false
   });
+
+  const syncDisplayProfileDraft = useCallback((nextDraft: DisplayProfileDraft) => {
+    displayProfileDraftRef.current = nextDraft;
+    setDisplayProfileDraft(nextDraft);
+  }, []);
+
+  const handleDisplayDraftChange = useCallback((profileName: string, identities: DisplayIdentity[]) => {
+    syncDisplayProfileDraft({ profileName, identities });
+  }, [syncDisplayProfileDraft]);
 
   useEffect(() => {
     let isMounted = true;
@@ -182,9 +259,18 @@ export function App() {
     });
   }, []);
 
-  const currentStep = steps[Math.min(stepIndex, steps.length - 1)];
-  const isLastStep = stepIndex === steps.length - 1;
-  const canGoBack = stepIndex > 0;
+  const activeStepIds = isCreatingProfileFlow ? createProfileFlowStepIds : steps.map((step) => step.id);
+  const activeSteps = activeStepIds
+    .map((id) => steps.find((step) => step.id === id) ?? null)
+    .filter((step): step is SetupStep => step !== null);
+  const activeStepIndexes = activeSteps.map((step) => steps.findIndex((entry) => entry.id === step.id));
+  const fallbackStepIndex = activeStepIndexes[0] ?? 0;
+  const currentFlowPosition = activeStepIndexes.indexOf(stepIndex);
+  const resolvedFlowPosition = currentFlowPosition >= 0 ? currentFlowPosition : 0;
+  const resolvedStepIndex = currentFlowPosition >= 0 ? stepIndex : fallbackStepIndex;
+  const currentStep = steps[resolvedStepIndex] ?? steps[0];
+  const isLastStep = resolvedFlowPosition === activeStepIndexes.length - 1;
+  const canGoBack = resolvedFlowPosition > 0;
   const isModeSwitching = activeModeAction !== null;
   const footerMessage = error || status.lastError || message;
 
@@ -205,13 +291,38 @@ export function App() {
       setSelectedPcGamingBehaviourProfileName(fallbackProfileName);
       if (fallbackProfileName) {
         setPcGamingBehaviour(pcGamingProfileBehaviours[fallbackProfileName] ?? pcGamingBehaviour);
+        setLauncher(pcGamingProfileLaunchers[fallbackProfileName] ?? launcher);
+        setHotkeys((current) => {
+          const nextHotkeys = pcGamingProfileHotkeys[fallbackProfileName] ?? defaultProfileHotkeys;
+          return {
+            ...current,
+            pcGamingMode: nextHotkeys.enterProfile
+          };
+        });
       }
 
       return;
     }
 
     setPcGamingBehaviour(pcGamingProfileBehaviours[selectedPcGamingBehaviourProfileName] ?? pcGamingBehaviour);
-  }, [activePcGamingProfileName, pcGamingProfiles, pcGamingProfileBehaviours, selectedPcGamingBehaviourProfileName]);
+    setLauncher(pcGamingProfileLaunchers[selectedPcGamingBehaviourProfileName] ?? launcher);
+    setHotkeys((current) => {
+      const nextHotkeys = pcGamingProfileHotkeys[selectedPcGamingBehaviourProfileName] ?? defaultProfileHotkeys;
+      return {
+        ...current,
+        pcGamingMode: nextHotkeys.enterProfile
+      };
+    });
+  }, [
+    activePcGamingProfileName,
+    launcher,
+    pcGamingBehaviour,
+    pcGamingProfileBehaviours,
+    pcGamingProfileHotkeys,
+    pcGamingProfileLaunchers,
+    pcGamingProfiles,
+    selectedPcGamingBehaviourProfileName
+  ]);
 
   function applySettingsToState(loadedSettings: AppSettings) {
     const consoleDisplays = loadedSettings.display?.consoleDisplays?.length
@@ -219,9 +330,15 @@ export function App() {
       : loadedSettings.display?.consoleDisplay ? [loadedSettings.display.consoleDisplay] : [];
     const loadedProfiles = loadedSettings.display?.pcGamingProfiles ?? [];
     const activeProfile = resolveActivePcGamingProfile(loadedSettings.display?.activePcGamingProfileName ?? null, loadedProfiles);
+    const loadedProfileConfigurations = loadedSettings.display?.pcGamingProfileConfigurations ?? [];
     const loadedProfileBehaviours = loadedSettings.display?.pcGamingProfileBehaviours ?? [];
     const defaultBehaviour = toPcGamingBehaviourState(loadedSettings.pcGaming);
-    const nextProfileBehaviours = buildProfileBehaviourMap(loadedProfiles, loadedProfileBehaviours, defaultBehaviour);
+    const defaultLauncher = toLauncherType(loadedSettings.launcher?.type || 'Playnite');
+    const nextProfileBehaviours = buildProfileBehaviourMap(loadedProfiles, loadedProfileConfigurations, loadedProfileBehaviours, defaultBehaviour);
+    const nextProfileLaunchers = buildProfileLauncherMap(loadedProfiles, loadedProfileConfigurations, defaultLauncher);
+    const nextProfileHotkeys = buildProfileHotkeysMap(loadedProfiles, loadedProfileConfigurations, {
+      enterProfile: loadedSettings.hotkeys?.pcGamingMode ?? ''
+    });
     const selectedProfileName = activeProfile?.name ?? loadedProfiles[0]?.name ?? '';
 
     setSelectedConsoleDisplays(consoleDisplays);
@@ -229,6 +346,8 @@ export function App() {
     setPcGamingProfiles(loadedProfiles);
     setActivePcGamingProfileName(activeProfile?.name ?? null);
     setPcGamingProfileBehaviours(nextProfileBehaviours);
+    setPcGamingProfileLaunchers(nextProfileLaunchers);
+    setPcGamingProfileHotkeys(nextProfileHotkeys);
     setSelectedPcGamingBehaviourProfileName(selectedProfileName);
     setPcGamingLayout(activeProfile?.layout ?? loadedSettings.display?.pcGamingLayout ?? null);
     setHotkeys({
@@ -236,7 +355,7 @@ export function App() {
       pcGamingMode: loadedSettings.hotkeys?.pcGamingMode || '',
       workMode: loadedSettings.hotkeys?.workMode || ''
     });
-    setLauncher(toLauncherType(loadedSettings.launcher?.type || 'Playnite'));
+    setLauncher(nextProfileLaunchers[selectedProfileName] ?? defaultLauncher);
     setConsoleBehaviour({
       hideDesktopIcons: loadedSettings.gameShell?.hideDesktopIcons ?? true,
       hideTaskbar: loadedSettings.gameShell?.hideTaskbar ?? true,
@@ -261,6 +380,12 @@ export function App() {
       desktopShortcut: loadedSettings.startup?.createDesktopShortcut ?? false
     });
     setIsSetupComplete(loadedSettings.ui?.isFirstRunCompleted ?? false);
+    setHasUnsavedChanges(false);
+    pendingSettingsOverrideRef.current = null;
+  }
+
+  function markUnsavedChanges() {
+    setHasUnsavedChanges(true);
   }
 
   function syncSelectionsWithActiveDisplays(detectedDisplays: DisplayDeviceInfo[]) {
@@ -278,6 +403,7 @@ export function App() {
       [profileName]: behaviour
     }));
     setPcGamingBehaviour(behaviour);
+    markUnsavedChanges();
   }
 
   function updatePcGamingBehaviourFlag(key: PcGamingBehaviourKey, value: boolean) {
@@ -297,22 +423,83 @@ export function App() {
     });
   }
 
-  function buildSettingsPayload(isFirstRunCompleted = isSetupComplete): AppSettings {
-    const launcherSettings = getLauncherSettings(launcher);
-    const activeProfileName = resolvePcGamingBehaviourProfileName(activePcGamingProfileName, pcGamingProfiles);
-    const activeProfileBehaviour = activeProfileName ? pcGamingProfileBehaviours[activeProfileName] : null;
+  function setProfileLauncher(profileName: string, nextLauncher: LauncherType) {
+    setPcGamingProfileLaunchers((current) => ({
+      ...current,
+      [profileName]: nextLauncher
+    }));
+    setLauncher(nextLauncher);
+    markUnsavedChanges();
+  }
+
+  function updateProfileHotkey(profileName: string, key: keyof ProfileHotkeysState, value: string) {
+    if (key === 'enterProfile' && isDuplicateProfileEnterHotkey(profileName, value, pcGamingProfileHotkeys)) {
+      setError('Ten hotkey wejścia jest już przypisany do innego profilu. Wybierz inną kombinację.');
+      return;
+    }
+
+    setError(null);
+    setPcGamingProfileHotkeys((current) => ({
+      ...current,
+      [profileName]: {
+        ...(current[profileName] ?? defaultProfileHotkeys),
+        [key]: value
+      }
+    }));
+    markUnsavedChanges();
+
+    if (selectedPcGamingBehaviourProfileName === profileName) {
+      setHotkeys((current) => ({
+        ...current,
+        pcGamingMode: key === 'enterProfile' ? value : current.pcGamingMode
+      }));
+    }
+  }
+
+  function buildSettingsPayload(
+    isFirstRunCompleted = isSetupComplete,
+    overrides?: SettingsPayloadOverrides
+  ): AppSettings {
+    const effectivePcGamingProfiles = overrides?.pcGamingProfiles ?? pcGamingProfiles;
+    const effectiveActivePcGamingProfileName = overrides?.activePcGamingProfileName ?? activePcGamingProfileName;
+    const effectivePcGamingLayout = overrides?.pcGamingLayout ?? pcGamingLayout;
+    const effectivePcGamingProfileBehaviours = overrides?.pcGamingProfileBehaviours ?? pcGamingProfileBehaviours;
+    const effectivePcGamingProfileLaunchers = overrides?.pcGamingProfileLaunchers ?? pcGamingProfileLaunchers;
+    const effectivePcGamingProfileHotkeys = overrides?.pcGamingProfileHotkeys ?? pcGamingProfileHotkeys;
+
+    const activeProfileName = resolvePcGamingBehaviourProfileName(effectiveActivePcGamingProfileName, effectivePcGamingProfiles);
+    const activeProfileBehaviour = activeProfileName ? effectivePcGamingProfileBehaviours[activeProfileName] : null;
+    const activeProfileLauncher = activeProfileName ? effectivePcGamingProfileLaunchers[activeProfileName] : null;
+    const activeProfileHotkeys = activeProfileName ? effectivePcGamingProfileHotkeys[activeProfileName] : null;
     const savedPcGamingBehaviour = activeProfileBehaviour ?? pcGamingBehaviour;
+    const savedLauncher = activeProfileLauncher ?? launcher;
+    const launcherSettings = getLauncherSettings(savedLauncher);
+    const savedHotkeys = activeProfileHotkeys ?? {
+      enterProfile: hotkeys.pcGamingMode
+    };
 
     return {
       display: {
         consoleDisplay: selectedConsoleDisplay,
         consoleDisplays: selectedConsoleDisplays,
-        pcGamingLayout,
-        pcGamingProfiles,
-        activePcGamingProfileName,
-        pcGamingProfileBehaviours: pcGamingProfiles.map((profile) => ({
+        pcGamingLayout: effectivePcGamingLayout,
+        pcGamingProfiles: effectivePcGamingProfiles,
+        activePcGamingProfileName: effectiveActivePcGamingProfileName,
+        pcGamingProfileConfigurations: effectivePcGamingProfiles.map((profile) => ({
           profileName: profile.name,
-          behaviour: pcGamingProfileBehaviours[profile.name] ?? savedPcGamingBehaviour
+          behaviour: effectivePcGamingProfileBehaviours[profile.name] ?? savedPcGamingBehaviour,
+          launcher: {
+            ...getLauncherSettings(effectivePcGamingProfileLaunchers[profile.name] ?? savedLauncher),
+            targetDisplayId: selectedConsoleDisplay?.monitorDevicePath ?? null
+          },
+          hotkeys: {
+            enterProfile: (effectivePcGamingProfileHotkeys[profile.name]?.enterProfile ?? savedHotkeys.enterProfile ?? '').trim(),
+            enterWorkMode: ''
+          }
+        })),
+        pcGamingProfileBehaviours: effectivePcGamingProfiles.map((profile) => ({
+          profileName: profile.name,
+          behaviour: effectivePcGamingProfileBehaviours[profile.name] ?? savedPcGamingBehaviour
         }))
       },
       launcher: {
@@ -346,7 +533,7 @@ export function App() {
       controller: settings?.controller ?? { enabled: false, consoleMode: null, pcGamingMode: null, workMode: null },
       hotkeys: {
         consoleMode: hotkeys.consoleMode.trim(),
-        pcGamingMode: hotkeys.pcGamingMode.trim(),
+        pcGamingMode: (savedHotkeys.enterProfile || hotkeys.pcGamingMode).trim(),
         workMode: hotkeys.workMode.trim()
       },
       startup: {
@@ -362,8 +549,8 @@ export function App() {
     };
   }
 
-  async function saveCurrentSettings(isFirstRunCompleted = isSetupComplete) {
-    const savedSettings = await sendBridgeCommand<AppSettings>('saveSettings', buildSettingsPayload(isFirstRunCompleted));
+  async function saveCurrentSettings(isFirstRunCompleted = isSetupComplete, overrides?: SettingsPayloadOverrides) {
+    const savedSettings = await sendBridgeCommand<AppSettings>('saveSettings', buildSettingsPayload(isFirstRunCompleted, overrides));
     setSettings(savedSettings);
     applySettingsToState(savedSettings);
     setStatus((current) => ({
@@ -375,14 +562,22 @@ export function App() {
     return savedSettings;
   }
 
-  async function saveAndReturnToDashboard() {
+  async function persistAndReturnToDashboard() {
     setError(null);
+
+    if (pcGamingProfiles.length === 0) {
+      setError('Najpierw dodaj co najmniej jeden profil ekranów.');
+      return;
+    }
+
     setIsSaving(true);
     setMessage(isEditingSection ? 'Zapisywanie zmian...' : 'Zapisywanie konfiguracji...');
 
     try {
-      const savedSettings = await saveCurrentSettings(true);
+      const savedSettings = await saveCurrentSettings(true, pendingSettingsOverrideRef.current ?? undefined);
+      pendingSettingsOverrideRef.current = null;
       setIsEditingSection(false);
+      setIsCreatingProfileFlow(false);
       setIsSetupComplete(savedSettings.ui.isFirstRunCompleted);
       setMessage(isEditingSection ? 'Zmiany zapisane.' : 'Konfiguracja zapisana. GameShell jest gotowy do użycia.');
     } catch (reason: unknown) {
@@ -392,27 +587,250 @@ export function App() {
     }
   }
 
-  async function goNext() {
+  async function saveAndReturnToDashboard() {
+    if (currentStep.id === 'gaming-display') {
+      const committed = await commitGamingDisplayDraft(false, 'save');
+      if (!committed) {
+        return;
+      }
+
+      // Let React commit profile state updates before building save payload.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    await persistAndReturnToDashboard();
+  }
+
+  function requestNavigation(action: PendingNavigationAction) {
+    if (action === 'goNext') {
+      void executeNavigation(action);
+      return;
+    }
+
+    if (!hasUnsavedChanges) {
+      void executeNavigation(action);
+      return;
+    }
+
+    setPendingNavigationAction(action);
+    setShowUnsavedDialog(true);
+  }
+
+  async function executeNavigation(action: PendingNavigationAction) {
+    switch (action) {
+      case 'goBack':
+        goBackInternal();
+        break;
+      case 'goNext':
+        await goNextInternal();
+        break;
+      case 'returnToDashboard':
+        returnToDashboardInternal();
+        break;
+      default:
+        break;
+    }
+  }
+
+  async function goNextInternal() {
     setError(null);
+
+    if (currentStep.id === 'gaming-display') {
+      await continueFromGamingDisplayStep(false);
+      return;
+    }
+
     if (isLastStep) {
       await saveAndReturnToDashboard();
       return;
     }
 
-    setStepIndex((current) => Math.min(current + 1, steps.length - 1));
+    const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
+    if (typeof nextIndex === 'number') {
+      setStepIndex(nextIndex);
+    }
     setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
   }
 
-  function goBack() {
-    setError(null);
-    setStepIndex((current) => Math.max(0, current - 1));
+  async function continueFromGamingDisplayStep(allowOverwrite: boolean) {
+    const committed = await commitGamingDisplayDraft(allowOverwrite, 'next');
+    if (!committed) {
+      return;
+    }
+
+    const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
+    if (typeof nextIndex === 'number') {
+      setStepIndex(nextIndex);
+    }
+    setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
   }
 
-  function returnToDashboard() {
+  async function commitGamingDisplayDraft(allowOverwrite: boolean, overwriteAction: OverwriteProfileAction) {
+    const latestDraft = displayProfileDraftRef.current;
+    const profileName = latestDraft.profileName.trim();
+    const identities = latestDraft.identities;
+    const hasDraft = profileName.length > 0 && identities.length > 0;
+
+    if (isCreatingProfileFlow && !hasDraft) {
+      setError('Uzupełnij nazwę nowego profilu i wybierz co najmniej jeden ekran.');
+      return false;
+    }
+
+    if (!hasDraft && pcGamingProfiles.length === 0) {
+      setError('Musisz dodać pierwszy profil ekranów, aby kontynuować.');
+      return false;
+    }
+
+    if (hasDraft) {
+      const existingProfile = pcGamingProfiles.find((profile) => profile.name.toLowerCase() === profileName.toLowerCase()) ?? null;
+      const isEditingSelectedProfile = selectedPcGamingBehaviourProfileName.length > 0
+        && selectedPcGamingBehaviourProfileName.toLowerCase() === profileName.toLowerCase();
+      const isLayoutUnchanged = existingProfile
+        ? areIdentitySetsEqual(identities, extractDisplayIdentities(existingProfile.layout))
+        : false;
+
+      if (existingProfile && !isEditingSelectedProfile && !isLayoutUnchanged && !allowOverwrite) {
+        setPendingOverwriteProfileAction(overwriteAction);
+        setShowOverwriteProfileDialog(true);
+        return false;
+      }
+
+      if (!existingProfile || !isLayoutUnchanged) {
+        await saveSelectedPcGamingLayout(profileName, identities);
+      }
+    }
+
+    return true;
+  }
+
+  async function handleOverwriteProfileDialogConfirm() {
+    setShowOverwriteProfileDialog(false);
+    const action = pendingOverwriteProfileAction;
+    setPendingOverwriteProfileAction(null);
+
+    const committed = await commitGamingDisplayDraft(true, action ?? 'next');
+    if (!committed) {
+      return;
+    }
+
+    if (action === 'save') {
+      // Let React commit profile state updates before building save payload.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await persistAndReturnToDashboard();
+      return;
+    }
+
+    if (action === 'save-then-continue') {
+      try {
+        setIsSaving(true);
+
+        // Let React commit profile state updates before building save payload.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        await saveCurrentSettings(isSetupComplete, pendingSettingsOverrideRef.current ?? undefined);
+        pendingSettingsOverrideRef.current = null;
+        setHasUnsavedChanges(false);
+
+        if (pendingNavigationAction) {
+          const actionToRun = pendingNavigationAction;
+          setPendingNavigationAction(null);
+          await executeNavigation(actionToRun);
+        }
+      } catch (reason: unknown) {
+        setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać konfiguracji.');
+      } finally {
+        setIsSaving(false);
+      }
+
+      return;
+    }
+
+    const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
+    if (typeof nextIndex === 'number') {
+      setStepIndex(nextIndex);
+    }
+    setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
+  }
+
+  function goBackInternal() {
+    setError(null);
+    const previousIndex = activeStepIndexes[resolvedFlowPosition - 1];
+    if (typeof previousIndex === 'number') {
+      setStepIndex(previousIndex);
+    }
+  }
+
+  function returnToDashboardInternal() {
     setError(null);
     setIsEditingSection(false);
+    setIsCreatingProfileFlow(false);
     setIsSetupComplete(true);
+    syncDisplayProfileDraft({ profileName: '', identities: [] });
+    setShowOverwriteProfileDialog(false);
+    setPendingOverwriteProfileAction(null);
+    pendingSettingsOverrideRef.current = null;
     setMessage('Gotowe.');
+  }
+
+  async function handleUnsavedDialogSave() {
+    if (!pendingNavigationAction) {
+      setShowUnsavedDialog(false);
+      return;
+    }
+
+    setShowUnsavedDialog(false);
+
+    if (pendingNavigationAction === 'goNext' && isLastStep) {
+      await saveAndReturnToDashboard();
+      setPendingNavigationAction(null);
+      return;
+    }
+
+    let shouldResetPendingNavigation = true;
+
+    try {
+      setIsSaving(true);
+
+      if (currentStep.id === 'gaming-display') {
+        const committed = await commitGamingDisplayDraft(false, 'save-then-continue');
+        if (!committed) {
+          shouldResetPendingNavigation = false;
+          return;
+        }
+
+        // Let React commit profile state updates before building save payload.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      await saveCurrentSettings(isSetupComplete, pendingSettingsOverrideRef.current ?? undefined);
+      pendingSettingsOverrideRef.current = null;
+      setHasUnsavedChanges(false);
+      await executeNavigation(pendingNavigationAction);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać konfiguracji.');
+    } finally {
+      setIsSaving(false);
+      if (shouldResetPendingNavigation) {
+        setPendingNavigationAction(null);
+      }
+    }
+  }
+
+  async function handleUnsavedDialogDiscard() {
+    const action = pendingNavigationAction;
+    setShowUnsavedDialog(false);
+    setPendingNavigationAction(null);
+
+    if (settings) {
+      applySettingsToState(settings);
+    } else {
+      setHasUnsavedChanges(false);
+      pendingSettingsOverrideRef.current = null;
+    }
+
+    if (action) {
+      await executeNavigation(action);
+    }
   }
 
   async function refreshDisplays() {
@@ -431,40 +849,91 @@ export function App() {
   }
 
   async function saveSelectedPcGamingLayout(profileName: string, identities: DisplayIdentity[]) {
-    setError(null);
-    try {
-      const savedSettings = await sendBridgeCommand<AppSettings>('savePcGamingDisplays', { identities, profileName });
-      setSettings(savedSettings);
-      applySettingsToState(savedSettings);
-      setMessage(`Zapisano profil ekranow: ${profileName}.`);
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać profilu ekranow.');
+    const trimmedName = profileName.trim();
+    if (!trimmedName) {
+      setError('Nazwa profilu jest wymagana.');
+      return;
     }
-  }
 
-  async function setActivePcGamingProfile(profileName: string) {
-    setError(null);
-    try {
-      const savedSettings = await sendBridgeCommand<AppSettings>('setActivePcGamingProfile', { profileName });
-      setSettings(savedSettings);
-      applySettingsToState(savedSettings);
-      setMessage(`Aktywny profil Gaming Mode: ${profileName}.`);
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się przełączyć profilu Gaming Mode.');
-    }
-  }
+    const selectedDevices = identities
+      .map((identity) => displays.find((display) => sameIdentity(display.identity, identity)) ?? null)
+      .filter((display): display is DisplayDeviceInfo => display !== null);
 
-  async function clearPcGamingLayout(profileName?: string) {
-    setError(null);
-    try {
-      const payload = profileName ? { profileName } : undefined;
-      const savedSettings = await sendBridgeCommand<AppSettings>('clearPcGamingLayout', payload);
-      setSettings(savedSettings);
-      applySettingsToState(savedSettings);
-      setMessage(profileName ? `Usunięto profil ekranow: ${profileName}.` : 'Usunięto uklad ekranow.');
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się usunąć ukladu ekranow.');
+    if (selectedDevices.length !== identities.length || selectedDevices.length === 0) {
+      setError('Nie wszystkie wybrane ekrany są obecnie dostępne. Odśwież listę ekranów.');
+      return;
     }
+
+    const primary = selectedDevices.find((display) => display.isPrimary) ?? selectedDevices[0];
+    const originX = primary.positionX;
+    const originY = primary.positionY;
+    const layout: DisplayLayoutSnapshot = {
+      id: `${Date.now()}`,
+      capturedAt: new Date().toISOString(),
+      displays: selectedDevices.map((display) => ({
+        identity: display.identity,
+        isActive: true,
+        isPrimary: sameIdentity(primary.identity, display.identity),
+        positionX: display.positionX - originX,
+        positionY: display.positionY - originY,
+        width: display.width,
+        height: display.height,
+        orientation: display.orientation,
+        refreshRateNumerator: display.refreshRateNumerator,
+        refreshRateDenominator: display.refreshRateDenominator,
+        refreshRateHz: display.refreshRateHz,
+        sourceId: display.sourceId,
+        targetId: display.targetId,
+        adapterLuid: display.adapterLuid,
+        sourceDeviceName: display.sourceDeviceName,
+        connectionTechnology: display.connectionTechnology
+      }))
+    };
+
+    const existingProfile = pcGamingProfiles.find((profile) => profile.name.toLowerCase() === trimmedName.toLowerCase()) ?? null;
+    const nextProfiles = existingProfile
+      ? pcGamingProfiles.map((profile) => profile.name.toLowerCase() === trimmedName.toLowerCase()
+        ? { ...profile, name: existingProfile.name, layout }
+        : profile)
+      : [...pcGamingProfiles, { name: trimmedName, layout }];
+    const resolvedProfileName = existingProfile?.name ?? trimmedName;
+    const nextProfileBehaviours: PcGamingProfileBehaviourMap = {
+      ...pcGamingProfileBehaviours,
+      [resolvedProfileName]: pcGamingProfileBehaviours[resolvedProfileName] ?? pcGamingBehaviour
+    };
+    const nextProfileLaunchers: PcGamingProfileLauncherMap = {
+      ...pcGamingProfileLaunchers,
+      [resolvedProfileName]: pcGamingProfileLaunchers[resolvedProfileName] ?? launcher
+    };
+    const nextProfileHotkeys: PcGamingProfileHotkeysMap = {
+      ...pcGamingProfileHotkeys,
+      [resolvedProfileName]: pcGamingProfileHotkeys[resolvedProfileName] ?? {
+        enterProfile: hotkeys.pcGamingMode
+      }
+    };
+
+    setPcGamingProfiles(nextProfiles);
+    setActivePcGamingProfileName(resolvedProfileName);
+    setPcGamingLayout(layout);
+    setSelectedPcGamingBehaviourProfileName(resolvedProfileName);
+    setPcGamingProfileBehaviours(nextProfileBehaviours);
+    setPcGamingProfileLaunchers(nextProfileLaunchers);
+    setPcGamingProfileHotkeys(nextProfileHotkeys);
+    pendingSettingsOverrideRef.current = {
+      pcGamingProfiles: nextProfiles,
+      activePcGamingProfileName: resolvedProfileName,
+      pcGamingLayout: layout,
+      pcGamingProfileBehaviours: nextProfileBehaviours,
+      pcGamingProfileLaunchers: nextProfileLaunchers,
+      pcGamingProfileHotkeys: nextProfileHotkeys
+    };
+    markUnsavedChanges();
+    setError(null);
+    setMessage(
+      isEditingSection
+        ? `Profil ekranow przygotowany: ${resolvedProfileName}. Zapisz zmiany, aby zatwierdzić.`
+        : `Profil ekranow przygotowany: ${resolvedProfileName}. Kliknij Dalej, aby kontynuować konfigurację.`
+    );
   }
 
   async function runModeCommand(command: ModeCommand, saveBeforeRun = false, payload?: unknown) {
@@ -474,8 +943,9 @@ export function App() {
     setMessage(`Przełączanie na ${formatCommandTargetMode(command)}...`);
 
     try {
-      if (saveBeforeRun) {
-        await saveCurrentSettings(false);
+      const shouldSaveBeforeRun = saveBeforeRun || hasUnsavedChanges;
+      if (shouldSaveBeforeRun) {
+        await saveCurrentSettings(isSetupComplete);
       }
 
       const result = await sendBridgeCommand<ModeResult>(command, payload);
@@ -499,16 +969,41 @@ export function App() {
         launcher={launcher}
         pcGamingLayout={pcGamingLayout}
         pcGamingProfiles={pcGamingProfiles}
+        pcGamingProfileLaunchers={pcGamingProfileLaunchers}
+        pcGamingProfileHotkeys={pcGamingProfileHotkeys}
         activeProfileName={activePcGamingProfileName}
+        selectedProfileName={selectedPcGamingBehaviourProfileName}
+        globalWorkModeHotkey={hotkeys.workMode}
         isModeSwitching={isModeSwitching}
         activeModeAction={activeModeAction}
         message={footerMessage}
         hasError={Boolean(error || status.lastError)}
         runModeCommand={runModeCommand}
+        selectProfile={setSelectedPcGamingBehaviourProfileName}
+        createProfile={() => {
+          const targetIndex = steps.findIndex((step) => step.id === 'gaming-display');
+          setIsEditingSection(false);
+          setIsCreatingProfileFlow(true);
+          setIsSetupComplete(false);
+          syncDisplayProfileDraft({ profileName: '', identities: [] });
+          setShowOverwriteProfileDialog(false);
+          setStepIndex(targetIndex >= 0 ? targetIndex : 0);
+          setMessage('Dodaj nowy profil i przejdź przez kroki profilu.');
+        }}
         editSettings={(stepId) => {
           const targetIndex = steps.findIndex((step) => step.id === stepId);
           setIsEditingSection(true);
+          setIsCreatingProfileFlow(false);
           setIsSetupComplete(false);
+          if (stepId === 'gaming-display') {
+            const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedPcGamingBehaviourProfileName) ?? null;
+            if (selectedProfile) {
+              syncDisplayProfileDraft({
+                profileName: selectedProfile.name,
+                identities: extractDisplayIdentities(selectedProfile.layout)
+              });
+            }
+          }
           setStepIndex(targetIndex >= 0 ? targetIndex : 0);
           setMessage('Edytujesz wybraną sekcję.');
         }}
@@ -528,8 +1023,8 @@ export function App() {
             </div>
           </div>
           <ol className="step-list">
-            {steps.map((step, index) => (
-              <li className={`step-item ${index === stepIndex ? 'active' : ''} ${index < stepIndex ? 'done' : ''}`} key={step.id}>
+            {activeSteps.map((step, index) => (
+              <li className={`step-item ${index === resolvedFlowPosition ? 'active' : ''} ${index < resolvedFlowPosition ? 'done' : ''}`} key={step.id}>
                 <span>{step.title}</span>
                 <small>{step.subtitle}</small>
               </li>
@@ -552,40 +1047,88 @@ export function App() {
               <DisplaysStep
                 stepNumber={stepIndex + 1}
                 displays={displays}
-                pcGamingLayout={pcGamingLayout}
                 pcGamingProfiles={pcGamingProfiles}
-                activePcGamingProfileName={activePcGamingProfileName}
+                selectedProfileName={selectedPcGamingBehaviourProfileName}
+                prefillFromSelectedProfile={!isCreatingProfileFlow}
+                onDraftChange={handleDisplayDraftChange}
                 isRefreshingDisplays={isRefreshingDisplays}
                 displayListError={displayListError}
                 refreshDisplays={refreshDisplays}
-                saveSelectedPcGamingLayout={saveSelectedPcGamingLayout}
-                setActivePcGamingProfile={setActivePcGamingProfile}
-                clearPcGamingLayout={clearPcGamingLayout}
               />
             ) : null}
-            {currentStep.id === 'launcher' ? <LauncherStep stepNumber={stepIndex + 1} launcher={launcher} setLauncher={setLauncher} /> : null}
+            {currentStep.id === 'launcher' ? (
+              <LauncherStep
+                stepNumber={stepIndex + 1}
+                pcGamingProfiles={pcGamingProfiles}
+                selectedProfileName={selectedPcGamingBehaviourProfileName}
+                launcher={launcher}
+                setLauncher={(nextLauncher) => {
+                  const profileName = selectedPcGamingBehaviourProfileName;
+                  if (!profileName) {
+                    setLauncher(nextLauncher);
+                    markUnsavedChanges();
+                    return;
+                  }
+
+                  setProfileLauncher(profileName, nextLauncher);
+                }}
+              />
+            ) : null}
             {currentStep.id === 'console-behaviour' ? (
               <ConsoleBehaviourStep
                 stepNumber={stepIndex + 1}
                 pcGamingProfiles={pcGamingProfiles}
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
-                setSelectedProfileName={setSelectedPcGamingBehaviourProfileName}
                 pcGamingBehaviour={pcGamingBehaviour}
                 onChangeBehaviourFlag={updatePcGamingBehaviourFlag}
               />
             ) : null}
             {currentStep.id === 'work-behaviour' ? (
-              <WorkBehaviourStep stepNumber={stepIndex + 1} behaviour={workBehaviour} setBehaviour={setWorkBehaviour} />
-            ) : null}
-            {currentStep.id === 'controller' ? <ControllerStep stepNumber={stepIndex + 1} hotkeys={hotkeys} setHotkeys={setHotkeys} /> : null}
-            {currentStep.id === 'test' ? (
-              <TestStep
+              <WorkBehaviourStep
                 stepNumber={stepIndex + 1}
+                globalWorkModeHotkey={hotkeys.workMode}
+                onChangeGlobalWorkModeHotkey={(value) => {
+                  setHotkeys((current) => ({
+                    ...current,
+                    workMode: value
+                  }));
+                  markUnsavedChanges();
+                }}
+                behaviour={workBehaviour}
+                setBehaviour={(behaviour) => {
+                  setWorkBehaviour(behaviour);
+                  markUnsavedChanges();
+                }}
+              />
+            ) : null}
+            {currentStep.id === 'controller' ? (
+              <ControllerStep
+                stepNumber={stepIndex + 1}
+                pcGamingProfiles={pcGamingProfiles}
+                selectedProfileName={selectedPcGamingBehaviourProfileName}
                 hotkeys={hotkeys}
-                hasPcGamingLayout={Boolean(pcGamingLayout)}
-                isModeSwitching={isModeSwitching}
-                activeModeAction={activeModeAction}
-                runModeCommand={runModeCommand}
+                onChangeHotkey={(key, value) => {
+                  const profileName = selectedPcGamingBehaviourProfileName;
+                  if (!profileName) {
+                    setHotkeys((current) => ({
+                      ...current,
+                      pcGamingMode: key === 'enterProfile' ? value : current.pcGamingMode
+                    }));
+                    return;
+                  }
+
+                  updateProfileHotkey(profileName, key, value);
+                }}
+              />
+            ) : null}
+            {currentStep.id === 'app-behaviour' ? (
+              <AppBehaviourStep
+                stepNumber={stepIndex + 1}
+                finishOptions={finishOptions}
+                setFinishOptions={(options) => {
+                  setFinishOptions(options);
+                  markUnsavedChanges();
+                }}
               />
             ) : null}
             {currentStep.id === 'finish' ? (
@@ -593,9 +1136,9 @@ export function App() {
                 stepNumber={stepIndex + 1}
                 launcher={launcher}
                 pcGamingLayout={pcGamingLayout}
+                pcGamingProfileLaunchers={pcGamingProfileLaunchers}
+                pcGamingProfileHotkeys={pcGamingProfileHotkeys}
                 activeProfileName={activePcGamingProfileName}
-                finishOptions={finishOptions}
-                setFinishOptions={setFinishOptions}
               />
             ) : null}
           </section>
@@ -604,16 +1147,16 @@ export function App() {
             {isEditingSection ? (
               <>
                 <div className="footer-actions-left">
-                  <button className="secondary-button" type="button" disabled={!canGoBack || isSaving} onClick={goBack}>
+                  <button className="secondary-button" type="button" disabled={!canGoBack || isSaving} onClick={() => requestNavigation('goBack')}>
                     Wróć
                   </button>
-                  <button className="secondary-button" type="button" disabled={isSaving} onClick={returnToDashboard}>
+                  <button className="secondary-button" type="button" disabled={isSaving} onClick={() => requestNavigation('returnToDashboard')}>
                     Panel główny
                   </button>
                 </div>
                 <p className={error || status.lastError ? 'error-line' : 'operation-line'}>{footerMessage}</p>
                 <div className="footer-actions-right">
-                  <button className="secondary-button" type="button" disabled={isSaving || isLastStep} onClick={goNext}>
+                  <button className="secondary-button" type="button" disabled={isSaving || isLastStep} onClick={() => requestNavigation('goNext')}>
                     Dalej
                   </button>
                   <button className="primary-button" type="button" disabled={isSaving} onClick={saveAndReturnToDashboard}>
@@ -624,19 +1167,71 @@ export function App() {
             ) : (
               <>
                 <div className="footer-actions-left">
-                  <button className="secondary-button" type="button" disabled={!canGoBack} onClick={goBack}>
+                  <button className="secondary-button" type="button" disabled={!canGoBack} onClick={() => requestNavigation('goBack')}>
                     Wróć
                   </button>
+                  {isCreatingProfileFlow ? (
+                    <button className="secondary-button" type="button" disabled={isSaving} onClick={() => requestNavigation('returnToDashboard')}>
+                      Panel główny
+                    </button>
+                  ) : null}
                 </div>
                 <p className={error || status.lastError ? 'error-line' : 'operation-line'}>{footerMessage}</p>
                 <div className="footer-actions-right">
-                  <button className="primary-button" type="button" disabled={isSaving} onClick={goNext}>
-                    {isSaving ? 'Zapisywanie...' : isLastStep ? 'Zakończ' : 'Dalej'}
+                  <button className="primary-button" type="button" disabled={isSaving} onClick={() => requestNavigation('goNext')}>
+                    {isSaving ? 'Zapisywanie...' : isLastStep ? 'Zakończ i wróć do panelu' : 'Dalej'}
                   </button>
                 </div>
               </>
             )}
           </footer>
+
+          {showOverwriteProfileDialog ? (
+            <div className="dialog-backdrop" role="presentation">
+              <div className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="overwrite-profile-dialog-title">
+                <h3 id="overwrite-profile-dialog-title">Nadpisanie profilu</h3>
+                <p>Profil o tej nazwie już istnieje. Czy na pewno chcesz go nadpisać?</p>
+                <div className="dialog-actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => {
+                      if (pendingOverwriteProfileAction === 'save-then-continue') {
+                        setPendingNavigationAction(null);
+                      }
+                      setShowOverwriteProfileDialog(false);
+                      setPendingOverwriteProfileAction(null);
+                    }}
+                  >
+                    Anuluj
+                  </button>
+                  <button className="primary-button" type="button" onClick={() => void handleOverwriteProfileDialogConfirm()}>
+                    Nadpisz
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {showUnsavedDialog ? (
+            <div className="dialog-backdrop" role="presentation">
+              <div className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="unsaved-dialog-title">
+                <h3 id="unsaved-dialog-title">Niezapisane zmiany</h3>
+                <p>Masz niezapisane zmiany w profilach. Chcesz je zapisać czy odrzucić?</p>
+                <div className="dialog-actions">
+                  <button className="secondary-button" type="button" onClick={() => setShowUnsavedDialog(false)}>
+                    Anuluj
+                  </button>
+                  <button className="danger-button secondary-button" type="button" onClick={() => void handleUnsavedDialogDiscard()}>
+                    Odrzuć
+                  </button>
+                  <button className="primary-button" type="button" onClick={() => void handleUnsavedDialogSave()}>
+                    Zapisz
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>
@@ -666,38 +1261,42 @@ function Dashboard({
   launcher,
   pcGamingLayout,
   pcGamingProfiles,
+  pcGamingProfileLaunchers,
+  pcGamingProfileHotkeys,
   activeProfileName,
+  selectedProfileName,
+  globalWorkModeHotkey,
   isModeSwitching,
   activeModeAction,
   message,
   hasError,
   runModeCommand,
+  selectProfile,
+  createProfile,
   editSettings
 }: {
   status: AppStatus;
   launcher: LauncherType;
   pcGamingLayout: DisplayLayoutSnapshot | null;
   pcGamingProfiles: DisplayLayoutProfile[];
+  pcGamingProfileLaunchers: PcGamingProfileLauncherMap;
+  pcGamingProfileHotkeys: PcGamingProfileHotkeysMap;
   activeProfileName: string | null;
+  selectedProfileName: string;
+  globalWorkModeHotkey: string;
   isModeSwitching: boolean;
   activeModeAction: string | null;
   message: string;
   hasError: boolean;
   runModeCommand: (command: ModeCommand, saveBeforeRun?: boolean, payload?: unknown) => Promise<void>;
+  selectProfile: (profileName: string) => void;
+  createProfile: () => void;
   editSettings: (stepId: StepId) => void;
 }) {
-  const [selectedProfileName, setSelectedProfileName] = useState('');
-
-  useEffect(() => {
-    if (activeProfileName && pcGamingProfiles.some((profile) => profile.name === activeProfileName)) {
-      setSelectedProfileName(activeProfileName);
-      return;
-    }
-
-    setSelectedProfileName(pcGamingProfiles[0]?.name ?? '');
-  }, [activeProfileName, pcGamingProfiles]);
-
+  const activeProfileLauncher = activeProfileName ? pcGamingProfileLaunchers[activeProfileName] : null;
+  const visibleLauncher = activeProfileLauncher ?? launcher;
   const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
+  const canRunSelectedProfile = Boolean(selectedProfileName) && !isModeSwitching;
 
   return (
     <main className="app-shell">
@@ -726,7 +1325,7 @@ function Dashboard({
               </div>
               <div>
                 <dt>Launcher</dt>
-                <dd>{launcher}</dd>
+                <dd>{visibleLauncher}</dd>
               </div>
             </dl>
           </section>
@@ -751,31 +1350,61 @@ function Dashboard({
                   <span className="current-mode-chip">{formatCurrentMode(status)}</span>
                 </div>
                 <div className="mode-card-grid">
-                  <button className={getModeCardClass('enterGameShellWithProfile', status, !selectedProfile)} type="button" disabled={isModeSwitching || !selectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: selectedProfileName })}>
-                    <span className="mode-card-kicker">Profil ekranow</span>
-                    <strong>Gaming Mode</strong>
-                    <small>{selectedProfile ? `${selectedProfile.name} · ${summarizeLayout(selectedProfile.layout)}` : 'Wybierz profil z listy.'}</small>
-                    <span className="mode-card-state">{getModeCardStateLabel('enterGameShellWithProfile', status, !selectedProfile)}</span>
-                    <em className="mode-card-action">{activeModeAction === getModeActionKey('enterGameShellWithProfile') ? 'Przełączanie...' : selectedProfile ? getModeCardHint('enterGameShellWithProfile', status) : 'Wybierz profil poniżej'}</em>
-                  </button>
                   <button className={getModeCardClass('enterWorkMode', status)} type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode')}>
-                    <span className="mode-card-kicker">Powrót</span>
+                    <span className="mode-card-kicker">Strategiczny powrót</span>
+                    <span className="mode-card-hotkey">{globalWorkModeHotkey ? `Hotkey: ${globalWorkModeHotkey}` : 'Hotkey: brak'}</span>
                     <strong>Work Mode</strong>
-                    <small>Przywraca układ sprzed sesji gamingowej oraz pulpit.</small>
+                    <small>Stały punkt bezpieczeństwa: szybki powrót do układu roboczego i pulpitu.</small>
                     <span className="mode-card-state">{getModeCardStateLabel('enterWorkMode', status, false)}</span>
                     <em className="mode-card-action">{activeModeAction === getModeActionKey('enterWorkMode') ? 'Przełączanie...' : getModeCardHint('enterWorkMode', status)}</em>
                   </button>
+                  {pcGamingProfiles.map((profile) => {
+                    const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
+                    const profileHotkeys = pcGamingProfileHotkeys[profile.name] ?? defaultProfileHotkeys;
+                    const profileActionKey = getModeActionKey('enterGameShellWithProfile');
+                    const isProfileConfiguredAsActive = activeProfileName === profile.name;
+                    const isProfileSelectedForEditing = selectedProfileName === profile.name;
+                    const isPcGamingNow = status.currentMode === 'PcGaming';
+                    const stateLabel = isPcGamingNow && isProfileConfiguredAsActive ? 'AKTYWNY' : 'GOTOWY';
+
+                    return (
+                      <button
+                        className={getModeCardClass('enterGameShellWithProfile', status, false, isProfileSelectedForEditing)}
+                        type="button"
+                        key={profile.name}
+                        disabled={isModeSwitching}
+                        onClick={() => selectProfile(profile.name)}
+                      >
+                        <span className="mode-card-kicker">Profil ekranow</span>
+                        <strong>{profile.name}</strong>
+                        <small>{summarizeLayout(profile.layout)} · {profileLauncher}</small>
+                        <span className="mode-card-state">{isProfileSelectedForEditing ? 'ZAZNACZONY' : stateLabel}</span>
+                        <em className="mode-card-action">
+                          {activeModeAction === profileActionKey
+                            ? 'Przełączanie...'
+                            : isProfileSelectedForEditing
+                              ? 'Profil do edycji'
+                              : profileHotkeys.enterProfile
+                                ? `Hotkey: ${profileHotkeys.enterProfile}`
+                                : 'Kliknij, aby zaznaczyć'}
+                        </em>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="field-grid">
-                  <label>
-                    Profil Gaming Mode
-                    <select className="hotkey-input profile-select" value={selectedProfileName} onChange={(event) => setSelectedProfileName(event.target.value)}>
-                      <option value="">Wybierz profil...</option>
-                      {pcGamingProfiles.map((profile) => (
-                        <option key={profile.name} value={profile.name}>{profile.name}</option>
-                      ))}
-                    </select>
-                  </label>
+                {pcGamingProfiles.length === 0 ? <p className="hint-line">Brak zapisanych profili. Dodaj profil w sekcji Ekrany.</p> : null}
+                <div className="dashboard-inline-actions">
+                  <button
+                    className="primary-button compact"
+                    type="button"
+                    disabled={!canRunSelectedProfile}
+                    onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: selectedProfileName })}
+                  >
+                    Uruchom profil{selectedProfile ? `: ${selectedProfile.name}` : ''}
+                  </button>
+                  <button className="secondary-button compact" type="button" onClick={createProfile}>
+                    Dodaj profil
+                  </button>
                 </div>
               </section>
 
@@ -789,25 +1418,25 @@ function Dashboard({
                 <div className="section-shortcuts" aria-label="Edycja konfiguracji">
                   <button type="button" onClick={() => editSettings('gaming-display')}>
                     <span>Ekrany</span>
-                    <small>Profile ekranow i aktywny uklad do grania</small>
+                    <small>Tworzenie i wybór układów ekranów</small>
                   </button>
                   <button type="button" onClick={() => editSettings('launcher')}>
-                    <span>Launcher gier</span>
-                    <small>{launcher}</small>
+                    <span>Launcher profilu</span>
+                    <small>Konfiguracja launchera dla każdego profilu</small>
                   </button>
                   <button type="button" onClick={() => editSettings('console-behaviour')}>
-                    <span>Zachowanie trybów gamingowych</span>
-                    <small>Ikony, taskbar, okna i kursor</small>
+                    <span>Zachowanie profilu</span>
+                    <small>Ikony, taskbar, okna i kursor per profil</small>
                   </button>
                   <button type="button" onClick={() => editSettings('work-behaviour')}>
                     <span>Zachowanie Work Mode</span>
                     <small>Przywracanie pulpitu po graniu</small>
                   </button>
                   <button type="button" onClick={() => editSettings('controller')}>
-                    <span>Skróty klawiatury i kontrolera</span>
-                    <small>Hotkeye i przyszłe mapowanie pada</small>
+                    <span>Skróty profilu</span>
+                    <small>Hotkeye wejścia i wyjścia dla profilu</small>
                   </button>
-                  <button type="button" onClick={() => editSettings('finish')}>
+                  <button type="button" onClick={() => editSettings('app-behaviour')}>
                     <span>Uruchamianie aplikacji</span>
                     <small>Autostart, tray i skróty systemowe</small>
                   </button>
@@ -841,66 +1470,56 @@ function WelcomeStep({ stepNumber }: { stepNumber: number }) {
 function DisplaysStep({
   stepNumber,
   displays,
-  pcGamingLayout,
   pcGamingProfiles,
-  activePcGamingProfileName,
+  selectedProfileName,
+  prefillFromSelectedProfile,
+  onDraftChange,
   isRefreshingDisplays,
   displayListError,
-  refreshDisplays,
-  saveSelectedPcGamingLayout,
-  setActivePcGamingProfile,
-  clearPcGamingLayout
+  refreshDisplays
 }: {
   stepNumber: number;
   displays: DisplayDeviceInfo[];
-  pcGamingLayout: DisplayLayoutSnapshot | null;
   pcGamingProfiles: DisplayLayoutProfile[];
-  activePcGamingProfileName: string | null;
+  selectedProfileName: string;
+  prefillFromSelectedProfile: boolean;
+  onDraftChange: (profileName: string, identities: DisplayIdentity[]) => void;
   isRefreshingDisplays: boolean;
   displayListError: string | null;
   refreshDisplays: () => Promise<void>;
-  saveSelectedPcGamingLayout: (profileName: string, identities: DisplayIdentity[]) => Promise<void>;
-  setActivePcGamingProfile: (profileName: string) => Promise<void>;
-  clearPcGamingLayout: (profileName?: string) => Promise<void>;
 }) {
   const [newProfileName, setNewProfileName] = useState('');
   const [selectedDisplays, setSelectedDisplays] = useState<DisplayIdentity[]>([]);
 
-  const maxProfileCount = calculateProfileCombinationLimit(displays.length);
-  const canCreateMoreProfiles = maxProfileCount > 0 && pcGamingProfiles.length < maxProfileCount;
-  const normalizedProfileName = newProfileName.trim().toLowerCase();
-  const profileNameExists = pcGamingProfiles.some((profile) => profile.name.toLowerCase() === normalizedProfileName);
-  const profileCombinationExists = hasSameDisplayCombination(selectedDisplays, pcGamingProfiles);
-  const canSaveProfileName = Boolean(newProfileName.trim())
-    && selectedDisplays.length > 0
-    && canCreateMoreProfiles
-    && !profileNameExists
-    && !profileCombinationExists;
-
   useEffect(() => {
-    const activeProfile = resolveActivePcGamingProfile(activePcGamingProfileName, pcGamingProfiles);
-    setSelectedDisplays(activeProfile ? extractDisplayIdentities(activeProfile.layout) : []);
-  }, [activePcGamingProfileName, pcGamingProfiles]);
-
-  function toggleSelectedDisplay(identity: DisplayIdentity) {
-    setSelectedDisplays((current) => current.some((selected) => sameIdentity(selected, identity))
-      ? current.filter((selected) => !sameIdentity(selected, identity))
-      : [...current, identity]);
-  }
-
-  function getProfileNameOrNull() {
-    const trimmed = newProfileName.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-
-  async function handleSaveProfile() {
-    const profileName = getProfileNameOrNull();
-    if (!profileName) {
+    if (!prefillFromSelectedProfile || !selectedProfileName) {
       return;
     }
 
-    await saveSelectedPcGamingLayout(profileName, selectedDisplays);
-    setNewProfileName('');
+    const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
+    if (!selectedProfile) {
+      return;
+    }
+
+    const profileIdentities = extractDisplayIdentities(selectedProfile.layout);
+    setNewProfileName(selectedProfile.name);
+    setSelectedDisplays(profileIdentities);
+    onDraftChange(selectedProfile.name, profileIdentities);
+  }, [pcGamingProfiles, prefillFromSelectedProfile, selectedProfileName]);
+
+  const canEditSelection = Boolean(newProfileName.trim())
+    && selectedDisplays.length > 0;
+
+  function toggleSelectedDisplay(identity: DisplayIdentity) {
+    setSelectedDisplays((current) => {
+      const alreadySelected = current.some((selected) => sameIdentity(selected, identity));
+      const next = alreadySelected
+        ? current.filter((selected) => !sameIdentity(selected, identity))
+        : [...current, identity];
+
+      onDraftChange(newProfileName, next);
+      return next;
+    });
   }
 
   return (
@@ -909,7 +1528,7 @@ function DisplaysStep({
       <h2>Ekrany</h2>
       <section className="settings-section">
         <h3>Wykryte ekrany</h3>
-        <p>Kliknij ekrany, aby zbudować profil. Zaznaczone karty są zielone, a niezaznaczone pozostają tylko podglądem stanu podłączenia.</p>
+        <p>Kliknij ekrany, aby zbudować lub edytować aktualnie zaznaczony profil. Zaznaczone karty są zielone, a niezaznaczone pozostają tylko podglądem stanu podłączenia.</p>
         <DisplayDiagnosticsPanel
           displays={displays}
           selectedDisplays={selectedDisplays}
@@ -918,47 +1537,12 @@ function DisplaysStep({
           error={displayListError}
           refreshDisplays={refreshDisplays}
           profileName={newProfileName}
-          setProfileName={setNewProfileName}
-          saveProfile={handleSaveProfile}
-          canSaveProfile={canSaveProfileName}
+          setProfileName={(nextName) => {
+            setNewProfileName(nextName);
+            onDraftChange(nextName, selectedDisplays);
+          }}
+          canEditSelection={canEditSelection}
         />
-      </section>
-
-      <section className="settings-section">
-        <h3>Zapisane profile</h3>
-        <p className="hint-line">{pcGamingLayout ? `${activePcGamingProfileName || 'Aktywny profil'} · ${summarizeLayout(pcGamingLayout)}` : 'Brak aktywnego profilu Gaming Mode.'}</p>
-        <p className="hint-line">Maksymalnie: {maxProfileCount} profili.</p>
-        {profileNameExists ? <p className="error-line">Profil o tej nazwie już istnieje.</p> : null}
-        {profileCombinationExists ? <p className="error-line">Profil z taką samą kombinacją ekranów już istnieje.</p> : null}
-
-        {pcGamingProfiles.length > 0 ? (
-          <div className="profile-list" role="list" aria-label="Profile ekranow">
-            {pcGamingProfiles.map((profile) => {
-              const isActive = activePcGamingProfileName === profile.name;
-              return (
-                <article className={`profile-item ${isActive ? 'active' : ''}`} key={profile.name} role="listitem" onClick={() => void setActivePcGamingProfile(profile.name)}>
-                  <div className="profile-item-main">
-                    <strong>{profile.name}</strong>
-                    <small>{summarizeLayout(profile.layout)}</small>
-                  </div>
-                  <div className="profile-item-actions">
-                    <span className="profile-item-state">{isActive ? 'Aktywny profil' : 'Kliknij, aby ustawic'}</span>
-                    <button
-                      className="secondary-button compact"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void clearPcGamingLayout(profile.name);
-                      }}
-                    >
-                      Usuń
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : null}
       </section>
     </div>
   );
@@ -973,8 +1557,7 @@ function DisplayDiagnosticsPanel({
   refreshDisplays,
   profileName,
   setProfileName,
-  saveProfile,
-  canSaveProfile
+  canEditSelection
 }: {
   displays: DisplayDeviceInfo[];
   selectedDisplays: DisplayIdentity[];
@@ -984,8 +1567,7 @@ function DisplayDiagnosticsPanel({
   refreshDisplays: () => Promise<void>;
   profileName: string;
   setProfileName: (value: string) => void;
-  saveProfile: () => Promise<void>;
-  canSaveProfile: boolean;
+  canEditSelection: boolean;
 }) {
   return (
     <section className="display-diagnostics" aria-labelledby="display-diagnostics-title">
@@ -995,9 +1577,6 @@ function DisplayDiagnosticsPanel({
           <p>Monitory widziane przez Windows, także wyłączone w ustawieniach ekranów.</p>
         </div>
         <div className="display-diagnostics-actions">
-          <button className="primary-button compact" type="button" disabled={!canSaveProfile} onClick={() => void saveProfile()}>
-            Zapisz profil ekranow
-          </button>
           <button className="secondary-button compact" type="button" disabled={isRefreshing} onClick={refreshDisplays}>
             {isRefreshing ? 'Odświeżanie...' : 'Odśwież listę ekranów'}
           </button>
@@ -1013,6 +1592,7 @@ function DisplayDiagnosticsPanel({
           placeholder="np. TV + monitor biurkowy"
         />
       </label>
+      {!canEditSelection ? <p className="hint-line">Uzupełnij nazwę profilu i wybierz co najmniej jeden ekran.</p> : null}
       {error ? <p className="error-line display-error">{error}</p> : null}
       {!error && displays.length === 0 ? <p className="hint-line">Nie wykryto ekranów.</p> : null}
       {displays.length > 0 ? (
@@ -1032,10 +1612,6 @@ function DisplayDiagnosticsPanel({
                   <small>Pozycja: {display.positionX}, {display.positionY}</small>
                   {display.connectionTechnology ? <small>Połączenie: {display.connectionTechnology}</small> : null}
                 </div>
-                <details onClick={(event) => event.stopPropagation()}>
-                  <summary>Identyfikator</summary>
-                  <code>{shortDisplayIdentifier(display)}</code>
-                </details>
               </article>
             );
           })}
@@ -1045,35 +1621,42 @@ function DisplayDiagnosticsPanel({
   );
 }
 
-function LauncherStep({ stepNumber, launcher, setLauncher }: { stepNumber: number; launcher: LauncherType; setLauncher: (launcher: LauncherType) => void }) {
-  const launchers: Array<{ value: LauncherType; title: string; description: string; badge: string }> = [
-    {
-      value: 'Playnite Fullscreen',
-      title: 'Playnite Fullscreen',
-      description: 'Najlepszy wybór dla biblioteki wielu launcherów i obsługi pada na TV.',
-      badge: 'Polecany'
-    },
-    {
-      value: 'Steam Big Picture',
-      title: 'Steam Big Picture',
-      description: 'Bezpośrednie wejście w tryb kanapowy Steam.',
-      badge: 'Steam'
-    },
-    {
-      value: 'Xbox App',
-      title: 'Xbox App',
-      description: 'Szybki start aplikacji Xbox i biblioteki Game Pass.',
-      badge: 'Xbox'
-    }
-  ];
+function LauncherStep({
+  stepNumber,
+  pcGamingProfiles,
+  selectedProfileName,
+  launcher,
+  setLauncher
+}: {
+  stepNumber: number;
+  pcGamingProfiles: DisplayLayoutProfile[];
+  selectedProfileName: string;
+  launcher: LauncherType;
+  setLauncher: (launcher: LauncherType) => void;
+}) {
+  const hasProfiles = pcGamingProfiles.length > 0;
+  const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
+
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Wybierz launcher</h2>
-      <p>Launcher zostanie uruchomiony po wejściu w Gaming Mode, jeśli w zachowaniu trybu włączysz jego start.</p>
-      <div className="launcher-grid" aria-label="Launcher">
-        {launchers.map((item) => (
-          <button className={`launcher-card ${launcher === item.value ? 'selected' : ''}`} key={item.value} type="button" onClick={() => setLauncher(item.value)}>
+      <h2>Launcher profilu</h2>
+      <p>Każdy profil ekranów może mieć inny launcher. Edytujesz aktualnie zaznaczony profil z panelu głównego.</p>
+      <div className="field-grid">
+        <div className="profile-target-line" aria-live="polite">
+          <span>Edytowany profil</span>
+          <strong>{selectedProfileLabel}</strong>
+        </div>
+      </div>
+      <div className="launcher-grid" aria-label="Launcher" aria-disabled={!hasProfiles}>
+        {launcherOptions.map((item) => (
+          <button
+            className={`launcher-card ${launcher === item.value ? 'selected' : ''}`}
+            key={item.value}
+            type="button"
+            onClick={() => setLauncher(item.value)}
+            disabled={!hasProfiles}
+          >
             <span className="launcher-badge">{item.badge}</span>
             <strong>{item.title}</strong>
             <small>{item.description}</small>
@@ -1088,18 +1671,17 @@ function ConsoleBehaviourStep({
   stepNumber,
   pcGamingProfiles,
   selectedProfileName,
-  setSelectedProfileName,
   pcGamingBehaviour,
   onChangeBehaviourFlag
 }: {
   stepNumber: number;
   pcGamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
-  setSelectedProfileName: (profileName: string) => void;
   pcGamingBehaviour: PcGamingBehaviourState;
   onChangeBehaviourFlag: (key: PcGamingBehaviourKey, value: boolean) => void;
 }) {
   const hasProfiles = pcGamingProfiles.length > 0;
+  const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
 
   return (
     <div className="wizard-copy">
@@ -1107,22 +1689,12 @@ function ConsoleBehaviourStep({
       <h2>Zachowanie Gaming Mode</h2>
       <section className="settings-section gaming-behaviour-section">
         <h3>Gaming Mode</h3>
-        <p>Wybierz profil, a następnie ustaw checkboxy dla tego konkretnego profilu.</p>
+        <p>Checkboxy dotyczą aktualnie zaznaczonego profilu z panelu głównego.</p>
         <div className="field-grid">
-          <label>
-            Profil Gaming Mode
-            <select
-              className="hotkey-input profile-select"
-              value={selectedProfileName}
-              onChange={(event) => setSelectedProfileName(event.target.value)}
-              disabled={!hasProfiles}
-            >
-              {!hasProfiles ? <option value="">Brak zapisanych profili</option> : null}
-              {pcGamingProfiles.map((profile) => (
-                <option key={profile.name} value={profile.name}>{profile.name}</option>
-              ))}
-            </select>
-          </label>
+          <div className="profile-target-line" aria-live="polite">
+            <span>Edytowany profil</span>
+            <strong>{selectedProfileLabel}</strong>
+          </div>
         </div>
         <div className="check-list">
           {pcGamingBehaviourOptions.map((option) => (
@@ -1131,6 +1703,7 @@ function ConsoleBehaviourStep({
               label={option.label}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
+              disabled={!hasProfiles}
             />
           ))}
         </div>
@@ -1141,10 +1714,14 @@ function ConsoleBehaviourStep({
 
 function WorkBehaviourStep({
   stepNumber,
+  globalWorkModeHotkey,
+  onChangeGlobalWorkModeHotkey,
   behaviour,
   setBehaviour
 }: {
   stepNumber: number;
+  globalWorkModeHotkey: string;
+  onChangeGlobalWorkModeHotkey: (value: string) => void;
   behaviour: typeof defaultWorkBehaviour;
   setBehaviour: (behaviour: typeof defaultWorkBehaviour) => void;
 }) {
@@ -1159,26 +1736,49 @@ function WorkBehaviourStep({
         <CheckRow label="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
         <CheckRow label="Nie minimalizuj istniejących okien" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
       </div>
+      <div className="field-grid">
+        <label>
+          Globalny hotkey przejścia do Work Mode
+          <HotkeyInput value={globalWorkModeHotkey} onChange={onChangeGlobalWorkModeHotkey} placeholder="np. Ctrl+Alt+W" />
+        </label>
+      </div>
     </div>
   );
 }
 
-function ControllerStep({ stepNumber, hotkeys, setHotkeys }: { stepNumber: number; hotkeys: HotkeySettingsState; setHotkeys: (hotkeys: HotkeySettingsState) => void }) {
+function ControllerStep({
+  stepNumber,
+  pcGamingProfiles,
+  selectedProfileName,
+  hotkeys,
+  onChangeHotkey
+}: {
+  stepNumber: number;
+  pcGamingProfiles: DisplayLayoutProfile[];
+  selectedProfileName: string;
+  hotkeys: HotkeySettingsState;
+  onChangeHotkey: (key: 'enterProfile', value: string) => void;
+}) {
+  const hasProfiles = pcGamingProfiles.length > 0;
+  const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
+
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2> Skróty klawiatury i kontrolera</h2>
+      <h2>Skróty profilu</h2>
       <section className="settings-section">
         <h3>Skróty klawiaturowe</h3>
-        <p>Globalne skróty klawiaturowe uruchamiają pełne workflow GameShell.</p>
+        <p>Każdy profil może mieć własny hotkey wejścia. Edytujesz profil wybrany na panelu głównym.</p>
+        <div className="field-grid">
+          <div className="profile-target-line" aria-live="polite">
+            <span>Edytowany profil</span>
+            <strong>{selectedProfileLabel}</strong>
+          </div>
+        </div>
         <div className="field-grid">
           <label>
-            Hotkey Gaming Mode
-            <HotkeyInput value={hotkeys.pcGamingMode} onChange={(value) => setHotkeys({ ...hotkeys, pcGamingMode: value })} placeholder="np. Ctrl+Alt+P" />
-          </label>
-          <label>
-            Hotkey Work Mode
-            <HotkeyInput value={hotkeys.workMode} onChange={(value) => setHotkeys({ ...hotkeys, workMode: value })} placeholder="np. Ctrl+Alt+W" />
+            Hotkey uruchomienia profilu
+            <HotkeyInput value={hotkeys.pcGamingMode} onChange={(value) => onChangeHotkey('enterProfile', value)} placeholder="np. Ctrl+Alt+P" disabled={!hasProfiles} />
           </label>
         </div>
       </section>
@@ -1186,45 +1786,47 @@ function ControllerStep({ stepNumber, hotkeys, setHotkeys }: { stepNumber: numbe
   );
 }
 
-function TestStep({
+function AppBehaviourStep({
   stepNumber,
-  hotkeys,
-  hasPcGamingLayout,
-  isModeSwitching,
-  activeModeAction,
-  runModeCommand
+  finishOptions,
+  setFinishOptions
 }: {
   stepNumber: number;
-  hotkeys: HotkeySettingsState;
-  hasPcGamingLayout: boolean;
-  isModeSwitching: boolean;
-  activeModeAction: string | null;
-  runModeCommand: (command: ModeCommand, saveBeforeRun?: boolean) => Promise<void>;
+  finishOptions: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean };
+  setFinishOptions: (options: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean }) => void;
 }) {
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Test pełnych trybów</h2>
-      <section className="test-group full-mode-test-group">
-        <h3>Pełne workflow GameShell</h3>
-        <p>Uruchamia układ ekranów oraz wszystkie skonfigurowane akcje: ikony pulpitu, taskbar, launcher i obsługę okien.</p>
-        <div className="mode-test-grid">
-          <div className="mode-test-option">
-            <button className="primary-button mode-action" type="button" disabled={isModeSwitching || !hasPcGamingLayout} onClick={() => runModeCommand('enterGameShellWithProfile', true)}>
-              {activeModeAction === getModeActionKey('enterGameShellWithProfile') ? 'Przełączanie...' : 'Przetestuj Gaming Mode'}
-            </button>
-            <span className="mode-test-hotkey">{hotkeys.pcGamingMode || 'Brak przypisanego hotkeya'}</span>
-            <p>Uruchamia aktywny zapisany profil ekranow oraz skonfigurowane zachowanie gamingowe.</p>
-          </div>
-          <div className="mode-test-option">
-            <button className="primary-button mode-action" type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode', true)}>
-              {activeModeAction === getModeActionKey('enterWorkMode') ? 'Przełączanie...' : 'Przetestuj Work Mode'}
-            </button>
-            <span className="mode-test-hotkey">{hotkeys.workMode || 'Brak przypisanego hotkeya'}</span>
-            <p>Przywraca poprzedni układ ekranów i pulpit do pracy.</p>
-          </div>
-        </div>
-      </section>
+      <h2>Zachowanie aplikacji</h2>
+      <p>Te ustawienia są globalne i dotyczą całej aplikacji, nie pojedynczego profilu.</p>
+      <div className="check-list">
+        <CheckRow
+          label="Startuj z Windows"
+          checked={finishOptions.startWithWindows}
+          onChange={(value) => setFinishOptions({
+            ...finishOptions,
+            startWithWindows: value,
+            startMinimized: value ? finishOptions.startMinimized : false
+          })}
+        />
+        <CheckRow
+          label="Startuj zminimalizowany do tray"
+          checked={finishOptions.startMinimized}
+          disabled={!finishOptions.startWithWindows}
+          onChange={(value) => setFinishOptions({ ...finishOptions, startMinimized: value })}
+        />
+        <CheckRow
+          label="Utwórz skrót w menu Start"
+          checked={finishOptions.startMenuShortcut}
+          onChange={(value) => setFinishOptions({ ...finishOptions, startMenuShortcut: value })}
+        />
+        <CheckRow
+          label="Utwórz skrót na pulpicie"
+          checked={finishOptions.desktopShortcut}
+          onChange={(value) => setFinishOptions({ ...finishOptions, desktopShortcut: value })}
+        />
+      </div>
     </div>
   );
 }
@@ -1233,17 +1835,20 @@ function FinishStep({
   stepNumber,
   launcher,
   pcGamingLayout,
-  activeProfileName,
-  finishOptions,
-  setFinishOptions
+  pcGamingProfileLaunchers,
+  pcGamingProfileHotkeys,
+  activeProfileName
 }: {
   stepNumber: number;
   launcher: LauncherType;
   pcGamingLayout: DisplayLayoutSnapshot | null;
+  pcGamingProfileLaunchers: PcGamingProfileLauncherMap;
+  pcGamingProfileHotkeys: PcGamingProfileHotkeysMap;
   activeProfileName: string | null;
-  finishOptions: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean };
-  setFinishOptions: (options: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean }) => void;
 }) {
+  const activeLauncher = activeProfileName ? pcGamingProfileLaunchers[activeProfileName] ?? launcher : launcher;
+  const activeHotkeys = activeProfileName ? pcGamingProfileHotkeys[activeProfileName] ?? defaultProfileHotkeys : defaultProfileHotkeys;
+
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
@@ -1259,37 +1864,60 @@ function FinishStep({
         </div>
         <div>
           <dt>Launcher</dt>
-          <dd>{launcher}</dd>
+          <dd>{activeLauncher}</dd>
+        </div>
+        <div>
+          <dt>Hotkey profilu</dt>
+          <dd>{activeHotkeys.enterProfile || 'Brak przypisanego hotkeya'}</dd>
         </div>
       </dl>
-      <div className="check-list">
-        <CheckRow label="Startuj z Windows" checked={finishOptions.startWithWindows} onChange={(value) => setFinishOptions({ ...finishOptions, startWithWindows: value })} />
-        <CheckRow label="Startuj zminimalizowany do tray" checked={finishOptions.startMinimized} onChange={(value) => setFinishOptions({ ...finishOptions, startMinimized: value })} />
-        <CheckRow label="Utwórz skrót w menu Start" checked={finishOptions.startMenuShortcut} onChange={(value) => setFinishOptions({ ...finishOptions, startMenuShortcut: value })} />
-        <CheckRow label="Utwórz skrót na pulpicie" checked={finishOptions.desktopShortcut} onChange={(value) => setFinishOptions({ ...finishOptions, desktopShortcut: value })} />
-      </div>
     </div>
   );
 }
 
-function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function CheckRow({
+  label,
+  checked,
+  onChange,
+  disabled = false
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <label className="check-row">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       <span>{label}</span>
     </label>
   );
 }
 
-function HotkeyInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+function HotkeyInput({
+  value,
+  onChange,
+  placeholder,
+  disabled = false
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
   return (
     <input
       className="hotkey-input"
       value={value}
       readOnly
+      disabled={disabled}
       placeholder={placeholder}
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={(event) => {
+        if (disabled) {
+          return;
+        }
+
         event.preventDefault();
         event.stopPropagation();
         if (isClearHotkeyEvent(event)) {
@@ -1383,12 +2011,16 @@ function getModeActionKey(command: ModeCommand) {
   return `${command}:`;
 }
 
-function getModeCardClass(command: ModeCommand, status: AppStatus, isUnconfigured = false) {
+function getModeCardClass(command: ModeCommand, status: AppStatus, isUnconfigured = false, isSelected = false) {
   const classes = ['mode-card'];
   if (isCurrentMode(command, status)) {
     classes.push('active');
   } else if (isUnconfigured) {
     classes.push('unconfigured');
+  }
+
+  if (isSelected) {
+    classes.push('selected');
   }
 
   return classes.join(' ');
@@ -1471,17 +2103,74 @@ function resolvePcGamingBehaviourProfileName(activeName: string | null, profiles
 
 function buildProfileBehaviourMap(
   profiles: DisplayLayoutProfile[],
+  configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>,
   savedBehaviours: NonNullable<AppSettings['display']['pcGamingProfileBehaviours']>,
   fallbackBehaviour: PcGamingBehaviourState
 ): PcGamingProfileBehaviourMap {
   const map: PcGamingProfileBehaviourMap = {};
 
   profiles.forEach((profile) => {
+    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
     const saved = savedBehaviours.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    map[profile.name] = toPcGamingBehaviourState(saved?.behaviour ?? fallbackBehaviour);
+    map[profile.name] = toPcGamingBehaviourState(configured?.behaviour ?? saved?.behaviour ?? fallbackBehaviour);
   });
 
   return map;
+}
+
+function buildProfileLauncherMap(
+  profiles: DisplayLayoutProfile[],
+  configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>,
+  fallbackLauncher: LauncherType
+): PcGamingProfileLauncherMap {
+  const map: PcGamingProfileLauncherMap = {};
+
+  profiles.forEach((profile) => {
+    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
+    map[profile.name] = toLauncherType(configured?.launcher?.type ?? fallbackLauncher);
+  });
+
+  return map;
+}
+
+function buildProfileHotkeysMap(
+  profiles: DisplayLayoutProfile[],
+  configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>,
+  fallbackHotkeys: ProfileHotkeysState
+): PcGamingProfileHotkeysMap {
+  const map: PcGamingProfileHotkeysMap = {};
+
+  profiles.forEach((profile) => {
+    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
+    map[profile.name] = {
+      enterProfile: configured?.hotkeys?.enterProfile ?? fallbackHotkeys.enterProfile
+    };
+  });
+
+  return map;
+}
+
+function normalizeHotkeyValue(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function isDuplicateProfileEnterHotkey(
+  profileName: string,
+  candidateHotkey: string,
+  profileHotkeys: PcGamingProfileHotkeysMap
+) {
+  const normalizedCandidate = normalizeHotkeyValue(candidateHotkey);
+  if (!normalizedCandidate) {
+    return false;
+  }
+
+  return Object.entries(profileHotkeys).some(([name, hotkeys]) => {
+    if (name.toLowerCase() === profileName.toLowerCase()) {
+      return false;
+    }
+
+    return normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate;
+  });
 }
 
 function resolveActivePcGamingProfile(activeName: string | null, profiles: DisplayLayoutProfile[]) {
@@ -1534,31 +2223,12 @@ function sameIdentity(left: DisplayIdentity, right: DisplayIdentity) {
   return false;
 }
 
-function calculateProfileCombinationLimit(displayCount: number) {
-  if (displayCount <= 0) {
-    return 0;
-  }
-
-  if (displayCount >= 31) {
-    return Number.MAX_SAFE_INTEGER;
-  }
-
-  return (2 ** displayCount) - 1;
-}
-
-function hasSameDisplayCombination(identities: DisplayIdentity[], profiles: DisplayLayoutProfile[]) {
-  if (identities.length === 0) {
+function areIdentitySetsEqual(left: DisplayIdentity[], right: DisplayIdentity[]) {
+  if (left.length !== right.length) {
     return false;
   }
 
-  return profiles.some((profile) => {
-    const profileIdentities = extractDisplayIdentities(profile.layout);
-    if (profileIdentities.length !== identities.length) {
-      return false;
-    }
-
-    return identities.every((identity) => profileIdentities.some((profileIdentity) => sameIdentity(identity, profileIdentity)));
-  });
+  return left.every((identity) => right.some((candidate) => sameIdentity(identity, candidate)));
 }
 
 function formatDisplayResolution(display: DisplayDeviceInfo) {
@@ -1571,19 +2241,6 @@ function formatDisplayRefresh(display: DisplayDeviceInfo) {
   }
 
   return `${formatNumber(display.refreshRateHz)} Hz`;
-}
-
-function shortDisplayIdentifier(display: DisplayDeviceInfo) {
-  const path = display.identity.monitorDevicePath || display.id || 'brak ścieżki monitora';
-  return [
-    path,
-    `GDI: ${display.sourceDeviceName || 'brak'}`,
-    `Adapter: ${display.adapterLuid}`,
-    `Source: ${display.sourceId}`,
-    `Target: ${display.targetId}`,
-    `EDID: ${display.identity.edidManufacturerId || 'brak'} / ${display.identity.edidProductCodeId || 'brak'}`,
-    `Connector: ${display.identity.connectorInstance || 'brak'}`
-  ].join('\n');
 }
 
 function summarizeLayout(layout: DisplayLayoutSnapshot) {

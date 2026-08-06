@@ -54,7 +54,8 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             switchingState: ModeState.SwitchingToConsole,
             completedState: ModeState.GameShell,
             transition: settings => _displayTransitionService.EnterConsoleModeAsync(GetConsoleDisplays(settings), cancellationToken),
-            workflow: settings => _modeWorkflowService.RunGamingWorkflowAsync(settings, GameShellMode.Console, cancellationToken),
+            preWorkflow: settings => _modeWorkflowService.PrepareGamingWorkflowAsync(settings, GameShellMode.Console, cancellationToken),
+            workflow: settings => _modeWorkflowService.CompleteGamingWorkflowAsync(settings, GameShellMode.Console, cancellationToken),
             completionDelay: settings => TimeSpan.FromSeconds(settings.GameShell.CompletionDelaySeconds),
             runtimeMode: GameShellMode.Console,
             cancellationToken);
@@ -80,7 +81,11 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 ResolvePcGamingLayout(settings.Display, profileName),
                 GetConsoleDisplays(settings),
                 cancellationToken),
-            workflow: settings => _modeWorkflowService.RunGamingWorkflowAsync(
+            preWorkflow: settings => _modeWorkflowService.PrepareGamingWorkflowAsync(
+                BuildEffectivePcGamingSettings(settings, profileName),
+                GameShellMode.PcGaming,
+                cancellationToken),
+            workflow: settings => _modeWorkflowService.CompleteGamingWorkflowAsync(
                 BuildEffectivePcGamingSettings(settings, profileName),
                 GameShellMode.PcGaming,
                 cancellationToken),
@@ -96,6 +101,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             switchingState: ModeState.SwitchingToWork,
             completedState: ModeState.WorkMode,
             transition: _ => _displayTransitionService.EnterWorkModeAsync(cancellationToken),
+            preWorkflow: null,
             workflow: settings => _modeWorkflowService.RunWorkWorkflowAsync(settings, cancellationToken),
             completionDelay: _ => TimeSpan.Zero,
             runtimeMode: GameShellMode.Work,
@@ -108,6 +114,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         ModeState switchingState,
         ModeState completedState,
         Func<AppSettings, Task<DisplayTransitionResult>> transition,
+        Func<AppSettings, Task<ModeWorkflowResult>>? preWorkflow,
         Func<AppSettings, Task<ModeWorkflowResult>> workflow,
         Func<AppSettings, TimeSpan> completionDelay,
         GameShellMode runtimeMode,
@@ -133,6 +140,26 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             var settings = await _settingsService.LoadAsync(cancellationToken);
             SetStatus(switchingState, operationName, null, null);
             _logger.LogInformation("{OperationName} started with native DisplayConfig workflow.", operationName);
+
+            if (preWorkflow is not null)
+            {
+                var preWorkflowResult = await preWorkflow(settings);
+                if (!preWorkflowResult.Success)
+                {
+                    stopwatch.Stop();
+                    var message = preWorkflowResult.Message ?? $"{operationName} pre-workflow failed.";
+                    SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, message);
+                    await SaveRuntimeResultAsync(runtimeMode, "Failed", cancellationToken);
+
+                    return new ModeResult
+                    {
+                        Status = ModeResultStatus.Failed,
+                        CurrentState = ModeState.Error,
+                        Message = message,
+                        DurationMs = stopwatch.ElapsedMilliseconds
+                    };
+                }
+            }
 
             var transitionResult = await transition(settings);
             if (!transitionResult.Success)
@@ -270,6 +297,9 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     private AppStatus CreateStatus(AppSettings settings)
     {
+        var activeProfileName = ResolvePcGamingProfileName(settings.Display, null);
+        var activeConfiguration = ResolvePcGamingProfileConfiguration(settings.Display, activeProfileName);
+
         lock (_statusGate)
         {
             return new AppStatus
@@ -280,7 +310,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 DisplayMode = "NativeDisplayConfig",
                 SelectedConsoleDisplay = GetConsoleDisplays(settings).FirstOrDefault()?.FriendlyName,
                 HasPcGamingLayout = ResolvePcGamingLayout(settings.Display, null) is not null,
-                ActiveLauncher = settings.Launcher.Type,
+                ActiveLauncher = activeConfiguration?.Launcher.Type ?? settings.Launcher.Type,
                 LastOperation = _lastOperation,
                 LastOperationDurationMs = _lastOperationDurationMs,
                 LastError = _lastError,
@@ -327,12 +357,15 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     private static AppSettings BuildEffectivePcGamingSettings(AppSettings settings, string? profileName)
     {
+        var resolvedProfileName = ResolvePcGamingProfileName(settings.Display, profileName);
+        var profileConfiguration = ResolvePcGamingProfileConfiguration(settings.Display, resolvedProfileName);
+
         return new AppSettings
         {
             Display = settings.Display,
-            Launcher = settings.Launcher,
+            Launcher = profileConfiguration?.Launcher ?? settings.Launcher,
             GameShell = settings.GameShell,
-            PcGaming = ResolvePcGamingBehaviour(settings.Display, settings.PcGaming, profileName),
+            PcGaming = profileConfiguration?.Behaviour ?? settings.PcGaming,
             WorkMode = settings.WorkMode,
             Audio = settings.Audio,
             Controller = settings.Controller,
@@ -345,13 +378,29 @@ public sealed class ModeOrchestrator : IModeOrchestrator
     private static PcGamingSettings ResolvePcGamingBehaviour(DisplaySettings display, PcGamingSettings defaultBehaviour, string? profileName)
     {
         var resolvedProfileName = ResolvePcGamingProfileName(display, profileName);
+        var configuration = ResolvePcGamingProfileConfiguration(display, resolvedProfileName);
+        if (configuration is not null)
+        {
+            return configuration.Behaviour;
+        }
+
         if (string.IsNullOrWhiteSpace(resolvedProfileName))
         {
             return defaultBehaviour;
         }
 
-        var profileBehaviour = display.PcGamingProfileBehaviours.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase));
-        return profileBehaviour?.Behaviour ?? defaultBehaviour;
+        var legacyBehaviour = display.PcGamingProfileBehaviours.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase));
+        return legacyBehaviour?.Behaviour ?? defaultBehaviour;
+    }
+
+    private static PcGamingProfileConfiguration? ResolvePcGamingProfileConfiguration(DisplaySettings display, string? profileName)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+        {
+            return null;
+        }
+
+        return display.PcGamingProfileConfigurations.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? ResolvePcGamingProfileName(DisplaySettings display, string? requestedProfileName)

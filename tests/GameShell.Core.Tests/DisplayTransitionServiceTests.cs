@@ -206,6 +206,52 @@ public sealed class DisplayTransitionServiceTests
         Assert.True(DisplayLayoutVerifier.MatchesSnapshot(expected, actual));
     }
 
+    [Fact]
+    public void MatchesSnapshot_IgnoresUniformCoordinateTranslation()
+    {
+        var expected = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440),
+            Path("Monitor C", "PATH-C", 1920, 0, 1920, 1080));
+        var actual = Snapshot(
+            Path("Monitor A", "PATH-A", 2560, 0, 1920, 1080),
+            Path("Monitor B", "PATH-B", 0, 0, 2560, 1440, isPrimary: true),
+            Path("Monitor C", "PATH-C", 4480, 0, 1920, 1080));
+
+        Assert.True(DisplayLayoutVerifier.MatchesSnapshot(expected, actual));
+    }
+
+    [Fact]
+    public void MatchesActiveDisplaySet_AcceptsSameMonitorsWithDifferentGeometry()
+    {
+        var expected = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440),
+            Path("Monitor C", "PATH-C", 1920, 0, 1920, 1080));
+        var actual = Snapshot(
+            Path("Monitor A", "PATH-A", 200, 120, 1920, 1080),
+            Path("Monitor B", "PATH-B", -2300, 120, 2560, 1440, isPrimary: true),
+            Path("Monitor C", "PATH-C", 2100, 120, 1920, 1080));
+
+        Assert.True(DisplayLayoutVerifier.MatchesActiveDisplaySet(expected, actual));
+    }
+
+    [Fact]
+    public void MatchesActiveDisplaySet_AcceptsExpectedMonitorsWhenExtraDisplayIsActive()
+    {
+        var expected = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440),
+            Path("Monitor C", "PATH-C", 1920, 0, 1920, 1080));
+        var actual = Snapshot(
+            Path("Monitor A", "PATH-A", 10, 10, 1920, 1080),
+            Path("Monitor B", "PATH-B", -2550, 10, 2560, 1440, isPrimary: true),
+            Path("Monitor C", "PATH-C", 1930, 10, 1920, 1080),
+            Path("Virtual Display", "PATH-VIRTUAL", 3850, 10, 1024, 768));
+
+        Assert.True(DisplayLayoutVerifier.MatchesActiveDisplaySet(expected, actual));
+    }
+
     private static DisplayTransitionService CreateService(
         FakeDisplayQueryService query,
         FakeDisplayLayoutApplicationService applier,

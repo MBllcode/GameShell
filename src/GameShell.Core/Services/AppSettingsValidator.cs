@@ -8,6 +8,7 @@ public static class AppSettingsValidator
     {
         settings.Display ??= new DisplaySettings();
         settings.Display.PcGamingProfiles ??= [];
+        settings.Display.PcGamingProfileConfigurations ??= [];
         settings.Display.PcGamingProfileBehaviours ??= [];
         settings.Launcher ??= new LauncherSettings();
         settings.GameShell ??= new GameShellSettings();
@@ -44,7 +45,7 @@ public static class AppSettingsValidator
         ValidateControllerShortcut(settings.Controller.WorkMode);
 
         NormalizePcGamingProfiles(settings.Display);
-        NormalizePcGamingProfileBehaviours(settings.Display, settings.PcGaming);
+        NormalizePcGamingProfileConfigurations(settings.Display, settings.PcGaming, settings.Launcher, settings.Hotkeys);
 
         return settings;
     }
@@ -152,40 +153,101 @@ public static class AppSettingsValidator
         display.PcGamingLayout = activeProfile.Layout;
     }
 
-    private static void NormalizePcGamingProfileBehaviours(DisplaySettings display, PcGamingSettings defaultBehaviour)
+    private static void NormalizePcGamingProfileConfigurations(
+        DisplaySettings display,
+        PcGamingSettings defaultBehaviour,
+        LauncherSettings defaultLauncher,
+        HotkeySettings defaultHotkeys)
     {
         if (display.PcGamingProfiles.Count == 0)
         {
+            display.PcGamingProfileConfigurations = [];
             display.PcGamingProfileBehaviours = [];
             return;
         }
 
-        var normalized = new List<PcGamingProfileBehaviour>();
+        var normalized = new List<PcGamingProfileConfiguration>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var profile in display.PcGamingProfiles)
         {
-            var behaviour = ResolveProfileBehaviour(display.PcGamingProfileBehaviours, profile.Name)
+            var existingConfiguration = ResolveProfileConfiguration(display.PcGamingProfileConfigurations, profile.Name);
+            var legacyBehaviour = ResolveProfileBehaviour(display.PcGamingProfileBehaviours, profile.Name);
+
+            var behaviour = existingConfiguration?.Behaviour
+                ?? legacyBehaviour
                 ?? ClonePcGamingSettings(defaultBehaviour);
+            var launcher = existingConfiguration?.Launcher ?? CloneLauncherSettings(defaultLauncher);
+            var hotkeys = existingConfiguration?.Hotkeys ?? new PcGamingProfileHotkeys
+            {
+                EnterProfile = defaultHotkeys.PcGamingMode,
+                EnterWorkMode = defaultHotkeys.WorkMode
+            };
 
             MigrateLegacyPcGamingDefaults(behaviour);
             behaviour.CompletionDelaySeconds = Math.Clamp(behaviour.CompletionDelaySeconds, 0, 600);
             behaviour.ProtectedProcessNames ??= [];
             behaviour.CloseOnlyProcessNames ??= [];
+            launcher.Type = string.IsNullOrWhiteSpace(launcher.Type) ? defaultLauncher.Type : launcher.Type.Trim();
+            launcher.ExecutablePath ??= defaultLauncher.ExecutablePath;
+            launcher.Arguments ??= defaultLauncher.Arguments;
+            hotkeys.EnterProfile ??= "";
+            hotkeys.EnterWorkMode ??= "";
 
             if (!usedNames.Add(profile.Name))
             {
                 continue;
             }
 
-            normalized.Add(new PcGamingProfileBehaviour
+            normalized.Add(new PcGamingProfileConfiguration
             {
                 ProfileName = profile.Name,
-                Behaviour = behaviour
+                Behaviour = behaviour,
+                Launcher = launcher,
+                Hotkeys = hotkeys
             });
         }
 
-        display.PcGamingProfileBehaviours = normalized;
+        display.PcGamingProfileConfigurations = normalized;
+        EnsureUniqueProfileEnterHotkeys(display.PcGamingProfileConfigurations);
+        display.PcGamingProfileBehaviours = normalized
+            .Select(configuration => new PcGamingProfileBehaviour
+            {
+                ProfileName = configuration.ProfileName,
+                Behaviour = configuration.Behaviour
+            })
+            .ToList();
+    }
+
+    private static void EnsureUniqueProfileEnterHotkeys(IReadOnlyList<PcGamingProfileConfiguration> configurations)
+    {
+        var usedHotkeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var configuration in configurations)
+        {
+            var normalized = NormalizeHotkey(configuration.Hotkeys.EnterProfile);
+            if (string.IsNullOrEmpty(normalized))
+            {
+                continue;
+            }
+
+            if (!usedHotkeys.Add(normalized))
+            {
+                configuration.Hotkeys.EnterProfile = "";
+            }
+        }
+    }
+
+    private static string NormalizeHotkey(string value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToUpperInvariant();
+    }
+
+    private static PcGamingProfileConfiguration? ResolveProfileConfiguration(IEnumerable<PcGamingProfileConfiguration> candidates, string profileName)
+    {
+        return candidates.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static PcGamingSettings? ResolveProfileBehaviour(IEnumerable<PcGamingProfileBehaviour> candidates, string profileName)
@@ -209,6 +271,17 @@ public static class AppSettingsValidator
             ProtectedProcessNames = source.ProtectedProcessNames is null ? [] : [..source.ProtectedProcessNames],
             CloseOnlyProcessNames = source.CloseOnlyProcessNames is null ? [] : [..source.CloseOnlyProcessNames],
             CompletionDelaySeconds = source.CompletionDelaySeconds
+        };
+    }
+
+    private static LauncherSettings CloneLauncherSettings(LauncherSettings source)
+    {
+        return new LauncherSettings
+        {
+            Type = source.Type,
+            ExecutablePath = source.ExecutablePath,
+            Arguments = source.Arguments,
+            TargetDisplayId = source.TargetDisplayId
         };
     }
 }

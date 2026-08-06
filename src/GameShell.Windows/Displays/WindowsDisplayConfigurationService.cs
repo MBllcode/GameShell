@@ -9,6 +9,7 @@ namespace GameShell.Windows.Displays;
 public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationService
 {
     private const int MaxQueryAttempts = 3;
+    private const int ErrorInvalidParameter = 87;
     private static readonly TimeSpan RefreshRateCorrectionDelay = TimeSpan.FromMilliseconds(750);
     private readonly ILogger<WindowsDisplayConfigurationService> _logger;
 
@@ -269,8 +270,39 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             modes,
             flags);
 
+        if (!validateOnly && result == ErrorInvalidParameter)
+        {
+            var runtimeFlags = DisplayConfigNative.SdcUseSuppliedDisplayConfig
+                | DisplayConfigNative.SdcAllowChanges
+                | DisplayConfigNative.SdcApply;
+            var runtimeApplyResult = DisplayConfigNative.SetDisplayConfig(
+                (uint)paths.Length,
+                paths,
+                (uint)modes.Length,
+                modes,
+                runtimeFlags);
+
+            if (runtimeApplyResult == DisplayConfigNative.ErrorSuccess)
+            {
+                _logger.LogWarning(
+                    "SetDisplayConfig apply succeeded only with runtime flags (without database save). Paths: {PathCount}, Modes: {ModeCount}.",
+                    paths.Length,
+                    modes.Length);
+                result = runtimeApplyResult;
+            }
+        }
+
         if (result != DisplayConfigNative.ErrorSuccess)
         {
+            if (!validateOnly && result == ErrorInvalidParameter)
+            {
+                var fallbackResult = TryApplyWithSanitizedSnapshot(snapshot, topology, cancellationToken);
+                if (fallbackResult.Success)
+                {
+                    return fallbackResult;
+                }
+            }
+
             _logger.LogError(
                 "SetDisplayConfig failed. ValidateOnly: {ValidateOnly}, ErrorCode: {ErrorCode}, Paths: {PathCount}, Modes: {ModeCount}.",
                 validateOnly,
@@ -294,6 +326,161 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         {
             Success = true,
             Message = validateOnly ? "Uklad ekranow jest poprawny." : "Zastosowano uklad ekranow."
+        };
+    }
+
+    private DisplayOperationResult TryApplyWithSanitizedSnapshot(
+        DisplayLayoutSnapshot originalSnapshot,
+        NativeDisplayTopology topology,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sanitized = BuildSanitizedSnapshotFromTopology(originalSnapshot, topology);
+            if (sanitized is null)
+            {
+                return new DisplayOperationResult
+                {
+                    Success = false,
+                    Message = "Fallback dla konfiguracji ekranów nie mógł dopasować wszystkich monitorów."
+                };
+            }
+
+            if (!TryBuildNativeConfiguration(sanitized, topology, out var paths, out var modes, out var message))
+            {
+                return new DisplayOperationResult
+                {
+                    Success = false,
+                    Message = string.IsNullOrWhiteSpace(message)
+                        ? "Fallback dla konfiguracji ekranów nie przygotował poprawnego układu."
+                        : message
+                };
+            }
+
+            var result = DisplayConfigNative.SetDisplayConfig(
+                (uint)paths.Length,
+                paths,
+                (uint)modes.Length,
+                modes,
+                DisplayConfigNative.SdcUseSuppliedDisplayConfig
+                | DisplayConfigNative.SdcAllowChanges
+                | DisplayConfigNative.SdcApply
+                | DisplayConfigNative.SdcSaveToDatabase);
+
+            if (result == ErrorInvalidParameter)
+            {
+                result = DisplayConfigNative.SetDisplayConfig(
+                    (uint)paths.Length,
+                    paths,
+                    (uint)modes.Length,
+                    modes,
+                    DisplayConfigNative.SdcUseSuppliedDisplayConfig
+                    | DisplayConfigNative.SdcAllowChanges
+                    | DisplayConfigNative.SdcApply);
+            }
+
+            if (result != DisplayConfigNative.ErrorSuccess)
+            {
+                _logger.LogError(
+                    "SetDisplayConfig fallback failed. ErrorCode: {ErrorCode}, Paths: {PathCount}, Modes: {ModeCount}.",
+                    result,
+                    paths.Length,
+                    modes.Length);
+                return new DisplayOperationResult
+                {
+                    Success = false,
+                    Message = $"Windows odrzucil konfiguracje ekranow. Kod bledu: {result}."
+                };
+            }
+
+            _logger.LogWarning("SetDisplayConfig fallback apply succeeded using sanitized snapshot.");
+            return new DisplayOperationResult
+            {
+                Success = true,
+                Message = "Zastosowano uklad ekranow (fallback)."
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SetDisplayConfig fallback apply failed with exception.");
+            return new DisplayOperationResult
+            {
+                Success = false,
+                Message = "Fallback dla konfiguracji ekranów zakończył się błędem."
+            };
+        }
+    }
+
+    private static DisplayLayoutSnapshot? BuildSanitizedSnapshotFromTopology(
+        DisplayLayoutSnapshot originalSnapshot,
+        NativeDisplayTopology topology)
+    {
+        var requested = originalSnapshot.Displays.Where(display => display.IsActive).ToList();
+        if (requested.Count == 0)
+        {
+            return null;
+        }
+
+        var selected = new List<NativeDisplayPath>();
+        foreach (var requestedDisplay in requested)
+        {
+            var matched = topology.Paths
+                .Where(path => path.IsActive || path.IsAvailable)
+                .FirstOrDefault(path => DisplayIdentityMatcher.IsReliableMatch(requestedDisplay.Identity, ToIdentity(path)));
+            if (matched is null)
+            {
+                return null;
+            }
+
+            selected.Add(matched);
+        }
+
+        var requestedPrimaryIdentity = requested.FirstOrDefault(display => display.IsPrimary)?.Identity;
+        var primary = requestedPrimaryIdentity is null
+            ? selected[0]
+            : selected.FirstOrDefault(path => DisplayIdentityMatcher.IsReliableMatch(requestedPrimaryIdentity, ToIdentity(path))) ?? selected[0];
+
+        var originX = primary.PositionX;
+        var originY = primary.PositionY;
+        var displays = selected.Select(path => new DisplayPathSnapshot
+        {
+            Identity = ToIdentity(path),
+            IsActive = true,
+            IsPrimary = DisplayIdentityMatcher.IsReliableMatch(ToIdentity(path), ToIdentity(primary)),
+            PositionX = path.PositionX - originX,
+            PositionY = path.PositionY - originY,
+            Width = path.Width,
+            Height = path.Height,
+            Orientation = ToDisplayOrientation(path.PathInfo.TargetInfo.Rotation),
+            RefreshRateNumerator = path.RefreshRateNumerator,
+            RefreshRateDenominator = path.RefreshRateDenominator,
+            SourceId = path.SourceId,
+            TargetId = path.TargetId,
+            AdapterLuid = path.AdapterLuid,
+            SourceDeviceName = path.SourceDeviceName,
+            ConnectionTechnology = path.ConnectionTechnology
+        }).ToList();
+
+        return new DisplayLayoutSnapshot
+        {
+            CapturedAt = DateTimeOffset.UtcNow,
+            Displays = displays
+        };
+    }
+
+    private static DisplayOrientation ToDisplayOrientation(DisplayConfigRotation rotation)
+    {
+        return rotation switch
+        {
+            DisplayConfigRotation.Identity => DisplayOrientation.Identity,
+            DisplayConfigRotation.Rotate90 => DisplayOrientation.Rotate90,
+            DisplayConfigRotation.Rotate180 => DisplayOrientation.Rotate180,
+            DisplayConfigRotation.Rotate270 => DisplayOrientation.Rotate270,
+            _ => DisplayOrientation.Unknown
         };
     }
 
@@ -385,12 +572,13 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             var path = currentPath.PathInfo;
             path.Flags = DisplayConfigNative.DisplayConfigPathActive;
             path.SourceInfo.ModeInfoIdx = sourceModeIndex;
-            path.SourceInfo.StatusFlags = 0;
             path.TargetInfo.ModeInfoIdx = targetModeIndex;
             path.TargetInfo.Rotation = MapOrientation(snapshotDisplay.Orientation, currentPath.PathInfo.TargetInfo.Rotation);
-            path.TargetInfo.RefreshRate = ResolveRefreshRate(snapshotDisplay, currentPath);
-            path.TargetInfo.TargetAvailable = true;
-            path.TargetInfo.StatusFlags = 0;
+            var refreshRate = ResolveRefreshRate(snapshotDisplay, currentPath);
+            if (refreshRate.Numerator > 0 && refreshRate.Denominator > 0)
+            {
+                path.TargetInfo.RefreshRate = refreshRate;
+            }
 
             targetPaths.Add(path);
         }
@@ -637,17 +825,9 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
 
     private NativeDisplayTopology QueryLayoutApplicationTopology(CancellationToken cancellationToken)
     {
-        try
-        {
-            var database = QueryTopology(DisplayConfigNative.QdcDatabaseCurrent, "database", cancellationToken);
-            var available = QueryAvailableTopology(cancellationToken);
-            return MergeTopologies(database, available);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "DisplayConfig database topology could not be read. Falling back to all paths.");
-            return QueryAvailableTopology(cancellationToken);
-        }
+        var active = QueryActiveTopology(cancellationToken);
+        var available = QueryAvailableTopology(cancellationToken);
+        return MergeTopologies(active, available);
     }
 
     private static NativeDisplayTopology MergeTopologies(NativeDisplayTopology primary, NativeDisplayTopology secondary)

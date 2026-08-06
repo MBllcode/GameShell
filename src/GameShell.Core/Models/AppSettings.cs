@@ -21,6 +21,7 @@ public sealed class DisplaySettings
     public DisplayLayoutSnapshot? PcGamingLayout { get; set; }
     public List<DisplayLayoutProfile> PcGamingProfiles { get; set; } = [];
     public string? ActivePcGamingProfileName { get; set; }
+    public List<PcGamingProfileConfiguration> PcGamingProfileConfigurations { get; set; } = [];
     public List<PcGamingProfileBehaviour> PcGamingProfileBehaviours { get; set; } = [];
 }
 
@@ -34,6 +35,20 @@ public sealed class PcGamingProfileBehaviour
 {
     public string ProfileName { get; set; } = string.Empty;
     public PcGamingSettings Behaviour { get; set; } = new();
+}
+
+public sealed class PcGamingProfileConfiguration
+{
+    public string ProfileName { get; set; } = string.Empty;
+    public PcGamingSettings Behaviour { get; set; } = new();
+    public LauncherSettings Launcher { get; set; } = new();
+    public PcGamingProfileHotkeys Hotkeys { get; set; } = new();
+}
+
+public sealed class PcGamingProfileHotkeys
+{
+    public string EnterProfile { get; set; } = "";
+    public string EnterWorkMode { get; set; } = "";
 }
 
 public sealed class LauncherSettings

@@ -4,6 +4,16 @@ namespace GameShell.Core.Interfaces;
 
 public interface IModeWorkflowService
 {
+    Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
+        AppSettings settings,
+        GameShellMode mode,
+        CancellationToken cancellationToken = default);
+
+    Task<ModeWorkflowResult> CompleteGamingWorkflowAsync(
+        AppSettings settings,
+        GameShellMode mode,
+        CancellationToken cancellationToken = default);
+
     Task<ModeWorkflowResult> RunGamingWorkflowAsync(
         AppSettings settings,
         GameShellMode mode,

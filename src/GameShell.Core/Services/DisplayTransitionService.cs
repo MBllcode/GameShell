@@ -7,6 +7,7 @@ namespace GameShell.Core.Services;
 public sealed class DisplayTransitionService : IDisplayTransitionService
 {
     private const int VerificationAttempts = 6;
+    private const int MultiDisplayVerificationAttempts = 14;
     private static readonly TimeSpan VerificationDelay = TimeSpan.FromMilliseconds(750);
 
     private readonly IDisplayQueryService _queryService;
@@ -111,8 +112,11 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         return await RunModeTransitionAsync(
             GameShellMode.PcGaming,
             _ => Task.FromResult(pcGamingLayout),
-            actual => DisplayLayoutVerifier.MatchesSnapshot(pcGamingLayout, actual),
-            cancellationToken);
+            actual => DisplayLayoutVerifier.MatchesSnapshot(pcGamingLayout, actual)
+                || DisplayLayoutVerifier.MatchesActiveDisplaySet(pcGamingLayout, actual),
+            cancellationToken,
+            verificationAttempts: MultiDisplayVerificationAttempts,
+            allowApplyWhenValidationFails: true);
     }
 
     private async Task<DisplayTransitionResult> EnterSingleDisplayGamingModeAsync(
@@ -236,7 +240,9 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         Func<DisplayLayoutSnapshot, Task<DisplayLayoutSnapshot>> buildTargetLayout,
         Func<DisplayLayoutSnapshot, bool> verify,
         CancellationToken cancellationToken,
-        bool captureWorkReturnLayout = true)
+        bool captureWorkReturnLayout = true,
+        int verificationAttempts = VerificationAttempts,
+        bool allowApplyWhenValidationFails = false)
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
@@ -265,7 +271,15 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         var validate = await _layoutService.ValidateLayoutAsync(target, cancellationToken);
         if (!validate.Success)
         {
-            return await RollBackAsync(state, "ValidateFailed", validate.Message, cancellationToken);
+            if (!allowApplyWhenValidationFails)
+            {
+                return await RollBackAsync(state, "ValidateFailed", validate.Message, cancellationToken);
+            }
+
+            _logger.LogWarning(
+                "Display layout validation failed for {TargetMode}, trying direct apply fallback. Message: {Message}",
+                targetMode,
+                validate.Message);
         }
 
         var apply = await _layoutService.ApplyLayoutAsync(target, cancellationToken);
@@ -274,7 +288,7 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
             return await RollBackAsync(state, "ApplyFailed", apply.Message, cancellationToken);
         }
 
-        if (!await WaitForLayoutAsync(verify, targetMode.ToString(), cancellationToken))
+        if (!await WaitForLayoutAsync(verify, targetMode.ToString(), cancellationToken, verificationAttempts))
         {
             return await RollBackAsync(state, "VerificationFailed", "Nie udało się potwierdzić docelowego układu ekranów.", cancellationToken);
         }
@@ -397,9 +411,11 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
     private async Task<bool> WaitForLayoutAsync(
         Func<DisplayLayoutSnapshot, bool> verify,
         string context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int attempts = VerificationAttempts)
     {
-        for (var attempt = 1; attempt <= VerificationAttempts; attempt++)
+        var maxAttempts = Math.Max(1, attempts);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             var actual = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
             if (verify(actual))
@@ -416,15 +432,15 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
                 "Display layout verification for {Context} did not match. Attempt {Attempt}/{MaxAttempts}.",
                 context,
                 attempt,
-                VerificationAttempts);
+                    maxAttempts);
 
-            if (attempt < VerificationAttempts)
+            if (attempt < maxAttempts)
             {
                 await Task.Delay(VerificationDelay, cancellationToken);
             }
         }
 
-        _logger.LogWarning("Display layout verification for {Context} failed after {AttemptCount} attempts.", context, VerificationAttempts);
+        _logger.LogWarning("Display layout verification for {Context} failed after {AttemptCount} attempts.", context, maxAttempts);
         return false;
     }
 
@@ -440,7 +456,7 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
 
         return DisplayTransitionResult.Fail(
             errorCode,
-            rolledBack ? "Nie udało się przełączyć ekranów. Przywrócono poprzedni układ." : message,
+            rolledBack ? $"Nie udało się przełączyć ekranów ({errorCode}). {message} Przywrócono poprzedni układ." : message,
             rolledBack);
     }
 

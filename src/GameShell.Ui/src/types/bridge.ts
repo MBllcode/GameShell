@@ -107,6 +107,18 @@ export interface PcGamingProfileBehaviour {
   behaviour: Partial<AppSettings['pcGaming']>;
 }
 
+export interface PcGamingProfileHotkeys {
+  enterProfile: string;
+  enterWorkMode: string;
+}
+
+export interface PcGamingProfileConfiguration {
+  profileName: string;
+  behaviour: Partial<AppSettings['pcGaming']>;
+  launcher: AppSettings['launcher'];
+  hotkeys: PcGamingProfileHotkeys;
+}
+
 export interface DependencyStatus {
   name: string;
   isRequired: boolean;
@@ -146,6 +158,7 @@ export interface AppSettings {
     pcGamingLayout: DisplayLayoutSnapshot | null;
     pcGamingProfiles?: DisplayLayoutProfile[];
     activePcGamingProfileName?: string | null;
+    pcGamingProfileConfigurations?: PcGamingProfileConfiguration[];
     pcGamingProfileBehaviours?: PcGamingProfileBehaviour[];
   };
   launcher: {

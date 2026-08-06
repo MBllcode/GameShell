@@ -19,6 +19,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     private const int SmCyVirtualScreen = 79;
     private const int WmClose = 0x0010;
     private const int SpiSetCursors = 0x0057;
+    private const int ClassNameBufferSize = 256;
     private const int CursorWidth = 32;
     private const int CursorHeight = 32;
 
@@ -56,7 +57,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         _runtimeStateService = runtimeStateService;
     }
 
-    public async Task<ModeWorkflowResult> RunGamingWorkflowAsync(
+    public async Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
         AppSettings settings,
         GameShellMode mode,
         CancellationToken cancellationToken = default)
@@ -77,6 +78,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             if (behaviour.CloseVisibleWindows)
             {
                 CloseVisibleWindows(settings, behaviour);
+                CloseExplorerWindows(behaviour);
                 await Task.Delay(700, cancellationToken);
             }
         }, cancellationToken);
@@ -86,6 +88,8 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             if (behaviour.MinimizeRemainingWindows)
             {
                 MinimizeRemainingWindows(settings, behaviour);
+                MinimizeCurrentWindow();
+                MinimizeExplorerWindows();
             }
 
             await Task.CompletedTask;
@@ -99,7 +103,40 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             }
         }, cancellationToken);
 
+        await TryStepAsync("move cursor", warnings, async () =>
+        {
+            if (behaviour.MoveCursorToCorner)
+            {
+                MoveCursorToBottomRight();
+            }
+
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+        await TryStepAsync("hide cursor", warnings, async () =>
+        {
+            if (behaviour.HideCursor)
+            {
+                HideSystemCursor();
+            }
+
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+        return warnings.Count == 0
+            ? ModeWorkflowResult.Ok()
+            : ModeWorkflowResult.Ok($"Workflow zakonczony z ostrzezeniami: {string.Join("; ", warnings)}");
+    }
+
+    public async Task<ModeWorkflowResult> CompleteGamingWorkflowAsync(
+        AppSettings settings,
+        GameShellMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        var warnings = new List<string>();
+        var behaviour = mode == GameShellMode.PcGaming ? settings.PcGaming : settings.GameShell;
         Process? launcherProcess = null;
+
         await TryStepAsync("start launcher", warnings, async () =>
         {
             if (behaviour.StartLauncher)
@@ -142,6 +179,20 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         return warnings.Count == 0
             ? ModeWorkflowResult.Ok()
             : ModeWorkflowResult.Ok($"Workflow zakonczony z ostrzezeniami: {string.Join("; ", warnings)}");
+    }
+
+    public async Task<ModeWorkflowResult> RunGamingWorkflowAsync(
+        AppSettings settings,
+        GameShellMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        var pre = await PrepareGamingWorkflowAsync(settings, mode, cancellationToken);
+        if (!pre.Success)
+        {
+            return pre;
+        }
+
+        return await CompleteGamingWorkflowAsync(settings, mode, cancellationToken);
     }
 
     public async Task<ModeWorkflowResult> RunWorkWorkflowAsync(
@@ -362,6 +413,120 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         }
     }
 
+    private static void MinimizeCurrentWindow()
+    {
+        try
+        {
+            var currentProcessId = Process.GetCurrentProcess().Id;
+
+            var foreground = GetForegroundWindow();
+            if (foreground != IntPtr.Zero)
+            {
+                _ = GetWindowThreadProcessId(foreground, out var foregroundProcessId);
+                if (foregroundProcessId == currentProcessId)
+                {
+                    ShowWindow(foreground, SwMinimize);
+                }
+            }
+
+            EnumWindows((window, lParam) =>
+            {
+                if (!IsWindowVisible(window))
+                {
+                    return true;
+                }
+
+                GetWindowThreadProcessId(window, out var processId);
+                if (processId != currentProcessId)
+                {
+                    return true;
+                }
+
+                ShowWindow(window, SwMinimize);
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch
+        {
+            // Best-effort self minimize.
+        }
+    }
+
+    private static void CloseExplorerWindows(GameShellSettings behaviour)
+    {
+        var closeOnly = CreateNameSet(behaviour.CloseOnlyProcessNames);
+        if (closeOnly.Count > 0 && !closeOnly.Contains("explorer"))
+        {
+            return;
+        }
+
+        EnumWindows((window, lParam) =>
+        {
+            if (!IsWindowVisible(window))
+            {
+                return true;
+            }
+
+            if (!IsExplorerFolderWindow(window))
+            {
+                return true;
+            }
+
+            PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero);
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    private static void MinimizeExplorerWindows()
+    {
+        EnumWindows((window, lParam) =>
+        {
+            if (!IsWindowVisible(window))
+            {
+                return true;
+            }
+
+            if (!IsExplorerFolderWindow(window))
+            {
+                return true;
+            }
+
+            ShowWindow(window, SwMinimize);
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    private static bool IsExplorerFolderWindow(IntPtr window)
+    {
+        var className = GetWindowClassName(window);
+        return string.Equals(className, "CabinetWClass", StringComparison.Ordinal)
+            || string.Equals(className, "ExploreWClass", StringComparison.Ordinal);
+    }
+
+    private static string GetWindowClassName(IntPtr window)
+    {
+        var buffer = new string('\0', ClassNameBufferSize);
+        var length = GetClassName(window, buffer, buffer.Length);
+        if (length <= 0)
+        {
+            return string.Empty;
+        }
+
+        return buffer[..length];
+    }
+
+    private static int GetClassName(IntPtr window, string className, int maxCount)
+    {
+        try
+        {
+            return GetClassNameNative(window, className, maxCount);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     private static IEnumerable<Process> EnumerateCandidateWindowProcesses(AppSettings settings, GameShellSettings behaviour)
     {
         var protectedNames = CreateNameSet(behaviour.ProtectedProcessNames);
@@ -458,6 +623,15 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
 
     private static IEnumerable<string> GetLauncherProcessNames(AppSettings settings)
     {
+        // Always include known launcher processes so Work Mode can reliably close
+        // the launcher used by the active gaming profile even if global launcher differs.
+        yield return "Playnite.FullscreenApp";
+        yield return "Playnite.DesktopApp";
+        yield return "steam";
+        yield return "Xbox";
+        yield return "XboxPcApp";
+        yield return "GamingServicesUI";
+
         if (settings.Launcher.Type.Equals("Playnite", StringComparison.OrdinalIgnoreCase))
         {
             yield return "Playnite.FullscreenApp";
@@ -542,6 +716,15 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr windowHandle, out int processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr windowHandle);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string className, string? windowName);
 
@@ -562,6 +745,9 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr windowHandle, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetClassNameW")]
+    private static extern int GetClassNameNative(IntPtr windowHandle, string className, int maxCount);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr CreateCursor(

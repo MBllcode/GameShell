@@ -744,14 +744,16 @@ public sealed class WebViewBridge
         }
 
         var existingProfile = displaySettings.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
-        if (existingProfile is not null)
-        {
-            throw new InvalidOperationException("Profil o tej nazwie już istnieje.");
-        }
-
-        if (displaySettings.PcGamingProfiles.Any(profile => IsSameProfileCombination(profile.Layout, layout)))
+        if (displaySettings.PcGamingProfiles.Any(profile => !string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase) && IsSameProfileCombination(profile.Layout, layout)))
         {
             throw new InvalidOperationException("Profil z taką samą kombinacją ekranów już istnieje.");
+        }
+
+        if (existingProfile is not null)
+        {
+            existingProfile.Layout = layout;
+            displaySettings.ActivePcGamingProfileName = existingProfile.Name;
+            return;
         }
 
         if (maxProfileCount > 0 && displaySettings.PcGamingProfiles.Count >= maxProfileCount)

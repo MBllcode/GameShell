@@ -2,6 +2,16 @@
 
 Dokument dla kolejnych sesji Codex. Przed kolejnymi zmianami najpierw przeczytaj ten plik, potem sprawdź aktualny kod.
 
+## Handoff 2026-08-06 (najwazniejsze)
+
+- Profil jest wybierany z `Szybkie przelaczenie`; kroki profilowe edytuja zawsze ten zaznaczony profil.
+- Krok `Ekrany` nie zawiera listy profili i nie ma recznego wyboru monitora glownego.
+- Przy edycji ukladu ekranow profil musi aktualizowac sie po `Zapisz zmiany`.
+- Krytyczny fix: zapis payloadu ma byc budowany z najnowszego draftu ekranu dla profilu (bez race condition React state). W `App.tsx` sluzy do tego override/ref dla payloadu i commit draftu przed `saveSettings`.
+- Modal nadpisania nazwy profilu ma pojawiac sie tylko gdy nazwa koliduje z innym profilem; zwykla edycja aktualnie zaznaczonego profilu nie powinna go pokazywac.
+- W first-run sa kroki globalne (`Work Mode`, `Zachowanie aplikacji`).
+- W `Dodaj profil` po pierwszej konfiguracji sa tylko kroki profilowe: `Ekrany`, `Launcher`, `Zachowanie profilu`, `Skroty profilu`, `Zakonczenie`.
+
 ## Cel produktu
 
 GameShell to lokalna aplikacja Windows do przełączania komputera między:
@@ -150,6 +160,8 @@ GameShell obsługuje globalne hotkeye dla pełnych trybów:
 - PC Gaming,
 - Work Mode.
 
+Hotkey przejścia do `Work Mode` jest globalny (nie per profil). UI konfiguruje go w sekcji `Zachowanie Work Mode` pod checkboxami.
+
 Obsługiwane argumenty CLI:
 
 ```powershell
@@ -248,11 +260,22 @@ Główne technologie:
 - jeden prosty krok `Ekrany`,
 - lista wykrytych ekranów pokazuje nazwę, rozdzielczość, refresh rate, primary, pozycję, typ połączenia i techniczny identyfikator w szczegółach,
 - nieaktywne, ale dostępne ekrany są widoczne i oznaczone jako nieaktywne,
+- krok `Ekrany` nie pokazuje już osobnej listy zapisanych profili; edytuje profil zaznaczony na panelu głównym,
+- krok `Ekrany` nie wymaga ręcznego wyboru monitora głównego profilu,
+- profil może zostać zapisany nawet przy takiej samej kombinacji ekranów jak inny profil (różnicowanie profili odbywa się też przez zachowania/checkboxy i launcher),
+- próba nadpisania profilu po nazwie pokazuje modal potwierdzenia w stylu aplikacji,
+- podczas pierwszej konfiguracji użytkownik klika `Dalej` w kroku `Ekrany`, a profil jest przygotowywany automatycznie i kreator przechodzi przez pełny flow,
+- po zakończeniu pierwszej konfiguracji, opcja `Dodaj profil` z panelu głównego otwiera flow profilowy bez kroków globalnych (`Start`, `Zachowanie Work Mode`, `Zachowanie aplikacji`),
+- flow dodawania kolejnego profilu przechodzi przez wszystkie kroki profilowe (`Ekrany`, `Launcher`, `Zachowanie profilu`, `Skróty profilu`, `Zakończenie`) i zapisuje dopiero na końcu,
+- podczas tworzenia kolejnego profilu użytkownik może na każdym kroku wrócić do panelu głównego i porzucić aktualny draft,
+- ustawienia globalne aplikacji (`Startuj z Windows`, `Startuj zminimalizowany`, skróty systemowe) są w osobnym kroku `Zachowanie aplikacji`, a krok `Zakończenie` zawiera tylko podsumowanie profilu,
+- `Startuj zminimalizowany do tray` jest zależne od `Startuj z Windows` i nie może pozostać aktywne, gdy autostart jest wyłączony,
 - sekcja `Console Mode` pozwala wybrać ekran Console i przetestować go bez zmieniania audio; wybrany ekran ma zielone obramowanie i marker `CONSOLE`,
 - sekcja `PC Gaming` jest kompaktowym profilem grania przy biurku: pozwala zapisać obecny układ, zapisać tylko monitor główny, przetestować profil i go usunąć; status profilu jest pokazany jako `ZAPISANY` albo `BRAK PROFILU`,
 - krok `Launcher` pokazuje status wykrycia Playnite, Steam i Xbox App oraz pozwala otworzyć oficjalną stronę pobierania wybranego launchera, jeśli nie jest zainstalowany,
 - krok `Test` pokazuje wyłącznie test pełnych trybów,
 - kreator ma stały footer z przyciskiem `Wróć` po lewej, komunikatem pośrodku i akcjami kontynuacji/zapisu po prawej,
+- potwierdzenia wymagające decyzji użytkownika używają ustandaryzowanych komponentów modalnych (`dialog-backdrop`, `dialog-panel`, `dialog-actions`); nie używamy `window.confirm`,
 - UI blokuje przewijanie okna aplikacji; kroki są projektowane tak, aby mieściły się w jednym widoku,
 - okno WPF startuje domyślnie w `1360 x 860`, ma minimum `1040 x 720`, zapamiętuje ostatni rozmiar i położenie użytkownika, a zbyt duży lub pozaekranowy zapis jest przy starcie przycinany/centrowany do aktualnego pulpitu,
 - hotkeye klawiaturowe są rejestrowane przez pola przechwytujące kombinacje klawiszy.

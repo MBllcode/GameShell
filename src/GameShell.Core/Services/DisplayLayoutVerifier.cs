@@ -21,6 +21,14 @@ public static class DisplayLayoutVerifier
             return false;
         }
 
+        if (expectedActive.Count == 0)
+        {
+            return true;
+        }
+
+        int? offsetX = null;
+        int? offsetY = null;
+
         foreach (var expectedDisplay in expectedActive)
         {
             var actualDisplay = actualActive.SingleOrDefault(display => DisplayIdentityMatcher.IsReliableMatch(expectedDisplay.Identity, display.Identity));
@@ -29,8 +37,11 @@ public static class DisplayLayoutVerifier
                 return false;
             }
 
-            if (actualDisplay.PositionX != expectedDisplay.PositionX
-                || actualDisplay.PositionY != expectedDisplay.PositionY
+            offsetX ??= actualDisplay.PositionX - expectedDisplay.PositionX;
+            offsetY ??= actualDisplay.PositionY - expectedDisplay.PositionY;
+
+            if (actualDisplay.PositionX - expectedDisplay.PositionX != offsetX
+                || actualDisplay.PositionY - expectedDisplay.PositionY != offsetY
                 || actualDisplay.Width != expectedDisplay.Width
                 || actualDisplay.Height != expectedDisplay.Height)
             {
@@ -39,5 +50,23 @@ public static class DisplayLayoutVerifier
         }
 
         return true;
+    }
+
+    public static bool MatchesActiveDisplaySet(DisplayLayoutSnapshot expected, DisplayLayoutSnapshot actual)
+    {
+        var expectedActive = expected.Displays.Where(display => display.IsActive).ToList();
+        var actualActive = actual.Displays.Where(display => display.IsActive).ToList();
+        if (actualActive.Count < expectedActive.Count)
+        {
+            return false;
+        }
+
+        if (actualActive.Count > 0 && !actualActive.Any(display => display.IsPrimary))
+        {
+            return false;
+        }
+
+        return expectedActive.All(expectedDisplay =>
+            actualActive.Any(actualDisplay => DisplayIdentityMatcher.IsReliableMatch(expectedDisplay.Identity, actualDisplay.Identity)));
     }
 }
