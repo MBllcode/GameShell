@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
+    "test:mapper": "node --experimental-strip-types --test tests/controllerDisplayMapper.test.ts",
     "dev": "vite",
     "preview": "vite preview"
   },

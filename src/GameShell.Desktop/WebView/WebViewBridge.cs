@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using GameShell.Core.Services;
+using GameShell.Desktop.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
@@ -47,6 +48,10 @@ public sealed class WebViewBridge
         "openDependencyDownloadPage",
         "selectDependencyPath",
         "setHotkeyCaptureActive",
+        "startControllerShortcutCapture",
+        "cancelControllerShortcutCapture",
+        "acknowledgeControllerShortcutCapture",
+        "getControllerStatus",
         "enterGameShell",
         "enterGameShellWithProfile",
         "enterWorkMode"
@@ -59,6 +64,7 @@ public sealed class WebViewBridge
     private readonly IDisplayQueryService _displayQueryService;
     private readonly IDisplayTransitionService _displayTransitionService;
     private readonly ILogger<WebViewBridge> _logger;
+    private Services.SdlControllerShortcutService? _controllerShortcutService;
 
     public WebViewBridge(
         IModeCommandService modeCommandService,
@@ -76,6 +82,11 @@ public sealed class WebViewBridge
         _displayQueryService = displayQueryService;
         _displayTransitionService = displayTransitionService;
         _logger = logger;
+    }
+
+    public void AttachControllerShortcutService(Services.SdlControllerShortcutService controllerShortcutService)
+    {
+        _controllerShortcutService = controllerShortcutService;
     }
 
     public event EventHandler? SettingsSaved;
@@ -96,6 +107,18 @@ public sealed class WebViewBridge
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to notify WebView about status change.");
+        }
+    }
+
+    public void NotifyControllerStatusChanged()
+    {
+        try
+        {
+            _coreWebView?.PostWebMessageAsJson("""{"type":"controllerStatusChanged"}""");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to notify WebView about controller status change.");
         }
     }
 
@@ -150,6 +173,10 @@ public sealed class WebViewBridge
                 "openDependencyDownloadPage" => await OpenDependencyDownloadPageAsync(message.Payload),
                 "selectDependencyPath" => await SelectDependencyPathAsync(message.Payload),
                 "setHotkeyCaptureActive" => SetHotkeyCaptureActive(message.Payload),
+                "startControllerShortcutCapture" => StartControllerShortcutCapture(message.Payload),
+                "cancelControllerShortcutCapture" => CancelControllerShortcutCapture(message.Payload),
+                "acknowledgeControllerShortcutCapture" => AcknowledgeControllerShortcutCapture(message.Payload),
+                "getControllerStatus" => GetControllerStatus(),
                 "enterGameShell" => await _modeCommandService.EnterGameShellAsync(),
                 "enterGameShellWithProfile" => await _modeCommandService.EnterGameShellWithDisplayProfileAsync(ReadOptionalProfileName(message.Payload) ?? "PcGaming"),
                 "enterWorkMode" => await _modeCommandService.EnterWorkModeAsync(),
@@ -193,11 +220,60 @@ public sealed class WebViewBridge
         return settings;
     }
 
+    public void ApplyWindowsIntegrationForCurrentSettings(AppSettings settings)
+    {
+        ApplyWindowsIntegration(settings);
+    }
+
     private object SetHotkeyCaptureActive(JsonElement? payload)
     {
         var isActive = ReadHotkeyCaptureState(payload);
         HotkeyCaptureStateChanged?.Invoke(this, isActive);
         return new { active = isActive };
+    }
+
+    private object StartControllerShortcutCapture(JsonElement? payload)
+    {
+        var profileId = ReadRequiredCaptureProfileId(payload);
+        return _controllerShortcutService?.StartCapture(profileId) ?? throw new InvalidOperationException("Controller capture service is unavailable.");
+    }
+
+    private object CancelControllerShortcutCapture(JsonElement? payload)
+    {
+        var reason = ReadOptionalString(payload, "reason") ?? "UserCancelled";
+        return _controllerShortcutService?.CancelCapture(reason) ?? throw new InvalidOperationException("Controller capture service is unavailable.");
+    }
+
+    private object AcknowledgeControllerShortcutCapture(JsonElement? payload)
+    {
+        var sessionId = ReadRequiredGuid(payload, "sessionId");
+        return _controllerShortcutService?.AcknowledgeCapture(sessionId) ?? throw new InvalidOperationException("Controller capture service is unavailable.");
+    }
+
+    private object GetControllerStatus()
+    {
+        return _controllerShortcutService?.GetStatus() ?? new
+        {
+            isConnected = false,
+            deviceName = (string?)null,
+            isListening = false,
+            capturePhase = "Idle",
+            captureSessionId = (Guid?)null,
+            profileId = (string?)null,
+            startedAt = (DateTimeOffset?)null,
+            capturedButtons = Array.Empty<string>(),
+            completedCapture = (object?)null,
+            inputSource = "SDL3",
+            gamepadButtonCount = 0,
+            joystickButtonCount = 0,
+            rawPressedButtons = Array.Empty<int>(),
+            backend = "SDL3",
+            controllerCount = 0,
+            controllerId = (string?)null,
+            lastReadButtons = Array.Empty<string>(),
+            lastReadAt = (DateTimeOffset?)null,
+            diagnosticStatus = "Brak zgodnego kontrolera"
+        };
     }
 
     private async Task<IReadOnlyList<DisplayDeviceInfo>> GetDisplaysAsync()
@@ -538,11 +614,16 @@ public sealed class WebViewBridge
         _logger.LogInformation("Settings saved from WebView. Path: {SettingsPath}", _settingsService.SettingsPath);
     }
 
-    private static void ApplyWindowsIntegration(AppSettings settings)
+    private void ApplyWindowsIntegration(AppSettings settings)
     {
         var startupRegistration = ResolveStartupRegistration();
 
         ApplyStartup(settings.Startup.StartWithWindows, startupRegistration.RunCommand);
+        _logger.LogInformation(
+            "Windows integration applied. StartWithWindows={StartWithWindows}, RunCommand={RunCommand}, BaseDirectory={BaseDirectory}.",
+            settings.Startup.StartWithWindows,
+            startupRegistration.RunCommand,
+            AppContext.BaseDirectory);
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "GameShellShortcut.ico");
 
         ApplyShortcut(
@@ -729,6 +810,19 @@ public sealed class WebViewBridge
         };
     }
 
+    private static Guid ReadRequiredGuid(JsonElement? payload, string propertyName)
+    {
+        var value = ReadOptionalString(payload, propertyName);
+        if (!Guid.TryParse(value, out var result)) throw new InvalidOperationException($"{propertyName} is required.");
+        return result;
+    }
+
+    private static string? ReadOptionalString(JsonElement? payload, string propertyName)
+    {
+        if (payload is null || payload.Value.ValueKind != JsonValueKind.Object || !payload.Value.TryGetProperty(propertyName, out var property)) return null;
+        return property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+    }
+
     private static DisplayIdentity ReadDisplayIdentity(JsonElement? payload)
     {
         if (payload is null || payload.Value.ValueKind is not JsonValueKind.Object || !payload.Value.TryGetProperty("identity", out var identityElement))
@@ -778,6 +872,14 @@ public sealed class WebViewBridge
     {
         return ReadOptionalProfileName(payload)
             ?? throw new InvalidOperationException("Nazwa profilu jest wymagana.");
+    }
+
+    private static string ReadRequiredCaptureProfileId(JsonElement? payload)
+    {
+        var profileId = ReadOptionalString(payload, "profileId") ?? ReadOptionalProfileName(payload);
+        return string.IsNullOrWhiteSpace(profileId)
+            ? throw new InvalidOperationException("ProfileId is required.")
+            : profileId.Trim();
     }
 
     private static void UpsertPcGamingProfile(DisplaySettings displaySettings, string? profileName, DisplayLayoutSnapshot layout, int maxProfileCount)

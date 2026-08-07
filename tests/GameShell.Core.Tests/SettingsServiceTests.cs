@@ -192,6 +192,151 @@ public sealed class SettingsServiceTests
         Assert.Equal("Ctrl+Alt+W", loaded.Hotkeys.WorkMode);
     }
 
+    [Fact]
+    public void Validate_DoesNotCopyGlobalControllerShortcutToProfileConfiguration()
+    {
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "Salon",
+                        Layout = new DisplayLayoutSnapshot()
+                    }
+                ]
+            },
+            Controller = new ControllerSettings
+            {
+                PcGamingMode = new ControllerShortcutSettings
+                {
+                    Buttons = [ControllerButton.Back, ControllerButton.South],
+                    HoldDurationMs = 900
+                }
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+        var configuration = Assert.Single(validated.Display.PcGamingProfileConfigurations);
+
+        Assert.Null(configuration.ControllerShortcut);
+    }
+
+    [Fact]
+    public void Validate_ClearsDuplicateProfileControllerShortcuts()
+    {
+        var shortcut = new ControllerShortcutSettings
+        {
+            Buttons = [ControllerButton.Back, ControllerButton.South],
+            HoldDurationMs = 700
+        };
+
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() },
+                    new DisplayLayoutProfile { Name = "Biurko", Layout = new DisplayLayoutSnapshot() }
+                ],
+                PcGamingProfileConfigurations =
+                [
+                    new PcGamingProfileConfiguration
+                    {
+                        ProfileName = "Salon",
+                        ControllerShortcut = new ControllerShortcutSettings
+                        {
+                            Buttons = [ControllerButton.Back, ControllerButton.South],
+                            HoldDurationMs = 700
+                        }
+                    },
+                    new PcGamingProfileConfiguration
+                    {
+                        ProfileName = "Biurko",
+                        ControllerShortcut = new ControllerShortcutSettings
+                        {
+                            Buttons = [ControllerButton.South, ControllerButton.Back],
+                            HoldDurationMs = 700
+                        }
+                    }
+                ]
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        Assert.NotNull(validated.Display.PcGamingProfileConfigurations[0].ControllerShortcut);
+        Assert.Null(validated.Display.PcGamingProfileConfigurations[1].ControllerShortcut);
+    }
+
+    [Fact]
+    public void Validate_ClearsProfileKeyboardHotkeyConflictingWithGlobalWorkMode()
+    {
+        var settings = new AppSettings
+        {
+            Hotkeys = new HotkeySettings { WorkMode = "Ctrl+Alt+W" },
+            Display = new DisplaySettings
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() }
+                ],
+                PcGamingProfileConfigurations =
+                [
+                    new PcGamingProfileConfiguration
+                    {
+                        ProfileName = "Salon",
+                        Hotkeys = new PcGamingProfileHotkeys { EnterProfile = "Alt+Ctrl+W" }
+                    }
+                ]
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        Assert.Empty(validated.Display.PcGamingProfileConfigurations[0].Hotkeys.EnterProfile);
+    }
+
+    [Fact]
+    public void Validate_ClearsProfileControllerShortcutConflictingWithGlobalWorkMode()
+    {
+        var settings = new AppSettings
+        {
+            Controller = new ControllerSettings
+            {
+                WorkMode = new ControllerShortcutSettings
+                {
+                    Buttons = [ControllerButton.Back, ControllerButton.South]
+                }
+            },
+            Display = new DisplaySettings
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() }
+                ],
+                PcGamingProfileConfigurations =
+                [
+                    new PcGamingProfileConfiguration
+                    {
+                        ProfileName = "Salon",
+                        ControllerShortcut = new ControllerShortcutSettings
+                        {
+                            Buttons = [ControllerButton.South, ControllerButton.Back]
+                        }
+                    }
+                ]
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        Assert.Null(validated.Display.PcGamingProfileConfigurations[0].ControllerShortcut);
+    }
+
     private static string CreateTempSettingsPath()
     {
         var directory = Path.Combine(Path.GetTempPath(), "GameShell.Tests", Guid.NewGuid().ToString("N"));

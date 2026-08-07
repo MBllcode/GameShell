@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { sendBridgeCommand, subscribeBridgeEvent } from './services/webViewBridge';
+import { ControllerFamily, detectControllerFamily, getControllerButtonDisplayName, mapControllerButtons } from './controllerDisplayMapper';
 import type {
   AppSettings,
   AppStatus,
+  ControllerShortcutSettings,
+  ControllerStatusInfo,
   DisplayDeviceInfo,
   DisplayIdentity,
   DisplayLayoutProfile,
@@ -16,6 +19,7 @@ type StepId =
   | 'launcher'
   | 'console-behaviour'
   | 'work-behaviour'
+  | 'work-shortcuts'
   | 'controller'
   | 'app-behaviour'
   | 'finish';
@@ -31,6 +35,8 @@ type HotkeySettingsState = {
 type ProfileHotkeysState = {
   enterProfile: string;
 };
+
+type PcGamingProfileControllerShortcutMap = Record<string, ControllerShortcutSettings | null>;
 
 type SetupStep = {
   id: StepId;
@@ -59,6 +65,7 @@ type SettingsPayloadOverrides = {
   pcGamingProfileBehaviours?: PcGamingProfileBehaviourMap;
   pcGamingProfileLaunchers?: PcGamingProfileLauncherMap;
   pcGamingProfileHotkeys?: PcGamingProfileHotkeysMap;
+  pcGamingProfileControllerShortcuts?: PcGamingProfileControllerShortcutMap;
 };
 
 const MAX_PROFILE_DISPLAYS = 2;
@@ -85,6 +92,7 @@ const steps: SetupStep[] = [
   { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Pulpit i okna dla profilu' },
   { id: 'controller', title: 'Skróty profilu', subtitle: 'Skróty klawiaturowe profilu' },
   { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Przywracanie układu roboczego' },
+  { id: 'work-shortcuts', title: 'Skróty Work Mode', subtitle: 'Skróty klawiaturowe i kontrolera' },
   { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Ustawienia globalne' },
   { id: 'finish', title: 'Zakończenie', subtitle: 'Podsumowanie profilu' }
 ];
@@ -98,6 +106,7 @@ const profileSettingsStepIds: StepId[] = [
 
 const globalSettingsStepIds: StepId[] = [
   'work-behaviour',
+  'work-shortcuts',
   'app-behaviour'
 ];
 
@@ -176,6 +185,9 @@ const defaultProfileHotkeys: ProfileHotkeysState = {
   enterProfile: ''
 };
 
+const defaultControllerShortcutHoldDurationMs = 700;
+const workModeControllerCaptureId = 'WorkMode';
+
 export function App() {
   const [status, setStatus] = useState<AppStatus>(initialStatus);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -214,7 +226,37 @@ export function App() {
   const [pcGamingProfileBehaviours, setPcGamingProfileBehaviours] = useState<PcGamingProfileBehaviourMap>({});
   const [pcGamingProfileLaunchers, setPcGamingProfileLaunchers] = useState<PcGamingProfileLauncherMap>({});
   const [pcGamingProfileHotkeys, setPcGamingProfileHotkeys] = useState<PcGamingProfileHotkeysMap>({});
+  const [pcGamingProfileControllerShortcuts, setPcGamingProfileControllerShortcuts] = useState<PcGamingProfileControllerShortcutMap>({});
+  const [workModeControllerShortcut, setWorkModeControllerShortcut] = useState<ControllerShortcutSettings | null>(null);
+  const [controllerShortcutStatus, setControllerShortcutStatus] = useState<ControllerStatusInfo>({
+    isConnected: false,
+    deviceName: null,
+    isListening: false,
+    capturePhase: 'Idle',
+    captureSessionId: null,
+    profileId: null,
+    startedAt: null,
+    capturedButtons: [],
+    completedCapture: null,
+    inputSource: 'None',
+    gamepadButtonCount: 0,
+    joystickButtonCount: 0,
+    rawPressedButtons: [],
+    backend: 'SDL3',
+    controllerCount: 0,
+    controllerId: null,
+    lastReadButtons: [],
+    lastReadAt: null,
+    diagnosticStatus: 'Brak zgodnego kontrolera'
+  });
+  const controllerSessionRef = useRef<string | null>(null);
+  const controllerCaptureActiveRef = useRef(false);
+  const acknowledgedCaptureRef = useRef<string | null>(null);
+  const controllerCaptureCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [controllerCaptureSuccessButtons, setControllerCaptureSuccessButtons] = useState<string[] | null>(null);
+  const [controllerNotice, setControllerNotice] = useState<'missing' | 'disconnected' | null>(null);
   const [profileHotkeyValidationError, setProfileHotkeyValidationError] = useState<string | null>(null);
+  const [profileControllerValidationError, setProfileControllerValidationError] = useState<string | null>(null);
   const [selectedPcGamingBehaviourProfileName, setSelectedPcGamingBehaviourProfileName] = useState('');
   const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', pcGamingMode: '', workMode: '' });
   const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
@@ -241,8 +283,43 @@ export function App() {
     setDisplayValidationState(state);
   }, []);
 
+  const applyControllerStatus = (status: ControllerStatusInfo) => {
+    const normalizedStatus = normalizeControllerStatus(status);
+    const wasCapturing = controllerCaptureActiveRef.current;
+    controllerCaptureActiveRef.current = isControllerCapturePhase(normalizedStatus.capturePhase);
+
+    if (normalizedStatus.controllerCount > 0) {
+      setControllerNotice(null);
+    } else if (wasCapturing) {
+      setControllerNotice('disconnected');
+    }
+
+    controllerSessionRef.current = normalizedStatus.captureSessionId;
+    setControllerShortcutStatus(normalizedStatus);
+    return normalizedStatus;
+  };
+
+  const startControllerCapture = async (profileId: string) => {
+    setControllerCaptureSuccessButtons(null);
+
+    try {
+      const currentStatus = applyControllerStatus(await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
+      if (currentStatus.controllerCount === 0) {
+        setControllerNotice('missing');
+        return;
+      }
+
+      setControllerNotice(null);
+      await sendBridgeCommand('startControllerShortcutCapture', { profileId });
+      applyControllerStatus(await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
+    } catch {
+      setError('Nie udało się rozpocząć nasłuchiwania kontrolera.');
+    }
+  };
+
   useEffect(() => {
     setProfileHotkeyValidationError(null);
+    setProfileControllerValidationError(null);
   }, [selectedPcGamingBehaviourProfileName]);
 
   useEffect(() => {
@@ -256,9 +333,30 @@ export function App() {
         }
 
         return [];
-      })
+      }),
+      sendBridgeCommand<ControllerStatusInfo>('getControllerStatus').catch((): ControllerStatusInfo => ({
+        isConnected: false,
+        deviceName: null,
+        isListening: false,
+        capturePhase: 'Idle',
+        captureSessionId: null,
+        profileId: null,
+        startedAt: null,
+        capturedButtons: [],
+        completedCapture: null,
+        inputSource: 'None',
+        gamepadButtonCount: 0,
+        joystickButtonCount: 0,
+        rawPressedButtons: [],
+        backend: 'SDL3',
+        controllerCount: 0,
+        controllerId: null,
+        lastReadButtons: [],
+        lastReadAt: null,
+        diagnosticStatus: 'Brak zgodnego kontrolera'
+      }))
     ])
-      .then(([nextStatus, loadedSettings, detectedDisplays]) => {
+      .then(([nextStatus, loadedSettings, detectedDisplays, nextControllerStatus]) => {
         if (!isMounted) {
           return;
         }
@@ -266,6 +364,7 @@ export function App() {
         setStatus(nextStatus);
         setSettings(loadedSettings);
         setDisplays(detectedDisplays);
+        applyControllerStatus(nextControllerStatus);
         applySettingsToState(loadedSettings);
         setIsInitialLoading(false);
       })
@@ -291,6 +390,114 @@ export function App() {
     });
   }, []);
 
+  useEffect(() => {
+    return subscribeBridgeEvent('controllerStatusChanged', async () => {
+      try {
+        const nextStatus = await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus');
+        const normalizedStatus = applyControllerStatus(nextStatus);
+        console.info(`[GameShell] UI capture phase: ${normalizedStatus.capturePhase}`);
+      } catch (reason: unknown) {
+        setError(reason instanceof Error ? reason.message : 'Nie udało się odświeżyć statusu kontrolera.');
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const phase = controllerShortcutStatus.capturePhase;
+    const isCaptureTracked = phase === 'WaitingForRelease'
+      || phase === 'WaitingForFirstPress'
+      || phase === 'Recording'
+      || phase === 'WaitingForCombinationRelease'
+      || phase === 'Completed';
+    if (!isCaptureTracked) {
+      return;
+    }
+
+    let isDisposed = false;
+    const refreshControllerStatus = async () => {
+      try {
+        const nextStatus = normalizeControllerStatus(await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
+        if (isDisposed) {
+          return;
+        }
+
+        const normalizedStatus = applyControllerStatus(nextStatus);
+        console.info(`[GameShell] UI capture phase: ${normalizedStatus.capturePhase}`);
+      } catch {
+        // The push event remains the primary update path; polling is a short-lived recovery path.
+      }
+    };
+
+    const pollingTimer = setInterval(() => {
+      void refreshControllerStatus();
+    }, 100);
+    return () => {
+      isDisposed = true;
+      clearInterval(pollingTimer);
+    };
+  }, [controllerShortcutStatus.capturePhase]);
+
+  useEffect(() => {
+    const completedCapture = controllerShortcutStatus.completedCapture;
+    if (!completedCapture || completedCapture.sessionId !== controllerShortcutStatus.captureSessionId) {
+      return;
+    }
+
+    const profileName = completedCapture.profileId;
+    const nextButtons = normalizeControllerButtons(completedCapture.buttons);
+    if (nextButtons.length === 0) {
+      return;
+    }
+
+    const currentButtons = profileName === workModeControllerCaptureId
+      ? workModeControllerShortcut?.buttons ?? []
+      : pcGamingProfileControllerShortcuts[profileName]?.buttons ?? [];
+    const isSameSelection = currentButtons.length === nextButtons.length && currentButtons.every((button, index) => button === nextButtons[index]);
+    if (!isSameSelection) {
+      if (profileName === workModeControllerCaptureId) {
+        updateWorkModeControllerShortcut(nextButtons);
+      } else {
+        updateProfileControllerShortcut(profileName, nextButtons);
+      }
+    }
+    if (acknowledgedCaptureRef.current === completedCapture.sessionId) {
+      return;
+    }
+
+    acknowledgedCaptureRef.current = completedCapture.sessionId;
+    setControllerCaptureSuccessButtons(nextButtons);
+    console.info(`[GameShell] UI success shown: ${nextButtons.join('+')}`);
+    console.info('[GameShell] UI ACK sent');
+    void sendBridgeCommand<ControllerStatusInfo>('acknowledgeControllerShortcutCapture', { sessionId: completedCapture.sessionId })
+      .then((nextStatus) => {
+        applyControllerStatus(nextStatus);
+      })
+      .catch(() => {
+        acknowledgedCaptureRef.current = null;
+        setError('Nie udało się potwierdzić zapisania kombinacji kontrolera.');
+      });
+    controllerCaptureCompletionTimerRef.current = setTimeout(() => {
+      setControllerCaptureSuccessButtons(null);
+      console.info('[GameShell] UI success dismissed');
+    }, 1500);
+
+  }, [controllerShortcutStatus.completedCapture, controllerShortcutStatus.captureSessionId, pcGamingProfileControllerShortcuts, workModeControllerShortcut]);
+
+  useEffect(() => () => {
+    if (controllerCaptureCompletionTimerRef.current) {
+      clearTimeout(controllerCaptureCompletionTimerRef.current);
+    }
+  }, []);
+
+  const previousControllerProfileRef = useRef(selectedPcGamingBehaviourProfileName);
+  useEffect(() => {
+    const previousProfile = previousControllerProfileRef.current;
+    previousControllerProfileRef.current = selectedPcGamingBehaviourProfileName;
+    if (previousProfile && previousProfile !== selectedPcGamingBehaviourProfileName && controllerSessionRef.current) {
+      void sendBridgeCommand('cancelControllerShortcutCapture', { reason: 'ProfileChanged' }).catch(() => undefined);
+    }
+  }, [selectedPcGamingBehaviourProfileName]);
+
   const indexedStep = steps[stepIndex] ?? steps[0];
   const isNonFirstRunEditingSession = !isVeryFirstConfiguration && isEditingSection;
   const activeStepIds = isVeryFirstConfiguration
@@ -311,6 +518,18 @@ export function App() {
   const resolvedFlowPosition = currentFlowPosition >= 0 ? currentFlowPosition : 0;
   const resolvedStepIndex = currentFlowPosition >= 0 ? stepIndex : fallbackStepIndex;
   const currentStep = steps[resolvedStepIndex] ?? steps[0];
+  const previousStepRef = useRef<StepId | null>(null);
+  useEffect(() => {
+    const previousStep = previousStepRef.current;
+    previousStepRef.current = currentStep.id;
+    if ((previousStep === 'controller' || previousStep === 'work-shortcuts')
+      && currentStep.id !== 'controller'
+      && currentStep.id !== 'work-shortcuts'
+      && controllerSessionRef.current) {
+      void sendBridgeCommand('cancelControllerShortcutCapture', { reason: 'SectionLeft' }).catch(() => undefined);
+    }
+  }, [currentStep.id]);
+
   const isLastStep = resolvedFlowPosition === activeStepIndexes.length - 1;
   const canGoBack = resolvedFlowPosition > 0;
   const isModeSwitching = activeModeAction !== null;
@@ -382,6 +601,11 @@ export function App() {
     const nextProfileHotkeys = buildProfileHotkeysMap(loadedProfiles, loadedProfileConfigurations, {
       enterProfile: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.pcGamingMode ?? '')
     });
+    const nextProfileControllerShortcuts = buildProfileControllerShortcutMap(
+      loadedProfiles,
+      loadedProfileConfigurations,
+      loadedSettings.controller?.pcGamingMode ?? null
+    );
     const selectedProfileName = activeProfile?.name ?? loadedProfiles[0]?.name ?? '';
 
     setSelectedConsoleDisplays(consoleDisplays);
@@ -391,6 +615,8 @@ export function App() {
     setPcGamingProfileBehaviours(nextProfileBehaviours);
     setPcGamingProfileLaunchers(nextProfileLaunchers);
     setPcGamingProfileHotkeys(nextProfileHotkeys);
+    setPcGamingProfileControllerShortcuts(nextProfileControllerShortcuts);
+    setWorkModeControllerShortcut(normalizeControllerShortcut(loadedSettings.controller?.workMode ?? null));
     setSelectedPcGamingBehaviourProfileName(selectedProfileName);
     setPcGamingLayout(activeProfile?.layout ?? loadedSettings.display?.pcGamingLayout ?? null);
     setHotkeys({
@@ -479,8 +705,9 @@ export function App() {
   function updateProfileHotkey(profileName: string, key: keyof ProfileHotkeysState, value: string) {
     const normalizedValue = normalizeHotkeyForDisplay(value);
 
-    if (key === 'enterProfile' && isDuplicateProfileEnterHotkey(profileName, normalizedValue, pcGamingProfileHotkeys)) {
-      setProfileHotkeyValidationError('Ten skrót jest już przypisany do innego profilu. Wybierz inną kombinację.');
+    if (key === 'enterProfile' && (isDuplicateProfileEnterHotkey(profileName, normalizedValue, pcGamingProfileHotkeys)
+      || isSameHotkey(normalizedValue, hotkeys.workMode))) {
+      setProfileHotkeyValidationError('Ten skrót jest już przypisany do innego profilu lub Work Mode. Wybierz inną kombinację.');
       return;
     }
 
@@ -503,6 +730,60 @@ export function App() {
     }
   }
 
+  function updateProfileControllerShortcut(profileName: string, buttons: string[]) {
+    const normalizedButtons = normalizeControllerButtons(buttons);
+
+    if (isDuplicateProfileControllerShortcut(profileName, normalizedButtons, pcGamingProfileControllerShortcuts)
+      || isSameControllerShortcut(normalizedButtons, workModeControllerShortcut?.buttons)) {
+      setProfileControllerValidationError('Ta kombinacja przyciskow jest juz przypisana do innego profilu lub Work Mode. Wybierz inna kombinacje.');
+      return;
+    }
+
+    setProfileControllerValidationError(null);
+    setError(null);
+    setPcGamingProfileControllerShortcuts((current) => ({
+      ...current,
+      [profileName]: normalizedButtons.length === 0
+        ? null
+        : {
+          buttons: normalizedButtons,
+          holdDurationMs: current[profileName]?.holdDurationMs ?? defaultControllerShortcutHoldDurationMs
+        }
+    }));
+    markUnsavedChanges();
+  }
+
+  function updateWorkModeControllerShortcut(buttons: string[]) {
+    const normalizedButtons = normalizeControllerButtons(buttons);
+    if (isDuplicateWorkModeControllerShortcut(normalizedButtons, pcGamingProfileControllerShortcuts)) {
+      setProfileControllerValidationError('Ta kombinacja przyciskow jest juz przypisana do profilu. Wybierz inna kombinacje.');
+      return;
+    }
+
+    setProfileControllerValidationError(null);
+    setError(null);
+    setWorkModeControllerShortcut(normalizedButtons.length === 0
+      ? null
+      : {
+        buttons: normalizedButtons,
+        holdDurationMs: workModeControllerShortcut?.holdDurationMs ?? defaultControllerShortcutHoldDurationMs
+      });
+    markUnsavedChanges();
+  }
+
+  function updateWorkModeHotkey(value: string) {
+    const normalizedValue = normalizeHotkeyForDisplay(value);
+    if (isDuplicateWorkModeHotkey(normalizedValue, pcGamingProfileHotkeys)) {
+      setProfileHotkeyValidationError('Ten skrót jest już przypisany do profilu. Wybierz inną kombinację.');
+      return;
+    }
+
+    setProfileHotkeyValidationError(null);
+    setError(null);
+    setHotkeys((current) => ({ ...current, workMode: normalizedValue }));
+    markUnsavedChanges();
+  }
+
   function buildSettingsPayload(
     isFirstRunCompleted = isSetupComplete,
     overrides?: SettingsPayloadOverrides
@@ -522,11 +803,16 @@ export function App() {
       ...(overrides?.pcGamingProfileHotkeys ?? {}),
       ...pcGamingProfileHotkeys
     };
+    const effectivePcGamingProfileControllerShortcuts: PcGamingProfileControllerShortcutMap = {
+      ...(overrides?.pcGamingProfileControllerShortcuts ?? {}),
+      ...pcGamingProfileControllerShortcuts
+    };
 
     const activeProfileName = resolvePcGamingBehaviourProfileName(effectiveActivePcGamingProfileName, effectivePcGamingProfiles);
     const activeProfileBehaviour = activeProfileName ? effectivePcGamingProfileBehaviours[activeProfileName] : null;
     const activeProfileLauncher = activeProfileName ? effectivePcGamingProfileLaunchers[activeProfileName] : null;
     const activeProfileHotkeys = activeProfileName ? effectivePcGamingProfileHotkeys[activeProfileName] : null;
+    const activeProfileControllerShortcut = activeProfileName ? effectivePcGamingProfileControllerShortcuts[activeProfileName] : null;
     const savedPcGamingBehaviour = activeProfileBehaviour ?? pcGamingBehaviour;
     const savedLauncher = activeProfileLauncher ?? launcher;
     const launcherSettings = getLauncherSettings(savedLauncher);
@@ -551,7 +837,8 @@ export function App() {
           hotkeys: {
             enterProfile: normalizeHotkeyForDisplay(effectivePcGamingProfileHotkeys[profile.name]?.enterProfile ?? savedHotkeys.enterProfile ?? ''),
             enterWorkMode: ''
-          }
+          },
+          controllerShortcut: normalizeControllerShortcut(effectivePcGamingProfileControllerShortcuts[profile.name] ?? null)
         })),
         pcGamingProfileBehaviours: effectivePcGamingProfiles.map((profile) => ({
           profileName: profile.name,
@@ -586,7 +873,17 @@ export function App() {
         consoleAudioDeviceId: settings?.audio?.consoleAudioDeviceId ?? null,
         consoleAudioDeviceName: settings?.audio?.consoleAudioDeviceName ?? null
       },
-      controller: settings?.controller ?? { enabled: false, consoleMode: null, pcGamingMode: null, workMode: null },
+      controller: {
+        enabled: Object.values(effectivePcGamingProfileControllerShortcuts).some((shortcut) => (shortcut?.buttons.length ?? 0) > 0)
+          || (workModeControllerShortcut?.buttons.length ?? 0) > 0
+          || settings?.controller?.enabled
+          || false,
+        consoleMode: settings?.controller?.consoleMode ?? null,
+        pcGamingMode: activeProfileName
+          ? normalizeControllerShortcut(activeProfileControllerShortcut)
+          : normalizeControllerShortcut(settings?.controller?.pcGamingMode ?? null),
+        workMode: normalizeControllerShortcut(workModeControllerShortcut)
+      },
       hotkeys: {
         consoleMode: normalizeHotkeyForDisplay(hotkeys.consoleMode),
         pcGamingMode: normalizeHotkeyForDisplay(savedHotkeys.enterProfile || hotkeys.pcGamingMode),
@@ -1055,6 +1352,12 @@ export function App() {
           enterProfile: ''
         }
     };
+    const nextProfileControllerShortcuts: PcGamingProfileControllerShortcutMap = {
+      ...pcGamingProfileControllerShortcuts,
+      [resolvedProfileName]: existingProfile
+        ? (pcGamingProfileControllerShortcuts[resolvedProfileName] ?? null)
+        : null
+    };
 
     setPcGamingProfiles(nextProfiles);
     setActivePcGamingProfileName(resolvedProfileName);
@@ -1063,13 +1366,15 @@ export function App() {
     setPcGamingProfileBehaviours(nextProfileBehaviours);
     setPcGamingProfileLaunchers(nextProfileLaunchers);
     setPcGamingProfileHotkeys(nextProfileHotkeys);
+    setPcGamingProfileControllerShortcuts(nextProfileControllerShortcuts);
     pendingSettingsOverrideRef.current = {
       pcGamingProfiles: nextProfiles,
       activePcGamingProfileName: resolvedProfileName,
       pcGamingLayout: layout,
       pcGamingProfileBehaviours: nextProfileBehaviours,
       pcGamingProfileLaunchers: nextProfileLaunchers,
-      pcGamingProfileHotkeys: nextProfileHotkeys
+      pcGamingProfileHotkeys: nextProfileHotkeys,
+      pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts
     };
     markUnsavedChanges();
     setError(null);
@@ -1110,7 +1415,9 @@ export function App() {
         }
       }
 
-      setMessage(result.message);
+      setMessage(command === 'enterWorkMode' && result.message === 'Enter Work Mode completed.'
+        ? 'Przełączono do Work Mode.'
+        : result.message);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Nie udało się uruchomić trybu.');
     } finally {
@@ -1139,6 +1446,9 @@ export function App() {
     const nextProfileHotkeys = Object.fromEntries(
       Object.entries(pcGamingProfileHotkeys).filter(([name]) => name.toLowerCase() !== profileKey)
     ) as PcGamingProfileHotkeysMap;
+    const nextProfileControllerShortcuts = Object.fromEntries(
+      Object.entries(pcGamingProfileControllerShortcuts).filter(([name]) => name.toLowerCase() !== profileKey)
+    ) as PcGamingProfileControllerShortcutMap;
 
     const currentActiveKey = activePcGamingProfileName?.toLowerCase() ?? null;
     const deletedActiveProfile = currentActiveKey === profileKey;
@@ -1162,7 +1472,8 @@ export function App() {
         pcGamingLayout: nextLayout,
         pcGamingProfileBehaviours: nextProfileBehaviours,
         pcGamingProfileLaunchers: nextProfileLaunchers,
-        pcGamingProfileHotkeys: nextProfileHotkeys
+        pcGamingProfileHotkeys: nextProfileHotkeys,
+        pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts
       });
       setMessage(`Profil został usunięty: ${profileName}.`);
     } catch (reason: unknown) {
@@ -1204,6 +1515,7 @@ export function App() {
           setIsSetupComplete(false);
           syncDisplayProfileDraft({ profileName: '', identities: [] });
           setProfileHotkeyValidationError(null);
+          setProfileControllerValidationError(null);
           setHotkeys((current) => ({
             ...current,
             pcGamingMode: ''
@@ -1327,19 +1639,41 @@ export function App() {
             {currentStep.id === 'work-behaviour' ? (
               <WorkBehaviourStep
                 stepNumber={resolvedFlowPosition + 1}
-                globalWorkModeHotkey={hotkeys.workMode}
-                onChangeGlobalWorkModeHotkey={(value) => {
-                  setHotkeys((current) => ({
-                    ...current,
-                    workMode: value
-                  }));
-                  markUnsavedChanges();
-                }}
                 behaviour={workBehaviour}
                 setBehaviour={(behaviour) => {
                   setWorkBehaviour(behaviour);
                   markUnsavedChanges();
                 }}
+              />
+            ) : null}
+            {currentStep.id === 'work-shortcuts' ? (
+              <ControllerStep
+                stepNumber={resolvedFlowPosition + 1}
+                pcGamingProfiles={[]}
+                selectedProfileName="Work Mode"
+                isWorkMode
+                hotkeys={hotkeys}
+                hotkeyValidationError={profileHotkeyValidationError}
+                controllerShortcut={workModeControllerShortcut}
+                controllerValidationError={profileControllerValidationError}
+                controllerStatus={controllerShortcutStatus}
+                captureSuccessButtons={controllerCaptureSuccessButtons}
+                controllerNotice={controllerNotice}
+                onStartControllerCapture={() => { void startControllerCapture(workModeControllerCaptureId); }}
+                onCancelControllerCapture={() => {
+                  if (controllerCaptureCompletionTimerRef.current) {
+                    clearTimeout(controllerCaptureCompletionTimerRef.current);
+                    controllerCaptureCompletionTimerRef.current = null;
+                  }
+                  setControllerCaptureSuccessButtons(null);
+                  void sendBridgeCommand('cancelControllerShortcutCapture', { reason: 'UserCancelled' })
+                    .then(() => sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'))
+                    .then((nextStatus) => applyControllerStatus(nextStatus))
+                    .catch(() => setError('Nie udało się anulować nasłuchiwania kontrolera.'));
+                }}
+                onRemoveControllerShortcut={() => updateWorkModeControllerShortcut([])}
+                onRemoveHotkey={() => updateWorkModeHotkey('')}
+                onChangeHotkey={(_, value) => updateWorkModeHotkey(value)}
               />
             ) : null}
             {currentStep.id === 'controller' ? (
@@ -1349,6 +1683,27 @@ export function App() {
                 selectedProfileName={selectedPcGamingBehaviourProfileName}
                 hotkeys={hotkeys}
                 hotkeyValidationError={profileHotkeyValidationError}
+                controllerShortcut={pcGamingProfileControllerShortcuts[selectedPcGamingBehaviourProfileName] ?? null}
+                controllerValidationError={profileControllerValidationError}
+                controllerStatus={controllerShortcutStatus}
+                captureSuccessButtons={controllerCaptureSuccessButtons}
+                controllerNotice={controllerNotice}
+                onStartControllerCapture={() => { void startControllerCapture(selectedPcGamingBehaviourProfileName); }}
+                onCancelControllerCapture={() => {
+                  if (controllerCaptureCompletionTimerRef.current) {
+                    clearTimeout(controllerCaptureCompletionTimerRef.current);
+                    controllerCaptureCompletionTimerRef.current = null;
+                  }
+                  setControllerCaptureSuccessButtons(null);
+                  void sendBridgeCommand('cancelControllerShortcutCapture', { reason: 'UserCancelled' })
+                    .then(() => sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'))
+                    .then((nextStatus) => applyControllerStatus(nextStatus))
+                    .catch(() => {
+                      setError('Nie udało się anulować nasłuchiwania kontrolera.');
+                    });
+                }}
+                  onRemoveControllerShortcut={() => updateProfileControllerShortcut(selectedPcGamingBehaviourProfileName, [])}
+                onRemoveHotkey={() => updateProfileHotkey(selectedPcGamingBehaviourProfileName, 'enterProfile', '')}
                 onChangeHotkey={(key, value) => {
                   const profileName = selectedPcGamingBehaviourProfileName;
                   if (!profileName) {
@@ -1359,7 +1714,9 @@ export function App() {
                     return;
                   }
 
-                  updateProfileHotkey(profileName, key, value);
+                  if (key === 'enterProfile') {
+                    updateProfileHotkey(profileName, key, value);
+                  }
                 }}
               />
             ) : null}
@@ -1596,51 +1953,55 @@ function Dashboard({
             </div>
           </header>
 
-          <section className="mode-side sidebar-status" aria-label="Aktualny stan">
-            <dl className="mode-side-facts">
-              <div className="sidebar-status-item sidebar-status-current">
-                <dt>Obecny tryb</dt>
-                <dd className="sidebar-status-value-strong">{formatCurrentMode(status)}</dd>
-              </div>
-              {isPcGamingActive ? (
-                <div className="sidebar-status-item">
-                  <dt>Profil</dt>
-                  <dd>{activeProfileName || 'Nie wybrano'}</dd>
+          <section className="sidebar-state-block" aria-label="Stan GameShell">
+            <div className="sidebar-section-label">Stan</div>
+            {isWorkModeActive ? (
+              <div className="sidebar-state-content">
+                <div className="sidebar-state-line">
+                  <strong>Work Mode</strong>
+                  <span className="work-return-status">AKTYWNY</span>
                 </div>
-              ) : null}
-              <div className="sidebar-status-item">
-                <dt>Uklad ekranow</dt>
-                <dd>{visibleLayoutSummary}</dd>
+                <p>Układ roboczy</p>
+                <small>{globalWorkModeHotkey || 'Hotkey: brak'}</small>
               </div>
-              {shouldShowLauncherFact ? (
-                <div className="sidebar-status-item">
-                  <dt>Launcher</dt>
-                  <dd>{visibleLauncher}</dd>
+            ) : (
+              <div className="sidebar-state-content">
+                <div className="sidebar-state-line">
+                  <strong>{formatCurrentMode(status)}</strong>
+                  {isPcGamingActive ? <span className="work-return-status">AKTYWNY</span> : null}
                 </div>
-              ) : null}
-            </dl>
-          </section>
-
-          <section className="work-return-panel sidebar-work-action" aria-label="Akcja Work Mode">
-              <div className="work-return-head sidebar-work-header">
-                <h3>Work Mode</h3>
-                {isWorkModeActive ? <span className="work-return-status">AKTYWNY</span> : null}
-              </div>
-              <p>{isWorkModeActive ? 'Układ roboczy jest przywrócony' : 'Powrót do układu roboczego'}</p>
-              <small>{globalWorkModeHotkey || 'Hotkey: brak'}</small>
-              {!isWorkModeActive ? (
-                <div className="work-return-actions">
+                {isPcGamingActive ? <p>Profil: {activeProfileName || 'Nie wybrano'}</p> : null}
+                <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
+                {shouldShowLauncherFact ? <small>{visibleLauncher}</small> : null}
+                {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || 'Hotkey: brak'}</small> : null}
+                {!isWorkModeActive ? (
                   <button
-                    className="primary-button compact work-return-button"
+                    className="sidebar-state-action"
                     type="button"
                     disabled={isModeSwitching}
                     onClick={() => runModeCommand('enterWorkMode')}
                   >
                     Wróć do Work Mode
                   </button>
-                </div>
-              ) : null}
-            </section>
+                ) : null}
+              </div>
+            )}
+          </section>
+
+          <section className="sidebar-global-settings" aria-label="Globalne ustawienia">
+            <div className="sidebar-section-label">Globalne</div>
+            <div className="sidebar-global-links">
+              <button type="button" onClick={() => editSettings('work-behaviour')}>
+                <span>Zachowanie Work Mode</span>
+              </button>
+              <button type="button" onClick={() => editSettings('work-shortcuts')}>
+                <span>Skróty Work Mode</span>
+              </button>
+              <button type="button" onClick={() => editSettings('app-behaviour')}>
+                <span>Uruchamianie aplikacji</span>
+              </button>
+            </div>
+          </section>
         </aside>
 
         <div className="setup-main">
@@ -1649,7 +2010,6 @@ function Dashboard({
               <h1 id="app-title">GameShell</h1>
               <p className="intro">Wybierz profil gamingowy albo dostosuj konfigurację GameShell.</p>
             </div>
-            <span className="status-pill">PANEL GŁÓWNY</span>
           </header>
 
           <section className="setup-page">
@@ -1733,15 +2093,13 @@ function Dashboard({
                 {pcGamingProfiles.length === 0 ? <p className="hint-line">Brak zapisanych profili. Dodaj profil w sekcji Ekrany.</p> : null}
               </section>
 
-              <section className="dashboard-band dashboard-config-section" aria-label="Konfiguracja">
-                <div className="dashboard-section-head compact">
-                  <div>
-                    <p className="eyebrow">Konfiguracja</p>
-                  </div>
-                </div>
+              <section className="dashboard-band dashboard-config-section" aria-label="Konfiguracja profilu">
                 <div className="dashboard-shortcut-groups" aria-label="Edycja konfiguracji">
                   <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
-                    <h3 id="profile-settings-title">USTAWIENIA ZAZNACZONEGO PROFILU</h3>
+                    <div className="profile-settings-heading">
+                      <h3 id="profile-settings-title">KONFIGURACJA PROFILU</h3>
+                      <span className="profile-context">{selectedProfileName || 'PC'}</span>
+                    </div>
                     <div className="section-shortcuts">
                       <button type="button" onClick={() => editSettings('gaming-display')}>
                         <span>Ekrany</span>
@@ -1758,20 +2116,6 @@ function Dashboard({
                       <button type="button" onClick={() => editSettings('controller')}>
                         <span>Skróty profilu</span>
                         <small>Hotkey wejścia dla wybranego profilu</small>
-                      </button>
-                    </div>
-                  </section>
-
-                  <section className="dashboard-shortcut-group" aria-labelledby="global-settings-title">
-                    <h3 id="global-settings-title">USTAWIENIA GLOBALNE</h3>
-                    <div className="section-shortcuts section-shortcuts-global">
-                      <button type="button" onClick={() => editSettings('work-behaviour')}>
-                        <span>Zachowanie Work Mode</span>
-                        <small>Globalne przywracanie pulpitu po graniu</small>
-                      </button>
-                      <button type="button" onClick={() => editSettings('app-behaviour')}>
-                        <span>Uruchamianie aplikacji</span>
-                        <small>Autostart, tray i skróty systemowe</small>
                       </button>
                     </div>
                   </section>
@@ -2209,14 +2553,10 @@ function ConsoleBehaviourStep({
 
 function WorkBehaviourStep({
   stepNumber,
-  globalWorkModeHotkey,
-  onChangeGlobalWorkModeHotkey,
   behaviour,
   setBehaviour
 }: {
   stepNumber: number;
-  globalWorkModeHotkey: string;
-  onChangeGlobalWorkModeHotkey: (value: string) => void;
   behaviour: typeof defaultWorkBehaviour;
   setBehaviour: (behaviour: typeof defaultWorkBehaviour) => void;
 }) {
@@ -2231,12 +2571,6 @@ function WorkBehaviourStep({
         <SettingRow title="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
         <SettingRow title="Nie minimalizuj istniejących okien" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
       </div>
-      <div className="field-grid">
-        <label>
-          Globalny skrót do przejścia w Work Mode
-          <HotkeyField value={globalWorkModeHotkey} onChange={onChangeGlobalWorkModeHotkey} placeholder="np. Ctrl+Alt+W" />
-        </label>
-      </div>
     </div>
   );
 }
@@ -2245,46 +2579,229 @@ function ControllerStep({
   stepNumber,
   pcGamingProfiles,
   selectedProfileName,
+  isWorkMode = false,
   hotkeys,
   hotkeyValidationError,
+  controllerShortcut,
+  controllerValidationError,
+  controllerStatus,
+  captureSuccessButtons,
+  controllerNotice,
+  onStartControllerCapture,
+  onCancelControllerCapture,
+  onRemoveControllerShortcut,
+  onRemoveHotkey,
   onChangeHotkey
 }: {
   stepNumber: number;
   pcGamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
+  isWorkMode?: boolean;
   hotkeys: HotkeySettingsState;
   hotkeyValidationError: string | null;
-  onChangeHotkey: (key: 'enterProfile', value: string) => void;
+  controllerShortcut: ControllerShortcutSettings | null;
+  controllerValidationError: string | null;
+  controllerStatus: ControllerStatusInfo;
+  captureSuccessButtons: string[] | null;
+  controllerNotice: 'missing' | 'disconnected' | null;
+  onStartControllerCapture: () => void;
+  onCancelControllerCapture: () => void;
+  onRemoveControllerShortcut: () => void;
+  onRemoveHotkey: () => void;
+  onChangeHotkey: (key: 'enterProfile' | 'workMode', value: string) => void;
 }) {
   const hasProfiles = pcGamingProfiles.length > 0;
   const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
-
+  const selectedControllerButtons = controllerShortcut?.buttons ?? [];
+  const hasControllerShortcut = selectedControllerButtons.length > 0;
+  const isCapturePhase = controllerStatus.capturePhase === 'WaitingForRelease'
+    || controllerStatus.capturePhase === 'WaitingForFirstPress'
+    || controllerStatus.capturePhase === 'Recording'
+    || controllerStatus.capturePhase === 'WaitingForCombinationRelease';
+  const canCancelCapture = controllerStatus.capturePhase === 'WaitingForRelease'
+    || controllerStatus.capturePhase === 'WaitingForFirstPress';
+  const isCaptureSuccess = controllerStatus.capturePhase === 'Completed' || captureSuccessButtons !== null;
+  const displayControllerButtons = controllerStatus.capturedButtons.length > 0
+    ? controllerStatus.capturedButtons
+    : selectedControllerButtons;
+  const controllerFamily = detectControllerFamily(controllerStatus.deviceName);
+  const controllerDeviceLabel = controllerStatus.isConnected
+    ? controllerFamily === ControllerFamily.PlayStation
+      ? 'PLAYSTATION POŁĄCZONY'
+      : controllerFamily === ControllerFamily.Xbox
+        ? 'XBOX POŁĄCZONY'
+        : controllerFamily === ControllerFamily.Nintendo
+          ? 'NINTENDO POŁĄCZONY'
+          : 'KONTROLER POŁĄCZONY'
+    : 'BRAK KONTROLERA';
+  const controllerDeviceDescription = controllerStatus.deviceName || 'Brak wykrytego kontrolera';
   return (
-    <div className="wizard-copy">
+    <div className="wizard-copy profile-shortcuts-content">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Skróty profilu</h2>
-      <section className="settings-section">
-        <h3>Skróty klawiaturowe</h3>
-        <p>Każdy profil może mieć własny skrót klawiaturowy uruchomienia.</p>
-        <div className="field-grid">
-          <div className="profile-target-line" aria-live="polite">
-            <span>Edytowany profil</span>
-            <strong>{selectedProfileLabel}</strong>
+      <h2>{isWorkMode ? 'Skrót Work Mode' : 'Skróty profilu'}</h2>
+      <div className="profile-shortcuts-intro">
+        <p>{isWorkMode ? 'Przypisz globalną kombinację przycisków kontrolera do przejścia w Work Mode.' : `Przypisz skrót klawiaturowy lub kombinację przycisków kontrolera do profilu ${selectedProfileLabel}.`}</p>
+        <span className="profile-shortcuts-profile-label">{isWorkMode ? 'CEL: WORK MODE' : `PROFIL: ${selectedProfileLabel.toUpperCase()}`}</span>
+      </div>
+
+      <section className="shortcut-module keyboard-shortcut-module">
+        <header className="shortcut-module-header">
+          <div>
+            <h3>Skrót klawiaturowy</h3>
+            <p>{isWorkMode ? 'Przechodzi w Work Mode z dowolnego miejsca w Windows.' : 'Uruchamia profil z dowolnego miejsca w Windows.'}</p>
           </div>
-        </div>
-        <div className="field-grid">
-          <label>
-            Hotkey uruchomienia profilu
+        </header>
+        <div className="shortcut-module-body keyboard-shortcut-body">
+          <label className="shortcut-control-label">
+            <span>HOTKEY</span>
             <HotkeyField
-              value={hotkeys.pcGamingMode}
-              onChange={(value) => onChangeHotkey('enterProfile', value)}
-              placeholder="np. Ctrl+Alt+P"
-              disabled={!hasProfiles}
+              value={isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode}
+              onChange={(value) => onChangeHotkey(isWorkMode ? 'workMode' : 'enterProfile', value)}
+              placeholder={isWorkMode ? 'np. Ctrl+Alt+W' : 'np. Ctrl+Alt+P'}
+              disabled={!isWorkMode && !hasProfiles}
               error={hotkeyValidationError}
             />
+            {(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? (
+              <button className="danger-button secondary-button" type="button" onClick={onRemoveHotkey}>
+                Usuń
+              </button>
+            ) : null}
           </label>
+          <span className={`shortcut-saved-status ${(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? 'is-saved' : ''}`}>
+            {(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? 'ZAPISANO' : 'BRAK SKRÓTU'}
+          </span>
         </div>
       </section>
+
+      <section className={`shortcut-module controller-shortcut-module ${isCapturePhase || isCaptureSuccess ? 'is-capturing' : ''}`}>
+        <header className="shortcut-module-header controller-module-header">
+          <div>
+            <h3>Skrót kontrolera</h3>
+            <p>Przytrzymaj zapisaną kombinację, aby {isWorkMode ? 'przejść w Work Mode' : 'uruchomić ten profil'}.</p>
+          </div>
+          <span className={`controller-status-pill ${controllerStatus.isConnected ? 'is-connected' : 'is-disconnected'}`} title={controllerDeviceDescription}>
+            {controllerDeviceLabel}
+          </span>
+        </header>
+        <div className="shortcut-module-body controller-shortcut-body">
+          {controllerNotice ? (
+            <div className="inline-notice controller-device-notice" role="alert" aria-live="assertive">
+              <span className="inline-notice-label">{controllerNotice === 'missing' ? 'URZĄDZENIE' : 'ROZŁĄCZONO'}</span>
+              <div className="inline-notice-copy">
+                <strong>
+                  {controllerNotice === 'missing'
+                    ? 'Nie wykryto kontrolera.'
+                    : 'Kontroler został rozłączony.'}
+                </strong>
+                <span>
+                  {controllerNotice === 'missing'
+                    ? 'Podłącz kontroler przez USB lub Bluetooth i spróbuj ponownie.'
+                    : 'Podłącz go ponownie, aby kontynuować.'}
+                </span>
+                {controllerNotice === 'missing' ? <span>GameShell wykryje go automatycznie.</span> : null}
+              </div>
+            </div>
+          ) : null}
+          {isCapturePhase || isCaptureSuccess ? (
+            <div className="controller-capture-panel" aria-live="polite">
+              {isCaptureSuccess ? (
+                <>
+                  <span className="capture-mode-label capture-success-label">ZAPISANO</span>
+                  <ControllerKeycaps buttons={captureSuccessButtons ?? controllerStatus.completedCapture?.buttons ?? []} family={controllerFamily} />
+                </>
+              ) : null}
+              {controllerStatus.capturePhase === 'WaitingForRelease' ? (
+                <>
+                  <span className="capture-mode-label">NASŁUCHIWANIE</span>
+                  <p>Puść wszystkie przyciski kontrolera.</p>
+                  <small>Nasłuchiwanie rozpocznie się automatycznie.</small>
+                </>
+              ) : null}
+              {controllerStatus.capturePhase === 'WaitingForFirstPress' ? (
+                <>
+                  <span className="capture-mode-label">NASŁUCHIWANIE</span>
+                  <p className="capture-primary-message">Teraz naciśnij i przytrzymaj wybraną kombinację.</p>
+                  <small>Możesz naciskać kolejne przyciski z niewielkim odstępem.</small>
+                </>
+              ) : null}
+              {controllerStatus.capturePhase === 'Recording' ? (
+                <>
+                  <span className="capture-mode-label">NASŁUCHIWANIE</span>
+                  <p>Wykryto kombinację</p>
+                  <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
+                  <small>Przytrzymaj jeszcze przez chwilę.</small>
+                </>
+              ) : null}
+              {controllerStatus.capturePhase === 'WaitingForCombinationRelease' ? (
+                <>
+                  <p>Puść kombinację, aby ją zapisać.</p>
+                  <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
+                </>
+              ) : null}
+              {canCancelCapture ? (
+                <button className="secondary-button controller-capture-cancel" type="button" onClick={onCancelControllerCapture}>
+                  Anuluj
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              {controllerStatus.capturePhase === 'Completed' && displayControllerButtons.length > 0 ? (
+                <div className="controller-capture-completed" aria-live="polite">
+                  <span className="capture-step-label">KOMBINACJA ZAPISANA</span>
+                  <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
+                </div>
+              ) : hasControllerShortcut ? (
+                <div className="controller-assigned-state">
+                  <span className="capture-step-label">PRZYPISANA KOMBINACJA</span>
+                  <ControllerKeycaps buttons={selectedControllerButtons} family={controllerFamily} />
+                  <p>Przytrzymaj przez {((controllerShortcut?.holdDurationMs ?? 700) / 1000).toFixed(1)} s, aby {isWorkMode ? 'przejść w Work Mode' : 'uruchomić profil'}.</p>
+                </div>
+              ) : (
+                <div className="controller-empty-state">
+                  <span className="capture-step-label">BRAK PRZYPISANEJ KOMBINACJI</span>
+                  <p>Przypisz przyciski, których przytrzymanie {isWorkMode ? 'przełączy w Work Mode' : 'uruchomi profil'}.</p>
+                </div>
+              )}
+              <div className="controller-shortcut-actions">
+                <button
+                  className="primary-button controller-shortcut-listen-button"
+                  type="button"
+                  disabled={!isWorkMode && !hasProfiles}
+                  onClick={onStartControllerCapture}
+                >
+                  {hasControllerShortcut ? 'Zmień kombinację' : 'Przypisz kombinację'}
+                </button>
+                {hasControllerShortcut ? (
+                  <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={onRemoveControllerShortcut}>
+                    Usuń
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+          {controllerValidationError ? <div className="field-validation-error" role="alert">{controllerValidationError}</div> : null}
+          <details className="controller-diagnostics">
+            <summary>Szczegóły diagnostyczne</summary>
+            <dl>
+              <div><dt>Kontrolery</dt><dd>{controllerStatus.controllerCount}</dd></div>
+              <div><dt>Urządzenie</dt><dd>{controllerDeviceDescription}</dd></div>
+            </dl>
+          </details>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ControllerKeycaps({ buttons, family }: { buttons: string[]; family: ControllerFamily }) {
+  if (buttons.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="controller-keycaps" aria-label={`Kombinacja: ${formatControllerShortcutButtons(buttons, family)}`}>
+      {buttons.map((button) => <span className="controller-keycap" key={button}>{getControllerButtonDisplayName(button, family)}</span>)}
     </div>
   );
 }
@@ -2755,8 +3272,28 @@ function buildProfileHotkeysMap(
   return map;
 }
 
+function buildProfileControllerShortcutMap(
+  profiles: DisplayLayoutProfile[],
+  configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>,
+  fallbackShortcut: ControllerShortcutSettings | null
+): PcGamingProfileControllerShortcutMap {
+  const map: PcGamingProfileControllerShortcutMap = {};
+
+  profiles.forEach((profile) => {
+    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
+    map[profile.name] = normalizeControllerShortcut(configured ? configured.controllerShortcut : fallbackShortcut);
+  });
+
+  return map;
+}
+
 function normalizeHotkeyValue(value: string) {
   return removeDiacritics(value.trim()).toUpperCase();
+}
+
+function isSameHotkey(left: string, right: string) {
+  const normalizedLeft = normalizeHotkeyValue(left);
+  return normalizedLeft.length > 0 && normalizedLeft === normalizeHotkeyValue(right);
 }
 
 function normalizeHotkeyForDisplay(value: string) {
@@ -2806,6 +3343,103 @@ function isDuplicateProfileEnterHotkey(
 
     return normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate;
   });
+}
+
+function isDuplicateWorkModeHotkey(candidateHotkey: string, profileHotkeys: PcGamingProfileHotkeysMap) {
+  const normalizedCandidate = normalizeHotkeyValue(candidateHotkey);
+  return normalizedCandidate.length > 0 && Object.values(profileHotkeys).some((hotkeys) => (
+    normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate
+  ));
+}
+
+function normalizeControllerButtons(buttons: string[] | null | undefined) {
+  return [...new Set(
+    (Array.isArray(buttons) ? buttons : [])
+      .filter((button): button is string => typeof button === 'string')
+      .map((button) => button.trim())
+      .filter(Boolean)
+  )];
+}
+
+function normalizeControllerStatus(status: ControllerStatusInfo): ControllerStatusInfo {
+  return {
+    ...status,
+    capturedButtons: normalizeControllerButtons(status.capturedButtons),
+    lastReadButtons: normalizeControllerButtons(status.lastReadButtons),
+    completedCapture: status.completedCapture
+      ? {
+        ...status.completedCapture,
+        buttons: normalizeControllerButtons(status.completedCapture.buttons)
+      }
+      : null
+  };
+}
+
+function isControllerCapturePhase(phase: ControllerStatusInfo['capturePhase']) {
+  return phase === 'WaitingForRelease'
+    || phase === 'WaitingForFirstPress'
+    || phase === 'Recording'
+    || phase === 'WaitingForCombinationRelease';
+}
+
+function normalizeControllerShortcut(shortcut: ControllerShortcutSettings | null | undefined): ControllerShortcutSettings | null {
+  if (!shortcut) {
+    return null;
+  }
+
+  const buttons = normalizeControllerButtons(shortcut.buttons ?? []);
+  if (buttons.length === 0) {
+    return null;
+  }
+
+  return {
+    buttons,
+    holdDurationMs: shortcut.holdDurationMs || defaultControllerShortcutHoldDurationMs
+  };
+}
+
+function isDuplicateProfileControllerShortcut(
+  profileName: string,
+  candidateButtons: string[],
+  profileControllerShortcuts: PcGamingProfileControllerShortcutMap
+) {
+  if (candidateButtons.length === 0) {
+    return false;
+  }
+
+  const normalizedCandidate = getControllerShortcutKey(candidateButtons);
+
+  return Object.entries(profileControllerShortcuts).some(([name, shortcut]) => {
+    if (name.toLowerCase() === profileName.toLowerCase()) {
+      return false;
+    }
+
+    return getControllerShortcutKey(shortcut?.buttons) === normalizedCandidate;
+  });
+}
+
+function isDuplicateWorkModeControllerShortcut(
+  candidateButtons: string[],
+  profileControllerShortcuts: PcGamingProfileControllerShortcutMap
+) {
+  const normalizedCandidate = getControllerShortcutKey(candidateButtons);
+  return normalizedCandidate.length > 0 && Object.values(profileControllerShortcuts).some((shortcut) => (
+    getControllerShortcutKey(shortcut?.buttons) === normalizedCandidate
+  ));
+}
+
+function isSameControllerShortcut(left: string[] | undefined, right: string[] | undefined) {
+  const leftKey = getControllerShortcutKey(left);
+  return leftKey.length > 0 && leftKey === getControllerShortcutKey(right);
+}
+
+function getControllerShortcutKey(buttons: string[] | undefined) {
+  return normalizeControllerButtons(buttons).sort((left, right) => left.localeCompare(right)).join('+').toUpperCase();
+}
+
+function formatControllerShortcutButtons(buttons: string[], family: ControllerFamily) {
+  return mapControllerButtons(normalizeControllerButtons(buttons), family)
+    .join(' + ');
 }
 
 function resolveActivePcGamingProfile(activeName: string | null, profiles: DisplayLayoutProfile[]) {

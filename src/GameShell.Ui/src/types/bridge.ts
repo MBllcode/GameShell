@@ -22,6 +22,10 @@ export type BridgeCommand =
   | 'openDependencyDownloadPage'
   | 'selectDependencyPath'
   | 'setHotkeyCaptureActive'
+  | 'startControllerShortcutCapture'
+  | 'cancelControllerShortcutCapture'
+  | 'acknowledgeControllerShortcutCapture'
+  | 'getControllerStatus'
   | 'enterGameShell'
   | 'enterGameShellWithProfile'
   | 'enterWorkMode';
@@ -118,6 +122,7 @@ export interface PcGamingProfileConfiguration {
   behaviour: Partial<AppSettings['pcGaming']>;
   launcher: AppSettings['launcher'];
   hotkeys: PcGamingProfileHotkeys;
+  controllerShortcut: ControllerShortcutSettings | null;
 }
 
 export interface DependencyStatus {
@@ -234,6 +239,35 @@ export interface AppSettings {
 export interface ControllerShortcutSettings {
   buttons: string[];
   holdDurationMs: number;
+}
+
+export interface ControllerStatusInfo {
+  isConnected: boolean;
+  deviceName: string | null;
+  isListening: boolean;
+  capturePhase: 'Idle' | 'WaitingForRelease' | 'WaitingForFirstPress' | 'Recording' | 'WaitingForCombinationRelease' | 'Completed' | 'Cancelled' | 'TimedOut';
+  captureSessionId: string | null;
+  profileId: string | null;
+  startedAt: string | null;
+  capturedButtons: string[];
+  completedCapture: CompletedControllerCapture | null;
+  inputSource: string;
+  gamepadButtonCount: number;
+  joystickButtonCount: number;
+  rawPressedButtons: number[];
+  backend: string;
+  controllerCount: number;
+  controllerId: string | null;
+  lastReadButtons: string[];
+  lastReadAt: string | null;
+  diagnosticStatus: string;
+}
+
+export interface CompletedControllerCapture {
+  sessionId: string;
+  profileId: string;
+  buttons: string[];
+  completedAt: string;
 }
 
 export interface ControllerSettings {

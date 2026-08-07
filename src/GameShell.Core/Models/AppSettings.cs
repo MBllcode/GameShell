@@ -43,6 +43,7 @@ public sealed class PcGamingProfileConfiguration
     public PcGamingSettings Behaviour { get; set; } = new();
     public LauncherSettings Launcher { get; set; } = new();
     public PcGamingProfileHotkeys Hotkeys { get; set; } = new();
+    public ControllerShortcutSettings? ControllerShortcut { get; set; }
 }
 
 public sealed class PcGamingProfileHotkeys

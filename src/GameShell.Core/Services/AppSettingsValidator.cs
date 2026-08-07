@@ -48,6 +48,7 @@ public static class AppSettingsValidator
 
         NormalizePcGamingProfiles(settings.Display);
         NormalizePcGamingProfileConfigurations(settings.Display, settings.PcGaming, settings.Launcher, settings.Hotkeys);
+        EnsureGlobalWorkModeShortcutUniqueness(settings);
 
         return settings;
     }
@@ -185,6 +186,7 @@ public static class AppSettingsValidator
                 EnterProfile = defaultHotkeys.PcGamingMode,
                 EnterWorkMode = defaultHotkeys.WorkMode
             };
+            var controllerShortcut = existingConfiguration?.ControllerShortcut;
 
             MigrateLegacyPcGamingDefaults(behaviour);
             behaviour.CompletionDelaySeconds = Math.Clamp(behaviour.CompletionDelaySeconds, 0, 600);
@@ -195,6 +197,7 @@ public static class AppSettingsValidator
             launcher.Arguments ??= defaultLauncher.Arguments;
             hotkeys.EnterProfile ??= "";
             hotkeys.EnterWorkMode ??= "";
+            ValidateControllerShortcut(controllerShortcut);
 
             if (!usedNames.Add(profile.Name))
             {
@@ -206,12 +209,14 @@ public static class AppSettingsValidator
                 ProfileName = profile.Name,
                 Behaviour = behaviour,
                 Launcher = launcher,
-                Hotkeys = hotkeys
+                Hotkeys = hotkeys,
+                ControllerShortcut = controllerShortcut
             });
         }
 
         display.PcGamingProfileConfigurations = normalized;
         EnsureUniqueProfileEnterHotkeys(display.PcGamingProfileConfigurations);
+        EnsureUniqueProfileControllerShortcuts(display.PcGamingProfileConfigurations);
         display.PcGamingProfileBehaviours = normalized
             .Select(configuration => new PcGamingProfileBehaviour
             {
@@ -238,6 +243,69 @@ public static class AppSettingsValidator
                 configuration.Hotkeys.EnterProfile = "";
             }
         }
+    }
+
+    private static void EnsureUniqueProfileControllerShortcuts(IReadOnlyList<PcGamingProfileConfiguration> configurations)
+    {
+        var usedShortcuts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var configuration in configurations)
+        {
+            if (configuration.ControllerShortcut is null || configuration.ControllerShortcut.Buttons.Count == 0)
+            {
+                continue;
+            }
+
+            var normalized = string.Join('+', configuration.ControllerShortcut.Buttons
+                .Select(button => button.ToString())
+                .OrderBy(button => button, StringComparer.OrdinalIgnoreCase));
+
+            if (!usedShortcuts.Add(normalized))
+            {
+                configuration.ControllerShortcut = null;
+            }
+        }
+    }
+
+    private static void EnsureGlobalWorkModeShortcutUniqueness(AppSettings settings)
+    {
+        var workModeHotkey = NormalizeHotkey(settings.Hotkeys.WorkMode);
+        if (!string.IsNullOrEmpty(workModeHotkey))
+        {
+            foreach (var configuration in settings.Display.PcGamingProfileConfigurations)
+            {
+                if (NormalizeHotkey(configuration.Hotkeys.EnterProfile) == workModeHotkey)
+                {
+                    configuration.Hotkeys.EnterProfile = "";
+                }
+            }
+        }
+
+        var workModeControllerShortcut = NormalizeControllerShortcut(settings.Controller.WorkMode);
+        if (string.IsNullOrEmpty(workModeControllerShortcut))
+        {
+            return;
+        }
+
+        foreach (var configuration in settings.Display.PcGamingProfileConfigurations)
+        {
+            if (NormalizeControllerShortcut(configuration.ControllerShortcut) == workModeControllerShortcut)
+            {
+                configuration.ControllerShortcut = null;
+            }
+        }
+    }
+
+    private static string NormalizeControllerShortcut(ControllerShortcutSettings? shortcut)
+    {
+        if (shortcut is null || shortcut.Buttons.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join('+', shortcut.Buttons
+            .Select(button => button.ToString())
+            .OrderBy(button => button, StringComparer.OrdinalIgnoreCase));
     }
 
     private static string NormalizeHotkey(string value)
@@ -355,4 +423,5 @@ public static class AppSettingsValidator
             TargetDisplayId = source.TargetDisplayId
         };
     }
+
 }

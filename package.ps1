@@ -92,13 +92,17 @@ if (-not (Test-Path $publishedExe)) {
 }
 
 try {
+    $packagedExePath = $finalExePath
     Copy-Item -LiteralPath $publishedExe -Destination $finalExePath -Force
     Write-Host "GameShell exe: $finalExePath"
 }
 catch {
     $fallbackExePath = Join-Path $installerPath ('GameShell-{0}.exe' -f (Get-Date).ToString('yyyyMMdd-HHmmssfff'))
     Copy-Item -LiteralPath $publishedExe -Destination $fallbackExePath -Force
+    $packagedExePath = $fallbackExePath
     Write-Warning "Could not replace $finalExePath because it is locked. Fallback artifact: $fallbackExePath"
 }
 
 Remove-WorkspaceDirectory $publishTempPath
+Write-Host "Opening packaged GameShell: $packagedExePath"
+Start-Process -FilePath $packagedExePath
