@@ -24,8 +24,10 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 ## Sidebar i dashboard
 
 - Sidebar pokazuje aktualny tryb i skrocone fakty konfiguracji.
+- W module `STAN` sidebar pokazuje drugorzedny status kontrolera z realtime `controllerStatus`; przy braku urzadzenia wyswietla `Brak kontrolera`, bez badge `ROZLACZONY`.
 - Work Mode jest prezentowany w obszarze sidebar/profilu, nie jako glowna karta quick-switch.
 - Dashboard ma byc zwarty i czytelny; unikamy pustych, wysokich kart bez informacji.
+- Przy pustej liscie profili boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne. Profilowe akcje i ustawienia sa wtedy wyszarzone oraz nieaktywne; `+ Dodaj profil` i ustawienia globalne pozostaja aktywne.
 
 ## Krok Ekrany
 
@@ -39,6 +41,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 ## Krok Skroty profilu
 
 - Walidacja duplikatu hotkey ma byc lokalna, czerwona i osadzona bezposrednio przy polu hotkey.
+- Gdy skrot klawiaturowy jest zapisany, przycisk `Usun` znajduje sie po prawej stronie inputa i jest kompaktowy, tak jak akcja usuwania skrotu kontrolera.
 - Podczas `NASLUCHIWANIE` pole zachowuje stan bledu (`aria-invalid`) i nie moze byc zagluszone przez globalny hotkey hosta.
 - Nowy profil nie dziedziczy hotkeya po poprzednio wybranym profilu.
 

@@ -6,14 +6,14 @@ type PendingRequest = {
 };
 
 const pendingRequests = new Map<string, PendingRequest>();
-const eventListeners = new Map<string, Set<() => void>>();
+const eventListeners = new Map<string, Set<(eventData: unknown) => void>>();
 let listenerAttached = false;
 
 export function sendBridgeCommand<T>(type: BridgeCommand, payload?: unknown): Promise<T> {
   const webview = window.chrome?.webview;
 
   if (!webview) {
-    return Promise.reject(new Error('WebView bridge is not available.'));
+    return Promise.reject(new Error('Połączenie z aplikacją jest niedostępne.'));
   }
 
   attachResponseListener(webview);
@@ -31,15 +31,15 @@ export function sendBridgeCommand<T>(type: BridgeCommand, payload?: unknown): Pr
   });
 }
 
-export function subscribeBridgeEvent(type: string, listener: () => void | Promise<void>) {
+export function subscribeBridgeEvent(type: string, listener: (eventData: unknown) => void | Promise<void>) {
   const webview = window.chrome?.webview;
   if (webview) {
     attachResponseListener(webview);
   }
 
-  const listeners = eventListeners.get(type) ?? new Set<() => void>();
-  const wrapped = () => {
-    void listener();
+  const listeners = eventListeners.get(type) ?? new Set<(eventData: unknown) => void>();
+  const wrapped = (eventData: unknown) => {
+    void listener(eventData);
   };
   listeners.add(wrapped);
   eventListeners.set(type, listeners);
@@ -65,7 +65,7 @@ function attachResponseListener(webview: NonNullable<Window['chrome']>['webview'
     const response = event.data as BridgeResponse<unknown>;
     const bridgeEvent = event.data as { type?: string };
     if (bridgeEvent.type && !('requestId' in bridgeEvent)) {
-      eventListeners.get(bridgeEvent.type)?.forEach((listener) => listener());
+      eventListeners.get(bridgeEvent.type)?.forEach((listener) => listener(event.data));
       return;
     }
 

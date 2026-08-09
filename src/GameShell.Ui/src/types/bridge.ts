@@ -242,6 +242,7 @@ export interface ControllerShortcutSettings {
 }
 
 export interface ControllerStatusInfo {
+  sequenceNumber: number;
   isConnected: boolean;
   deviceName: string | null;
   isListening: boolean;

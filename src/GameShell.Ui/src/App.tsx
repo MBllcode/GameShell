@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { sendBridgeCommand, subscribeBridgeEvent } from './services/webViewBridge';
-import { ControllerFamily, detectControllerFamily, getControllerButtonDisplayName, mapControllerButtons } from './controllerDisplayMapper';
+import { ControllerFamily, detectControllerFamily, getControllerButtonDisplayName, getControllerDisplayName, mapControllerButtons } from './controllerDisplayMapper';
 import type {
   AppSettings,
   AppStatus,
@@ -86,15 +86,15 @@ const initialStatus: AppStatus = {
 };
 
 const steps: SetupStep[] = [
-  { id: 'welcome', title: 'Start', subtitle: 'Co skonfigurujemy' },
-  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Konfiguracja profili ekranów' },
-  { id: 'launcher', title: 'Launcher profilu', subtitle: 'Launcher dla każdego profilu' },
-  { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Pulpit i okna dla profilu' },
-  { id: 'controller', title: 'Skróty profilu', subtitle: 'Skróty klawiaturowe profilu' },
-  { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Przywracanie układu roboczego' },
-  { id: 'work-shortcuts', title: 'Skróty Work Mode', subtitle: 'Skróty klawiaturowe i kontrolera' },
-  { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Ustawienia globalne' },
-  { id: 'finish', title: 'Zakończenie', subtitle: 'Podsumowanie profilu' }
+  { id: 'welcome', title: 'Start', subtitle: 'Najważniejsze ustawienia' },
+  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Ekrany używane przez profil' },
+  { id: 'launcher', title: 'Launcher profilu', subtitle: 'Aplikacja uruchamiana z profilem' },
+  { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Pulpit po uruchomieniu profilu' },
+  { id: 'controller', title: 'Skróty profilu', subtitle: 'Skróty uruchamiające profil' },
+  { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Pulpit po powrocie do pracy' },
+  { id: 'work-shortcuts', title: 'Skróty Work Mode', subtitle: 'Skróty powrotu do pracy' },
+  { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Uruchamianie i skróty systemowe' },
+  { id: 'finish', title: 'Zakończenie', subtitle: 'Sprawdź ustawienia profilu' }
 ];
 
 const profileSettingsStepIds: StepId[] = [
@@ -164,19 +164,19 @@ const launcherOptions: Array<{ value: LauncherType; title: string; description: 
   {
     value: 'Playnite Fullscreen',
     title: 'Playnite Fullscreen',
-    description: 'Polecany wybór dla wielu launcherów i wygodnej obsługi padem.',
+    description: 'Wygodna obsługa wielu launcherów kontrolerem.',
     badge: 'Polecany'
   },
   {
     value: 'Steam Big Picture',
     title: 'Steam Big Picture',
-    description: 'Uruchamia Steam od razu w trybie Big Picture.',
+    description: 'Uruchamia Steam w trybie Big Picture.',
     badge: 'Steam'
   },
   {
     value: 'Xbox App',
     title: 'Xbox App',
-    description: 'Szybkie przejście do aplikacji Xbox i biblioteki Game Pass.',
+    description: 'Otwiera aplikację Xbox i bibliotekę Game Pass.',
     badge: 'Xbox'
   }
 ];
@@ -229,6 +229,7 @@ export function App() {
   const [pcGamingProfileControllerShortcuts, setPcGamingProfileControllerShortcuts] = useState<PcGamingProfileControllerShortcutMap>({});
   const [workModeControllerShortcut, setWorkModeControllerShortcut] = useState<ControllerShortcutSettings | null>(null);
   const [controllerShortcutStatus, setControllerShortcutStatus] = useState<ControllerStatusInfo>({
+    sequenceNumber: 0,
     isConnected: false,
     deviceName: null,
     isListening: false,
@@ -249,6 +250,7 @@ export function App() {
     lastReadAt: null,
     diagnosticStatus: 'Brak zgodnego kontrolera'
   });
+  const controllerStatusSequenceRef = useRef(0);
   const controllerSessionRef = useRef<string | null>(null);
   const controllerCaptureActiveRef = useRef(false);
   const acknowledgedCaptureRef = useRef<string | null>(null);
@@ -285,6 +287,15 @@ export function App() {
 
   const applyControllerStatus = (status: ControllerStatusInfo) => {
     const normalizedStatus = normalizeControllerStatus(status);
+    if (normalizedStatus.sequenceNumber < controllerStatusSequenceRef.current) {
+      console.info(`[GameShell] Ignored stale controller status #${normalizedStatus.sequenceNumber}; current #${controllerStatusSequenceRef.current}`);
+      return controllerShortcutStatus;
+    }
+
+    controllerStatusSequenceRef.current = normalizedStatus.sequenceNumber;
+    console.info(
+      `[GameShell] UI controller status updated #${normalizedStatus.sequenceNumber} Connected=${normalizedStatus.isConnected} Family=${detectControllerFamily(normalizedStatus.deviceName)}`
+    );
     const wasCapturing = controllerCaptureActiveRef.current;
     controllerCaptureActiveRef.current = isControllerCapturePhase(normalizedStatus.capturePhase);
 
@@ -329,34 +340,13 @@ export function App() {
       sendBridgeCommand<AppSettings>('getSettings'),
       sendBridgeCommand<DisplayDeviceInfo[]>('getDisplays').catch((reason: unknown) => {
         if (isMounted) {
-          setDisplayListError(reason instanceof Error ? reason.message : 'Nie udało się odczytać konfiguracji ekranów.');
+          setDisplayListError(reason instanceof Error ? reason.message : 'Nie udało się odczytać listy ekranów.');
         }
 
         return [];
-      }),
-      sendBridgeCommand<ControllerStatusInfo>('getControllerStatus').catch((): ControllerStatusInfo => ({
-        isConnected: false,
-        deviceName: null,
-        isListening: false,
-        capturePhase: 'Idle',
-        captureSessionId: null,
-        profileId: null,
-        startedAt: null,
-        capturedButtons: [],
-        completedCapture: null,
-        inputSource: 'None',
-        gamepadButtonCount: 0,
-        joystickButtonCount: 0,
-        rawPressedButtons: [],
-        backend: 'SDL3',
-        controllerCount: 0,
-        controllerId: null,
-        lastReadButtons: [],
-        lastReadAt: null,
-        diagnosticStatus: 'Brak zgodnego kontrolera'
-      }))
+      })
     ])
-      .then(([nextStatus, loadedSettings, detectedDisplays, nextControllerStatus]) => {
+      .then(([nextStatus, loadedSettings, detectedDisplays]) => {
         if (!isMounted) {
           return;
         }
@@ -364,7 +354,6 @@ export function App() {
         setStatus(nextStatus);
         setSettings(loadedSettings);
         setDisplays(detectedDisplays);
-        applyControllerStatus(nextControllerStatus);
         applySettingsToState(loadedSettings);
         setIsInitialLoading(false);
       })
@@ -391,15 +380,41 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    return subscribeBridgeEvent('controllerStatusChanged', async () => {
+    let isDisposed = false;
+    const unsubscribe = subscribeBridgeEvent('controllerStatusChanged', async (eventData) => {
+      const event = eventData as { sequenceNumber?: number };
+      console.info(`[GameShell] UI received controllerStatusChanged #${event.sequenceNumber ?? 'unknown'}`);
       try {
         const nextStatus = await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus');
+        if (isDisposed) {
+          return;
+        }
+
         const normalizedStatus = applyControllerStatus(nextStatus);
-        console.info(`[GameShell] UI capture phase: ${normalizedStatus.capturePhase}`);
+        console.info(
+          `[GameShell] UI controller status updated #${event.sequenceNumber ?? 'unknown'} Connected=${normalizedStatus.isConnected} Family=${detectControllerFamily(normalizedStatus.deviceName)}`
+        );
       } catch (reason: unknown) {
         setError(reason instanceof Error ? reason.message : 'Nie udało się odświeżyć statusu kontrolera.');
       }
     });
+
+    void sendBridgeCommand<ControllerStatusInfo>('getControllerStatus')
+      .then((nextStatus) => {
+        if (!isDisposed) {
+          applyControllerStatus(nextStatus);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!isDisposed) {
+          setError(reason instanceof Error ? reason.message : 'Nie udało się odczytać statusu kontrolera.');
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -789,8 +804,12 @@ export function App() {
     overrides?: SettingsPayloadOverrides
   ): AppSettings {
     const effectivePcGamingProfiles = overrides?.pcGamingProfiles ?? pcGamingProfiles;
-    const effectiveActivePcGamingProfileName = overrides?.activePcGamingProfileName ?? activePcGamingProfileName;
-    const effectivePcGamingLayout = overrides?.pcGamingLayout ?? pcGamingLayout;
+    const effectiveActivePcGamingProfileName = overrides && Object.prototype.hasOwnProperty.call(overrides, 'activePcGamingProfileName')
+      ? overrides.activePcGamingProfileName ?? null
+      : activePcGamingProfileName;
+    const effectivePcGamingLayout = overrides && Object.prototype.hasOwnProperty.call(overrides, 'pcGamingLayout')
+      ? overrides.pcGamingLayout ?? null
+      : pcGamingLayout;
     const effectivePcGamingProfileBehaviours: PcGamingProfileBehaviourMap = {
       ...(overrides?.pcGamingProfileBehaviours ?? {}),
       ...pcGamingProfileBehaviours
@@ -924,7 +943,7 @@ export function App() {
     }
 
     setIsSaving(true);
-    setMessage(isEditingSection ? 'Zapisywanie zmian...' : 'Zapisywanie konfiguracji...');
+    setMessage(isEditingSection ? 'Zapisywanie zmian...' : 'Zapisywanie ustawień...');
 
     try {
       const preferredProfileName = resolvePreferredProfileNameForPostSaveSelection(
@@ -945,9 +964,9 @@ export function App() {
       setIsEditingSection(false);
       setIsCreatingProfileFlow(false);
       setIsSetupComplete(savedSettings.ui.isFirstRunCompleted);
-      setMessage(isEditingSection ? 'Zmiany zapisane.' : 'Konfiguracja zapisana. GameShell jest gotowy do użycia.');
+      setMessage('Zapisano zmiany.');
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać konfiguracji.');
+      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');
     } finally {
       setIsSaving(false);
     }
@@ -1016,7 +1035,7 @@ export function App() {
 
     setError(null);
     setStepIndex(targetIndex);
-    setMessage('Edytujesz wybraną sekcję.');
+    setMessage('Wybrano sekcję do edycji.');
   }
 
   async function executeNavigation(action: PendingNavigationAction) {
@@ -1055,7 +1074,7 @@ export function App() {
         setHasAdvancedInCreateProfileFlow(true);
       }
     }
-    setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
+    setMessage(isEditingSection ? 'Możesz przejść dalej lub zapisać zmiany.' : 'Gotowe.');
   }
 
   async function continueFromGamingDisplayStep(allowOverwrite: boolean) {
@@ -1098,7 +1117,7 @@ export function App() {
     }
 
     if (!hasDraft && pcGamingProfiles.length === 0) {
-      setError('Musisz dodać pierwszy profil ekranów, aby kontynuować.');
+      setError('Dodaj profil i wybierz ekran, aby kontynuować.');
       return false;
     }
 
@@ -1168,7 +1187,7 @@ export function App() {
           await executeNavigation(actionToRun);
         }
       } catch (reason: unknown) {
-        setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać konfiguracji.');
+        setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');
       } finally {
         setIsSaving(false);
       }
@@ -1239,7 +1258,7 @@ export function App() {
       setHasUnsavedChanges(false);
       await executeNavigation(pendingNavigationAction);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać konfiguracji.');
+      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');
     } finally {
       setIsSaving(false);
       if (shouldResetPendingNavigation) {
@@ -1272,9 +1291,9 @@ export function App() {
     try {
       const detectedDisplays = await sendBridgeCommand<DisplayDeviceInfo[]>('getDisplays');
       setDisplays(detectedDisplays);
-      setMessage(detectedDisplays.length === 0 ? 'Nie wykryto aktywnych ekranów.' : 'Lista ekranów została odświeżona.');
+      setMessage(detectedDisplays.length === 0 ? 'Nie znaleziono ekranów.' : 'Odświeżono listę ekranów.');
     } catch (reason: unknown) {
-      setDisplayListError(reason instanceof Error ? reason.message : 'Nie udało się odczytać konfiguracji ekranów.');
+      setDisplayListError(reason instanceof Error ? reason.message : 'Nie udało się odczytać listy ekranów.');
     } finally {
       setIsRefreshingDisplays(false);
     }
@@ -1297,7 +1316,7 @@ export function App() {
       .filter((display): display is DisplayDeviceInfo => display !== null);
 
     if (selectedDevices.length !== identities.length || selectedDevices.length === 0) {
-      setError('Nie wszystkie wybrane ekrany są obecnie dostępne. Odśwież listę ekranów.');
+      setError('Niektóre wybrane ekrany są niedostępne. Odśwież listę ekranów.');
       return;
     }
 
@@ -1381,7 +1400,7 @@ export function App() {
     setMessage(
       isEditingSection
         ? `Profil ekranow przygotowany: ${resolvedProfileName}. Zapisz zmiany, aby zatwierdzić.`
-        : `Profil ekranow przygotowany: ${resolvedProfileName}. Kliknij Dalej, aby kontynuować konfigurację.`
+        : `Profil ekranów gotowy: ${resolvedProfileName}. Kliknij Dalej, aby kontynuować.`
     );
   }
 
@@ -1463,7 +1482,7 @@ export function App() {
 
     setError(null);
     setIsRemovingProfile(true);
-    setMessage(`Usuwanie profilu: ${profileName}...`);
+    setMessage(`Usuwanie profilu „${profileName}”...`);
 
     try {
       await saveCurrentSettings(true, {
@@ -1475,7 +1494,7 @@ export function App() {
         pcGamingProfileHotkeys: nextProfileHotkeys,
         pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts
       });
-      setMessage(`Profil został usunięty: ${profileName}.`);
+      setMessage(`Usunięto profil „${profileName}”.`);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Nie udało się usunąć profilu.');
     } finally {
@@ -1491,6 +1510,7 @@ export function App() {
     return (
       <Dashboard
         status={status}
+        controllerStatus={controllerShortcutStatus}
         launcher={launcher}
         pcGamingLayout={pcGamingLayout}
         pcGamingProfiles={pcGamingProfiles}
@@ -1549,14 +1569,7 @@ export function App() {
   return (
     <main className="app-shell">
       <section className="setup-window" aria-labelledby="app-title">
-        <aside className="brand-panel" aria-label="Kroki konfiguracji GameShell">
-          <div className="brand-lockup">
-            <img className="brand-mark" src="/assets/GameShell.png" alt="" aria-hidden="true" />
-            <div>
-              <p>GameShell Setup</p>
-              <small>lokalne profile gamingowe</small>
-            </div>
-          </div>
+        <aside className="brand-panel" aria-label="Kroki ustawień">
           <ol className="step-list">
             {activeSteps.map((step, index) => (
               <li
@@ -1583,15 +1596,7 @@ export function App() {
           </ol>
         </aside>
 
-        <div className="setup-main">
-          <header className="masthead">
-            <div>
-              <h1 id="app-title">{currentStep.title}</h1>
-              <p className="intro">{currentStep.subtitle}</p>
-            </div>
-            <span className="status-pill">Kreator konfiguracji</span>
-          </header>
-
+        <div className={`setup-main wizard-main ${isVeryFirstConfiguration ? '' : 'hide-step-eyebrows'}`}>
           <section className="setup-page">
             {currentStep.id === 'welcome' ? <WelcomeStep stepNumber={stepIndex + 1} /> : null}
             {currentStep.id === 'gaming-display' ? (
@@ -1830,7 +1835,7 @@ export function App() {
             <div className="dialog-backdrop" role="presentation">
               <div className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="unsaved-dialog-title">
                 <h3 id="unsaved-dialog-title">Niezapisane zmiany</h3>
-                <p>Masz niezapisane zmiany w profilach. Chcesz je zapisać czy odrzucić?</p>
+                <p>Masz niezapisane zmiany. Chcesz je zapisać czy odrzucić?</p>
                 <div className="dialog-actions">
                   <button className="secondary-button" type="button" onClick={() => setShowUnsavedDialog(false)}>
                     Anuluj
@@ -1859,7 +1864,7 @@ function LoadingScreen() {
           <header className="masthead">
             <div>
               <h1 id="app-title">GameShell</h1>
-              <p className="intro">Wczytywanie konfiguracji...</p>
+              <p className="intro">Wczytywanie ustawień...</p>
             </div>
             <span className="status-pill">Start</span>
           </header>
@@ -1871,6 +1876,7 @@ function LoadingScreen() {
 
 function Dashboard({
   status,
+  controllerStatus,
   launcher,
   pcGamingLayout,
   pcGamingProfiles,
@@ -1891,6 +1897,7 @@ function Dashboard({
   editSettings
 }: {
   status: AppStatus;
+  controllerStatus: ControllerStatusInfo;
   launcher: LauncherType;
   pcGamingLayout: DisplayLayoutSnapshot | null;
   pcGamingProfiles: DisplayLayoutProfile[];
@@ -1944,16 +1951,8 @@ function Dashboard({
   return (
     <main className="app-shell">
       <section className="setup-window" aria-labelledby="app-title">
-        <aside className="brand-panel dashboard-sidebar" aria-label="GameShell">
-          <header className="brand-lockup sidebar-brand">
-            <img className="brand-mark" src="/assets/GameShell.png" alt="" aria-hidden="true" />
-            <div>
-              <p>GameShell</p>
-              <small>lokalne profile gamingowe</small>
-            </div>
-          </header>
-
-          <section className="sidebar-state-block" aria-label="Stan GameShell">
+        <aside className="brand-panel dashboard-sidebar" aria-label="Nawigacja aplikacji">
+          <section className="sidebar-state-block" aria-label="Stan aplikacji">
             <div className="sidebar-section-label">Stan</div>
             {isWorkModeActive ? (
               <div className="sidebar-state-content">
@@ -1962,7 +1961,7 @@ function Dashboard({
                   <span className="work-return-status">AKTYWNY</span>
                 </div>
                 <p>Układ roboczy</p>
-                <small>{globalWorkModeHotkey || 'Hotkey: brak'}</small>
+                <small>{globalWorkModeHotkey || 'Brak skrótu'}</small>
               </div>
             ) : (
               <div className="sidebar-state-content">
@@ -1973,7 +1972,7 @@ function Dashboard({
                 {isPcGamingActive ? <p>Profil: {activeProfileName || 'Nie wybrano'}</p> : null}
                 <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
                 {shouldShowLauncherFact ? <small>{visibleLauncher}</small> : null}
-                {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || 'Hotkey: brak'}</small> : null}
+                {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || 'Brak skrótu'}</small> : null}
                 {!isWorkModeActive ? (
                   <button
                     className="sidebar-state-action"
@@ -1986,10 +1985,23 @@ function Dashboard({
                 ) : null}
               </div>
             )}
+            <div className="sidebar-controller-status" aria-label="Kontroler">
+              <div className="sidebar-controller-label">Kontroler</div>
+              {controllerStatus.isConnected ? (
+                <div className="sidebar-controller-row">
+                  <span className="sidebar-controller-name" title={controllerStatus.deviceName ?? undefined}>
+                    {getControllerDisplayName(controllerStatus.deviceName)}
+                  </span>
+                  <span className="work-return-status">POŁĄCZONY</span>
+                </div>
+              ) : (
+                <p className="sidebar-controller-empty">Brak kontrolera</p>
+              )}
+            </div>
           </section>
 
           <section className="sidebar-global-settings" aria-label="Globalne ustawienia">
-            <div className="sidebar-section-label">Globalne</div>
+            <div className="sidebar-section-label">Ustawienia globalne</div>
             <div className="sidebar-global-links">
               <button type="button" onClick={() => editSettings('work-behaviour')}>
                 <span>Zachowanie Work Mode</span>
@@ -2004,21 +2016,14 @@ function Dashboard({
           </section>
         </aside>
 
-        <div className="setup-main">
-          <header className="masthead">
-            <div>
-              <h1 id="app-title">GameShell</h1>
-              <p className="intro">Wybierz profil gamingowy albo dostosuj konfigurację GameShell.</p>
-            </div>
-          </header>
-
-          <section className="setup-page">
+        <div className="setup-main dashboard-main">
+          <section className="setup-page dashboard-page">
             <div className="dashboard-layout">
               <section className="dashboard-band dashboard-mode-band" aria-labelledby="dashboard-modes-title">
                 <section className="quick-switch-panel profile-module" aria-label="Zapisane profile ekranów">
                   <div className="profile-module-header">
                     <div className="profile-module-title-wrap">
-                      <h2 id="dashboard-modes-title" className="profile-module-title">Zapisane profile ekranów</h2>
+                      <h1 id="app-title" className="profile-module-title">Profile gamingowe</h1>
                     </div>
                     <div className="profile-module-header-actions">
                       <small className="profile-module-count">
@@ -2036,7 +2041,7 @@ function Dashboard({
                   </div>
 
                   <div className="profile-list-shell">
-                    <div className="profile-quick-list" role="listbox" aria-label="Lista profili PC Gaming">
+                    <div className="profile-quick-list" role="listbox" aria-label="Lista profili gamingowych">
                       {pcGamingProfiles.map((profile) => {
                         const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
                         const isProfileConfiguredAsActive = activeProfileName === profile.name;
@@ -2090,32 +2095,32 @@ function Dashboard({
                     </button>
                   </div>
                 </section>
-                {pcGamingProfiles.length === 0 ? <p className="hint-line">Brak zapisanych profili. Dodaj profil w sekcji Ekrany.</p> : null}
+                {pcGamingProfiles.length === 0 ? <p className="hint-line">Nie masz jeszcze profilu. Dodaj go w sekcji Ekrany.</p> : null}
               </section>
 
-              <section className="dashboard-band dashboard-config-section" aria-label="Konfiguracja profilu">
-                <div className="dashboard-shortcut-groups" aria-label="Edycja konfiguracji">
+              <section className="dashboard-band dashboard-config-section" aria-label="Ustawienia profilu">
+                <div className="dashboard-shortcut-groups" aria-label="Edycja ustawień">
                   <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
                     <div className="profile-settings-heading">
-                      <h3 id="profile-settings-title">KONFIGURACJA PROFILU</h3>
-                      <span className="profile-context">{selectedProfileName || 'PC'}</span>
+                      <h3 id="profile-settings-title">USTAWIENIA PROFILU</h3>
+                      <span className="profile-context">{selectedProfileName || 'Brak profilu'}</span>
                     </div>
                     <div className="section-shortcuts">
-                      <button type="button" onClick={() => editSettings('gaming-display')}>
+                      <button type="button" disabled={pcGamingProfiles.length === 0} onClick={() => editSettings('gaming-display')}>
                         <span>Ekrany</span>
-                        <small>Tworzenie i wybór układów ekranów</small>
+                        <small>Wybierz ekrany używane przez profil.</small>
                       </button>
-                      <button type="button" onClick={() => editSettings('launcher')}>
+                      <button type="button" disabled={pcGamingProfiles.length === 0} onClick={() => editSettings('launcher')}>
                         <span>Launcher profilu</span>
-                        <small>Konfiguracja launchera dla każdego profilu</small>
+                        <small>Wybierz aplikację uruchamianą z profilem.</small>
                       </button>
-                      <button type="button" onClick={() => editSettings('console-behaviour')}>
+                      <button type="button" disabled={pcGamingProfiles.length === 0} onClick={() => editSettings('console-behaviour')}>
                         <span>Zachowanie profilu</span>
-                        <small>Ikony, taskbar, okna i kursor per profil</small>
+                        <small>Ustaw zachowanie pulpitu po uruchomieniu profilu.</small>
                       </button>
-                      <button type="button" onClick={() => editSettings('controller')}>
+                      <button type="button" disabled={pcGamingProfiles.length === 0} onClick={() => editSettings('controller')}>
                         <span>Skróty profilu</span>
-                        <small>Hotkey wejścia dla wybranego profilu</small>
+                        <small>Ustaw skróty uruchamiające profil.</small>
                       </button>
                     </div>
                   </section>
@@ -2172,10 +2177,9 @@ function WelcomeStep({ stepNumber }: { stepNumber: number }) {
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Skonfiguruj GameShell na tym komputerze</h2>
+      <h2>Ustaw GameShell</h2>
       <p>
-        Ten kreator pomoże Ci ustawić profile ekranów, launchery i zachowanie trybów.
-        Po zakończeniu szybko przełączysz komputer między graniem a pracą.
+        Ustaw profile gamingowe, launchery i przełączanie między graniem a pracą.
       </p>
     </div>
   );
@@ -2268,7 +2272,7 @@ function DisplaysStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Ekrany</h2>
       <section className="settings-section">
-        <p>Wybierz ekrany należące do profilu.</p>
+        <p>Wybierz ekrany używane przez profil.</p>
         <DisplayDiagnosticsPanel
           displays={displays}
           selectedDisplays={selectedDisplays}
@@ -2353,11 +2357,11 @@ function DisplayDiagnosticsPanel({
     <section className="display-diagnostics display-module" aria-label="Dostępne ekrany">
       <div className="display-diagnostics-head display-module-header">
         <div>
-          <p>Lista ekranów wykrytych przez Windows, także tych chwilowo wyłączonych.</p>
+          <p>Wybierz dostępne ekrany i nadaj profilowi nazwę.</p>
         </div>
         <div className="display-diagnostics-actions">
           <button className="secondary-button compact" type="button" disabled={isRefreshing} onClick={refreshDisplays}>
-            {isRefreshing ? 'Odświeżanie...' : 'Odśwież listę ekranów'}
+            {isRefreshing ? 'Odświeżanie...' : 'Odśwież'}
           </button>
         </div>
       </div>
@@ -2366,7 +2370,7 @@ function DisplayDiagnosticsPanel({
           <div className="profile-name-header">
             <label className="profile-name-label" htmlFor="profile-name-input">Nazwa profilu</label>
             <span className="selection-count" aria-live="polite">
-              Wybrano <strong>{selectedDisplays.length}/{MAX_PROFILE_DISPLAYS}</strong>
+              Ekrany <strong>{selectedDisplays.length}/{MAX_PROFILE_DISPLAYS}</strong>
             </span>
           </div>
           <input
@@ -2389,7 +2393,7 @@ function DisplayDiagnosticsPanel({
         </div>
         {showNameError ? (
           <div id="profile-name-validation-error" className="field-validation-error" role="alert">
-            Podaj nazwę profilu.
+            Wpisz nazwę profilu.
           </div>
         ) : null}
         {displayLimitMessage ? (
@@ -2397,17 +2401,17 @@ function DisplayDiagnosticsPanel({
             <span className="inline-notice-label">LIMIT</span>
             <div className="inline-notice-copy">
               <strong>{displayLimitMessage}</strong>
-              <span>Obsługa większej liczby ekranów zostanie dodana później.</span>
+              <span>Profil może obejmować najwyżej dwa ekrany.</span>
             </div>
           </div>
         ) : null}
         {showSelectionError ? (
           <div className="selection-validation-error" role="alert">
-            Wybierz co najmniej jeden ekran.
+            Wybierz przynajmniej jeden ekran.
           </div>
         ) : null}
         {error ? <p className="error-line display-error">{error}</p> : null}
-        {!error && displays.length === 0 ? <p className="hint-line">Nie wykryto ekranów.</p> : null}
+        {!error && displays.length === 0 ? <p className="hint-line">Nie znaleziono ekranów. Podłącz ekran i odśwież listę.</p> : null}
         {displays.length > 0 ? (
           <div className="display-grid">
             {displays.map((display) => {
@@ -2480,10 +2484,10 @@ function LauncherStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Launcher profilu</h2>
-      <p>Każdy profil ekranów może używać innego launchera. Zmiana dotyczy aktualnie zaznaczonego profilu.</p>
+      <p>Wybierz aplikację uruchamianą z tym profilem.</p>
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
-          <span>Edytowany profil</span>
+          <span>Aktywny profil</span>
           <strong>{selectedProfileLabel}</strong>
         </div>
       </div>
@@ -2525,13 +2529,13 @@ function ConsoleBehaviourStep({
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Zachowanie Gaming Mode</h2>
+      <h2>Zachowanie profilu</h2>
       <section className="settings-section gaming-behaviour-section">
-        <h3>Gaming Mode</h3>
-        <p>Te opcje określają, co ma się stać po uruchomieniu wybranego profilu.</p>
+        <h3>Pulpit po uruchomieniu</h3>
+        <p>Ustaw wygląd pulpitu po uruchomieniu profilu.</p>
         <div className="field-grid">
           <div className="profile-target-line" aria-live="polite">
-            <span>Edytowany profil</span>
+            <span>Aktywny profil</span>
             <strong>{selectedProfileLabel}</strong>
           </div>
         </div>
@@ -2564,12 +2568,12 @@ function WorkBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie Work Mode</h2>
-      <p>Work Mode przywraca układ roboczy oraz standardowy wygląd pulpitu.</p>
+      <p>Ustaw wygląd pulpitu po powrocie do Work Mode.</p>
       <div className="settings-group">
         <SettingRow title="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
         <SettingRow title="Pokaż paski zadań" checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
         <SettingRow title="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
-        <SettingRow title="Nie minimalizuj istniejących okien" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
+        <SettingRow title="Przywróć otwarte okna" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
       </div>
     </div>
   );
@@ -2640,7 +2644,7 @@ function ControllerStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>{isWorkMode ? 'Skrót Work Mode' : 'Skróty profilu'}</h2>
       <div className="profile-shortcuts-intro">
-        <p>{isWorkMode ? 'Przypisz globalną kombinację przycisków kontrolera do przejścia w Work Mode.' : `Przypisz skrót klawiaturowy lub kombinację przycisków kontrolera do profilu ${selectedProfileLabel}.`}</p>
+        <p>{isWorkMode ? 'Ustaw skrót powrotu do Work Mode.' : `Ustaw skrót uruchamiający profil ${selectedProfileLabel}.`}</p>
         <span className="profile-shortcuts-profile-label">{isWorkMode ? 'CEL: WORK MODE' : `PROFIL: ${selectedProfileLabel.toUpperCase()}`}</span>
       </div>
 
@@ -2648,24 +2652,26 @@ function ControllerStep({
         <header className="shortcut-module-header">
           <div>
             <h3>Skrót klawiaturowy</h3>
-            <p>{isWorkMode ? 'Przechodzi w Work Mode z dowolnego miejsca w Windows.' : 'Uruchamia profil z dowolnego miejsca w Windows.'}</p>
+            <p>{isWorkMode ? 'Wraca do Work Mode z dowolnego miejsca.' : 'Uruchamia profil z dowolnego miejsca.'}</p>
           </div>
         </header>
         <div className="shortcut-module-body keyboard-shortcut-body">
           <label className="shortcut-control-label">
-            <span>HOTKEY</span>
-            <HotkeyField
-              value={isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode}
-              onChange={(value) => onChangeHotkey(isWorkMode ? 'workMode' : 'enterProfile', value)}
-              placeholder={isWorkMode ? 'np. Ctrl+Alt+W' : 'np. Ctrl+Alt+P'}
-              disabled={!isWorkMode && !hasProfiles}
-              error={hotkeyValidationError}
-            />
-            {(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? (
-              <button className="danger-button secondary-button" type="button" onClick={onRemoveHotkey}>
-                Usuń
-              </button>
-            ) : null}
+            <span>SKRÓT</span>
+            <div className="keyboard-shortcut-control-row">
+              <HotkeyField
+                value={isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode}
+                onChange={(value) => onChangeHotkey(isWorkMode ? 'workMode' : 'enterProfile', value)}
+                placeholder={isWorkMode ? 'np. Ctrl+Alt+W' : 'np. Ctrl+Alt+P'}
+                disabled={!isWorkMode && !hasProfiles}
+                error={hotkeyValidationError}
+              />
+              {(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? (
+                <button className="danger-button secondary-button keyboard-shortcut-remove" type="button" onClick={onRemoveHotkey}>
+                  Usuń
+                </button>
+              ) : null}
+            </div>
           </label>
           <span className={`shortcut-saved-status ${(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? 'is-saved' : ''}`}>
             {(isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode) ? 'ZAPISANO' : 'BRAK SKRÓTU'}
@@ -2677,7 +2683,7 @@ function ControllerStep({
         <header className="shortcut-module-header controller-module-header">
           <div>
             <h3>Skrót kontrolera</h3>
-            <p>Przytrzymaj zapisaną kombinację, aby {isWorkMode ? 'przejść w Work Mode' : 'uruchomić ten profil'}.</p>
+            <p>Przytrzymaj kombinację, aby {isWorkMode ? 'wrócić do Work Mode' : 'uruchomić profil'}.</p>
           </div>
           <span className={`controller-status-pill ${controllerStatus.isConnected ? 'is-connected' : 'is-disconnected'}`} title={controllerDeviceDescription}>
             {controllerDeviceLabel}
@@ -2698,7 +2704,7 @@ function ControllerStep({
                     ? 'Podłącz kontroler przez USB lub Bluetooth i spróbuj ponownie.'
                     : 'Podłącz go ponownie, aby kontynuować.'}
                 </span>
-                {controllerNotice === 'missing' ? <span>GameShell wykryje go automatycznie.</span> : null}
+                {controllerNotice === 'missing' ? <span>Aplikacja wykryje go automatycznie.</span> : null}
               </div>
             </div>
           ) : null}
@@ -2714,14 +2720,14 @@ function ControllerStep({
                 <>
                   <span className="capture-mode-label">NASŁUCHIWANIE</span>
                   <p>Puść wszystkie przyciski kontrolera.</p>
-                  <small>Nasłuchiwanie rozpocznie się automatycznie.</small>
+                  <small>Możesz teraz zwolnić przyciski.</small>
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'WaitingForFirstPress' ? (
                 <>
                   <span className="capture-mode-label">NASŁUCHIWANIE</span>
-                  <p className="capture-primary-message">Teraz naciśnij i przytrzymaj wybraną kombinację.</p>
-                  <small>Możesz naciskać kolejne przyciski z niewielkim odstępem.</small>
+                  <p className="capture-primary-message">Naciśnij i przytrzymaj wybraną kombinację.</p>
+                  <small>Możesz naciskać przyciski po kolei.</small>
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'Recording' ? (
@@ -2729,7 +2735,7 @@ function ControllerStep({
                   <span className="capture-mode-label">NASŁUCHIWANIE</span>
                   <p>Wykryto kombinację</p>
                   <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
-                  <small>Przytrzymaj jeszcze przez chwilę.</small>
+                  <small>Przytrzymaj ją jeszcze chwilę.</small>
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'WaitingForCombinationRelease' ? (
@@ -2753,14 +2759,14 @@ function ControllerStep({
                 </div>
               ) : hasControllerShortcut ? (
                 <div className="controller-assigned-state">
-                  <span className="capture-step-label">PRZYPISANA KOMBINACJA</span>
+                  <span className="capture-step-label">PRZYPISANY SKRÓT</span>
                   <ControllerKeycaps buttons={selectedControllerButtons} family={controllerFamily} />
                   <p>Przytrzymaj przez {((controllerShortcut?.holdDurationMs ?? 700) / 1000).toFixed(1)} s, aby {isWorkMode ? 'przejść w Work Mode' : 'uruchomić profil'}.</p>
                 </div>
               ) : (
                 <div className="controller-empty-state">
-                  <span className="capture-step-label">BRAK PRZYPISANEJ KOMBINACJI</span>
-                  <p>Przypisz przyciski, których przytrzymanie {isWorkMode ? 'przełączy w Work Mode' : 'uruchomi profil'}.</p>
+                  <span className="capture-step-label">BRAK PRZYPISANEGO SKRÓTU</span>
+                  <p>Ustaw przyciski, których przytrzymanie {isWorkMode ? 'wróci do Work Mode' : 'uruchomi profil'}.</p>
                 </div>
               )}
               <div className="controller-shortcut-actions">
@@ -2819,10 +2825,10 @@ function AppBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie aplikacji</h2>
-      <p>Te ustawienia dotyczą całej aplikacji i obowiązują dla wszystkich profili.</p>
+      <p>Ustaw uruchamianie GameShell i skróty systemowe.</p>
       <div className="settings-group">
         <SettingRow
-          title="Startuj z Windows"
+          title="Uruchamiaj z Windows"
           checked={finishOptions.startWithWindows}
           onChange={(value) => setFinishOptions({
             ...finishOptions,
@@ -2831,7 +2837,7 @@ function AppBehaviourStep({
           })}
         />
         <SettingRow
-          title="Startuj zminimalizowany do tray"
+          title="Uruchamiaj zminimalizowany"
           checked={finishOptions.startMinimized}
           disabled={!finishOptions.startWithWindows}
           onChange={(value) => setFinishOptions({ ...finishOptions, startMinimized: value })}
@@ -2872,14 +2878,14 @@ function FinishStep({
   return (
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Podsumowanie konfiguracji</h2>
+      <h2>Podsumowanie ustawień</h2>
       <dl className="summary-list">
         <div>
-          <dt>Profil Gaming Mode</dt>
+          <dt>Profil gamingowy</dt>
           <dd>{activeProfileName || 'Nie wybrano'}</dd>
         </div>
         <div>
-          <dt>Uklad ekranow</dt>
+          <dt>Układ ekranów</dt>
           <dd>{pcGamingLayout ? summarizeLayout(pcGamingLayout) : 'Brak aktywnego profilu'}</dd>
         </div>
         <div>
@@ -2887,8 +2893,8 @@ function FinishStep({
           <dd>{activeLauncher}</dd>
         </div>
         <div>
-          <dt>Hotkey profilu</dt>
-          <dd>{activeHotkeys.enterProfile || 'Brak przypisanego hotkeya'}</dd>
+          <dt>Skrót profilu</dt>
+          <dd>{activeHotkeys.enterProfile || 'Brak przypisanego skrótu'}</dd>
         </div>
       </dl>
     </div>
@@ -3170,7 +3176,7 @@ function formatCurrentMode(status: AppStatus) {
   switch (status.currentMode) {
     case 'Console':
     case 'PcGaming':
-      return 'Gaming Mode';
+      return 'Tryb gamingowy';
     case 'Work':
       return 'Work Mode';
     default:
@@ -3200,7 +3206,7 @@ function formatCommandTargetMode(command: ModeCommand) {
   switch (command) {
     case 'enterGameShell':
     case 'enterGameShellWithProfile':
-      return 'Gaming Mode';
+      return 'Tryb gamingowy';
     case 'enterWorkMode':
       return 'Work Mode';
   }
@@ -3364,6 +3370,7 @@ function normalizeControllerButtons(buttons: string[] | null | undefined) {
 function normalizeControllerStatus(status: ControllerStatusInfo): ControllerStatusInfo {
   return {
     ...status,
+    sequenceNumber: status.sequenceNumber ?? 0,
     capturedButtons: normalizeControllerButtons(status.capturedButtons),
     lastReadButtons: normalizeControllerButtons(status.lastReadButtons),
     completedCapture: status.completedCapture

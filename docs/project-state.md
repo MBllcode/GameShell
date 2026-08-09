@@ -18,6 +18,10 @@ Aktualne, robocze podsumowanie stanu projektu.
 ## Stan UI
 
 - Po pierwszej konfiguracji aplikacja otwiera dashboard z profilem.
+- Dashboardowy sidebar pokazuje w module `STAN` realtime status kontrolera: `DualSense`, `Xbox Controller` albo `Kontroler` oraz `POLACZONY`/`Brak kontrolera`.
+- Sidebar korzysta z tego samego frontendowego `controllerStatus`, ktory obsluguje skroty kontrolera; nie ma osobnego pollingu.
+- Gdy wszystkie profile gamingowe zostana usuniete, lista profili pozostaje pusta. Nie jest tworzony profil `Domyslny`.
+- Boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne przy pustej liscie, ale akcje profilu sa wyszarzone. Dostepne pozostaja `+ Dodaj profil` i ustawienia globalne.
 - Dodawanie profilu prowadzi przez flow profilowe: `Ekrany -> Launcher -> Zachowanie profilu -> Skroty profilu -> Zakonczenie`.
 - Krok `Ekrany`:
   - wymaga nazwy profilu,
@@ -32,6 +36,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 ## Hotkeye profili
 
 - Kazdy profil ma wlasny hotkey wejscia.
+- Przycisk `Usun` dla zapisanego skrotu klawiaturowego jest umieszczony po prawej stronie inputa i ma kompaktowy rozmiar zgodny ze skrotem kontrolera.
 - Kombinacje sa normalizowane do kanonicznej postaci, bez polskich znakow diakrytycznych.
 - Ta sama kombinacja nie moze byc przypisana do dwoch roznych profili.
 - Podczas `NASLUCHIWANIE` globalne hotkeye aplikacji sa chwilowo wyrejestrowane, aby UI moglo przechwycic klawisze i pokazac lokalna walidacje duplikatu.
@@ -41,6 +46,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Brak `window.confirm` dla standardowego `Zapisz zmiany`.
 - Modal nadpisania pojawia sie tylko przy rzeczywistym konflikcie nazwy z innym profilem.
 - Launcher i ustawienia profilu nie sa nadpisywane starym snapshotem po edycji ekranow.
+- Jawne `null` dla pustego `pcGamingLayout` i `activePcGamingProfileName` jest zachowywane podczas zapisu, aby walidator nie odtwarzal profilu `Domyslny`.
 
 ## Desktop host i runtime
 

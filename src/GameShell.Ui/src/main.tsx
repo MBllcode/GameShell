@@ -76,15 +76,15 @@ function StartupErrorScreen({ message }: { message: string }) {
         <div className="setup-main">
           <header className="masthead">
             <div>
-              <h1 id="app-title">GameShell</h1>
-              <p className="intro">Aplikacja nie mogła się uruchomić poprawnie.</p>
+                <h1 id="app-title">GameShell</h1>
+              <p className="intro">GameShell nie uruchomił się poprawnie.</p>
             </div>
             <span className="status-pill has-error">Błąd</span>
           </header>
           <div className="startup-error-panel">
-            <h2>Wystąpił błąd startowy</h2>
+            <h2>Nie udało się uruchomić GameShell</h2>
             <p>{message}</p>
-            <p>Sprawdź log: %LOCALAPPDATA%\GameShell\Logs\gameshell-YYYY-MM-DD.log</p>
+            <p>Sprawdź log aplikacji w folderze danych lokalnych.</p>
           </div>
         </div>
       </section>

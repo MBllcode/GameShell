@@ -30,6 +30,7 @@ public sealed class SdlControllerShortcutService : IDisposable
     private DateTimeOffset _lastReadingAt = DateTimeOffset.MinValue;
     private string _diagnosticStatus = "Brak zgodnego kontrolera SDL3";
     private DateTimeOffset _lastDiagnosticLogAt = DateTimeOffset.MinValue;
+    private long _controllerStatusChangeSequence;
     private ControllerInputSnapshot _latestSnapshot = new("", new HashSet<ControllerButton>(), 0, DateTimeOffset.UtcNow);
     private long _snapshotSequence;
     private Guid? _captureSessionId;
@@ -136,6 +137,7 @@ public sealed class SdlControllerShortcutService : IDisposable
                 rawPressedButtons = Array.Empty<int>(),
                 backend = "SDL3",
                 controllerCount = _gamepad == IntPtr.Zero ? 0 : 1,
+                sequenceNumber = _controllerStatusChangeSequence,
                 controllerId = _lastControllerId,
                 lastReadButtons = _lastPressedButtons.Select(button => button.ToString()).ToArray(),
                 lastReadAt = _lastReadingAt,
@@ -234,7 +236,12 @@ public sealed class SdlControllerShortcutService : IDisposable
             if (SdlNative.SDL_IsGamepad(id) != 0) { selectedId = id; break; }
         }
 
-        if (selectedId == _gamepadId && _gamepad != IntPtr.Zero) return;
+        if (selectedId == _gamepadId
+            && _gamepad != IntPtr.Zero
+            && SdlNative.SDL_GamepadConnected(_gamepad) != 0)
+        {
+            return;
+        }
         if (_gamepad != IntPtr.Zero) SdlNative.SDL_CloseGamepad(_gamepad);
         _gamepad = IntPtr.Zero;
         _gamepadId = selectedId;
@@ -271,6 +278,12 @@ public sealed class SdlControllerShortcutService : IDisposable
     private void PollGamepad(CancellationToken cancellationToken)
     {
         if (_gamepad == IntPtr.Zero) { RefreshGamepad(); return; }
+        if (SdlNative.SDL_GamepadConnected(_gamepad) == 0)
+        {
+            RefreshGamepad();
+            return;
+        }
+
         SdlNative.SDL_PumpEvents();
         SdlNative.SDL_UpdateGamepads();
         var pressed = new HashSet<ControllerButton>();
@@ -574,7 +587,38 @@ public sealed class SdlControllerShortcutService : IDisposable
         NotifyControllerStatusChanged();
     }
 
-    private void NotifyControllerStatusChanged() => _webViewBridge.NotifyControllerStatusChanged();
+    private void NotifyControllerStatusChanged()
+    {
+        long sequenceNumber;
+        bool isConnected;
+        string? deviceName;
+        lock (_syncRoot)
+        {
+            sequenceNumber = ++_controllerStatusChangeSequence;
+            isConnected = _gamepad != IntPtr.Zero;
+            deviceName = _lastDeviceName;
+        }
+
+        _logger.LogInformation(
+            "Controller status changed #{SequenceNumber}. Connected={Connected}, Name={Name}, Family={Family}.",
+            sequenceNumber,
+            isConnected,
+            deviceName ?? "(none)",
+            GetControllerFamilyForDiagnostics(deviceName));
+        _webViewBridge.NotifyControllerStatusChanged(sequenceNumber, isConnected, deviceName);
+    }
+
+    private static string GetControllerFamilyForDiagnostics(string? deviceName)
+    {
+        if (string.IsNullOrWhiteSpace(deviceName)) return "Generic";
+        if (deviceName.Contains("DualSense", StringComparison.OrdinalIgnoreCase)
+            || deviceName.Contains("PlayStation", StringComparison.OrdinalIgnoreCase)
+            || deviceName.Contains("PS5", StringComparison.OrdinalIgnoreCase)) return "PlayStation";
+        if (deviceName.Contains("Xbox", StringComparison.OrdinalIgnoreCase)) return "Xbox";
+        if (deviceName.Contains("Nintendo", StringComparison.OrdinalIgnoreCase)
+            || deviceName.Contains("Switch", StringComparison.OrdinalIgnoreCase)) return "Nintendo";
+        return "Generic";
+    }
 
     private object GetCaptureSessionStatus()
     {

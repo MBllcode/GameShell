@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Windows;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using GameShell.Core.Services;
@@ -64,7 +65,11 @@ public sealed class WebViewBridge
     private readonly IDisplayQueryService _displayQueryService;
     private readonly IDisplayTransitionService _displayTransitionService;
     private readonly ILogger<WebViewBridge> _logger;
+    private readonly Lock _controllerNotificationSync = new();
     private Services.SdlControllerShortcutService? _controllerShortcutService;
+    private bool _hasControllerNotification;
+    private bool _lastControllerConnected;
+    private string? _lastControllerDeviceName;
 
     public WebViewBridge(
         IModeCommandService modeCommandService,
@@ -110,16 +115,50 @@ public sealed class WebViewBridge
         }
     }
 
-    public void NotifyControllerStatusChanged()
+    public void NotifyControllerStatusChanged(long sequenceNumber, bool isConnected, string? deviceName)
     {
-        try
+        lock (_controllerNotificationSync)
         {
-            _coreWebView?.PostWebMessageAsJson("""{"type":"controllerStatusChanged"}""");
+            if (_hasControllerNotification
+                && _lastControllerConnected == isConnected
+                && string.Equals(_lastControllerDeviceName, deviceName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _hasControllerNotification = true;
+            _lastControllerConnected = isConnected;
+            _lastControllerDeviceName = deviceName;
         }
-        catch (Exception ex)
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null)
         {
-            _logger.LogDebug(ex, "Failed to notify WebView about controller status change.");
+            _logger.LogError("Cannot send controllerStatusChanged #{SequenceNumber}: WPF dispatcher is unavailable.", sequenceNumber);
+            return;
         }
+
+        dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                _logger.LogInformation(
+                    "Bridge sending controllerStatusChanged #{SequenceNumber}. Connected={Connected}, Name={Name}, DispatcherThread={ThreadId}.",
+                    sequenceNumber,
+                    isConnected,
+                    deviceName ?? "(none)",
+                    Environment.CurrentManagedThreadId);
+                _coreWebView?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "controllerStatusChanged",
+                    sequenceNumber
+                }, JsonOptions));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to notify WebView about controller status change #{SequenceNumber}.", sequenceNumber);
+            }
+        }));
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

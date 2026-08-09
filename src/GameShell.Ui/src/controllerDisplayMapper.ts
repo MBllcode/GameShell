@@ -79,6 +79,19 @@ export function detectControllerFamily(deviceName: string | null | undefined): C
   return ControllerFamily.Generic;
 }
 
+export function getControllerDisplayName(deviceName: string | null | undefined): string {
+  const normalizedName = deviceName?.toLowerCase() ?? '';
+  if (/dualsense/i.test(normalizedName)) {
+    return 'DualSense';
+  }
+
+  if (detectControllerFamily(deviceName) === ControllerFamily.Xbox) {
+    return 'Xbox Controller';
+  }
+
+  return 'Kontroler';
+}
+
 export function getControllerButtonDisplayName(button: string, family: ControllerFamily): string {
   return displayNames[family][button] ?? button;
 }

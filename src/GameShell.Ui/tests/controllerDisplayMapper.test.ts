@@ -4,6 +4,7 @@ import {
   ControllerFamily,
   detectControllerFamily,
   getControllerButtonDisplayName,
+  getControllerDisplayName,
   mapControllerButtons
 } from '../src/controllerDisplayMapper.ts';
 
@@ -37,4 +38,10 @@ test('detects controller families conservatively from device names', () => {
   assert.equal(detectControllerFamily('Xbox Wireless Controller'), ControllerFamily.Xbox);
   assert.equal(detectControllerFamily('Nintendo Switch Pro Controller'), ControllerFamily.Nintendo);
   assert.equal(detectControllerFamily('Arcade USB Gamepad'), ControllerFamily.Generic);
+});
+
+test('uses concise user-facing names for supported controller families', () => {
+  assert.equal(getControllerDisplayName('DualSense Wireless Controller'), 'DualSense');
+  assert.equal(getControllerDisplayName('Xbox Wireless Controller'), 'Xbox Controller');
+  assert.equal(getControllerDisplayName('Arcade USB Gamepad'), 'Kontroler');
 });
