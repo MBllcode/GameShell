@@ -54,7 +54,8 @@ export function DashboardPage({
   editSettings
 }: DashboardPageProps) {
   const [showDeleteProfileDialog, setShowDeleteProfileDialog] = useState(false);
-  const isWorkModeActive = status.currentMode === 'Work';
+  const dashboardSelectedProfileName = selectedProfileName || activeProfileName || pcGamingProfiles[0]?.name || '';
+  const isWorkModeActive = status.currentMode === 'Work' || (status.currentMode === null && pcGamingProfiles.length > 0);
   const isPcGamingActive = status.currentMode === 'PcGaming';
   const isConsoleModeActive = status.currentMode === 'Console';
   const activeGamingProfileLayout = activeProfileName
@@ -71,9 +72,9 @@ export function DashboardPage({
   const shouldShowLauncherFact = !isWorkModeActive;
   const activeProfileLauncher = activeProfileName ? pcGamingProfileLaunchers[activeProfileName] : null;
   const visibleLauncher = activeProfileLauncher ?? launcher;
-  const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
-  const canRunSelectedProfile = Boolean(selectedProfileName) && !isModeSwitching && !isRemovingProfile;
-  const canDeleteSelectedProfile = Boolean(selectedProfileName) && !isModeSwitching && !isRemovingProfile;
+  const selectedProfile = pcGamingProfiles.find((profile) => profile.name === dashboardSelectedProfileName) ?? null;
+  const canRunSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
+  const canDeleteSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
   const profileCountLabel = pcGamingProfiles.length === 1 ? 'profil' : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4 ? 'profile' : 'profili';
 
   return (
@@ -126,7 +127,7 @@ export function DashboardPage({
                       {pcGamingProfiles.map((profile) => {
                         const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
                         const isProfileConfiguredAsActive = activeProfileName === profile.name;
-                        const isProfileSelectedForEditing = selectedProfileName === profile.name;
+                        const isProfileSelectedForEditing = dashboardSelectedProfileName === profile.name;
                         const isPcGamingNow = status.currentMode === 'PcGaming';
                         const stateLabel = isPcGamingNow && isProfileConfiguredAsActive ? 'AKTYWNY' : isProfileSelectedForEditing ? 'ZAZNACZONY' : 'GOTOWY';
                         return (
@@ -140,7 +141,7 @@ export function DashboardPage({
                   </div>
                   <div className="profile-actions profile-module-footer">
                     <button className="danger-button secondary-button compact delete-action" type="button" disabled={!canDeleteSelectedProfile} onClick={() => setShowDeleteProfileDialog(true)}>Usuń profil</button>
-                    <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: selectedProfileName })}><span>Uruchom profil{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
+                    <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: dashboardSelectedProfileName })}><span>Uruchom profil{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
                   </div>
                 </section>
                 {pcGamingProfiles.length === 0 ? <p className="hint-line">Nie masz jeszcze profilu. Dodaj go w sekcji Ekrany.</p> : null}
@@ -148,7 +149,7 @@ export function DashboardPage({
               <section className="dashboard-band dashboard-config-section" aria-label="Ustawienia profilu">
                 <div className="dashboard-shortcut-groups" aria-label="Edycja ustawień">
                   <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
-                    <div className="profile-settings-heading"><h3 id="profile-settings-title">USTAWIENIA PROFILU</h3><span className="profile-context">{selectedProfileName || 'PC'}</span></div>
+                    <div className="profile-settings-heading"><h3 id="profile-settings-title">USTAWIENIA PROFILU</h3><span className="profile-context">{dashboardSelectedProfileName || 'PC'}</span></div>
                     <div className="section-shortcuts">
                       <button type="button" onClick={() => editSettings('gaming-display')}><span>Ekrany</span><small>Wybierz ekrany używane przez profil.</small></button>
                       <button type="button" onClick={() => editSettings('launcher')}><span>Launcher profilu</span><small>Wybierz aplikację uruchamianą z profilem.</small></button>

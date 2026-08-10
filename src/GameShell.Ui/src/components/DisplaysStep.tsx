@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile } from '../types/bridge';
+import { normalizePcGamingProfileName } from '../features/profiles/utils';
 import {
   extractDisplayIdentities,
   formatDisplayRefresh,
@@ -102,11 +103,12 @@ export function DisplaysStep({
           refreshDisplays={refreshDisplays}
           profileName={newProfileName}
           setProfileName={(nextName) => {
-            setNewProfileName(nextName);
-            if (nextName.trim().length > 0 && validationState.showNameError) {
+            const normalizedName = normalizePcGamingProfileName(nextName);
+            setNewProfileName(normalizedName);
+            if (normalizedName.length > 0 && validationState.showNameError) {
               onValidationStateChange({ ...validationState, showNameError: false });
             }
-            onDraftChange(nextName, selectedDisplays);
+            onDraftChange(normalizedName, selectedDisplays);
           }}
           validationState={validationState}
           onValidationStateChange={onValidationStateChange}

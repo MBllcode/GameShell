@@ -49,6 +49,9 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Stany sesji: `Idle`, `EnteringProfile`, `LauncherActive`, `LaunchingGame`, `GameActive`, `ReturningToLauncher`, `ExitingToWorkMode`, `Faulted`.
 - Udana aktywacja profilu wykonuje istniejacy workflow i ustawia `LauncherActive`. Playnite zachowuje normalny lifecycle gry; GameShell nie przywraca ani nie restartuje launchera po kazdym zamknieciu gry.
 - Jawne Work Mode zatrzymuje monitor, wykonuje istniejacy workflow przywracania i konczy sesje stanem `Idle`.
+- Work Mode ma jeden `TransitionId` na request i loguje poczatek, granice krokow, cancellation source oraz wynik kazdego etapu.
+- Token zycia monitora gamingowego jest niezalezny od tokena requestu aktywacji profilu. Wlasne anulowanie monitora podczas `StopAsync` jest oczekiwanym zakonczeniem, a nie bledem sesji.
+- Przywracanie layoutu ekranow i glowna zmiana stanu sa krytyczne. Zamkniecie launchera, taskbary i ikony pulpitu sa best-effort; bounded timeout launchera jest ostrzezeniem i nie przerywa Work Mode.
 - Duplikaty aktywacji sa odrzucane, przejscia sa serializowane, a bledy sa logowane i koncza sie stanem `Faulted`, z mozliwoscia ponowienia komendy.
 - `IGameSessionMonitor` jest osobnym kontraktem. Implementacja Windows sprawdza tylko jawnie skonfigurowane `PcGaming.GameProcessNames`; pusta lista oznacza brak heurystycznego wykrywania gry.
 - Po `GameDetected` GameShell zmienia wyłącznie stan sesji na `GameActive` i monitoruje zakończenie skonfigurowanego procesu. Nie modyfikuje HWND gry, jej stylu, rozmiaru, pozycji ani focusu.
@@ -70,6 +73,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Gdy wszystkie profile gamingowe zostana usuniete, lista profili pozostaje pusta. Nie jest tworzony profil `Domyslny`.
 - Boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne przy pustej liscie, ale akcje profilu sa wyszarzone. Dostepne pozostaja `+ Dodaj profil` i ustawienia globalne.
 - Dodawanie profilu prowadzi przez flow profilowe: `Ekrany -> Launcher -> Zachowanie profilu -> Skroty profilu -> Zakonczenie`.
+- Nazwy profili gamingowych sa uppercase-only: UI konwertuje wpis podczas edycji, a `AppSettingsValidator` normalizuje takze starsze ustawienia i konfiguracje przy zapisie/odczycie.
 - Krok `Ekrany`:
   - wymaga nazwy profilu,
   - wymaga wyboru co najmniej jednego ekranu,
@@ -114,7 +118,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja: build solution przeszedl, testy .NET `57/57`, build UI przeszedl, pakowanie EXE zakonczone sukcesem. Stabilnosc profili PC, KONSOLA i Work Mode jest teraz weryfikowana manualnie.
+- Ostatnia walidacja: build solution przeszedl, testy .NET `66/66`, build UI i test UTF-8 przeszly, pakowanie EXE zakonczone sukcesem. Stabilnosc profili PC, KONSOLA i Work Mode jest teraz weryfikowana manualnie.
 
 ## Utrzymanie repo
 

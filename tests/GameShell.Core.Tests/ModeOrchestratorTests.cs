@@ -9,6 +9,84 @@ namespace GameShell.Core.Tests;
 public sealed class ModeOrchestratorTests
 {
     [Fact]
+    public async Task EnterWorkMode_RunsCleanupBeforeDisplayRestoreAndPostWorkflow()
+    {
+        var order = new List<string>();
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()),
+            new FakeModeWorkflowService(order),
+            new FakeDisplayTransitionService(order),
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming }),
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterWorkModeAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(["prepare-work", "display-work", "post-work"], order);
+    }
+
+    [Fact]
+    public async Task EnterWorkMode_DisplayFailureDoesNotRunPostWorkflowOrChangeRuntimeMode()
+    {
+        var order = new List<string>();
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()),
+            new FakeModeWorkflowService(order),
+            new FakeDisplayTransitionService(order) { WorkModeResult = DisplayTransitionResult.Fail("SetDisplayConfigFailed", "display failed") },
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterWorkModeAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal(ModeState.Error, result.CurrentState);
+        Assert.Equal(["prepare-work", "display-work"], order);
+        Assert.Equal(GameShellMode.PcGaming, runtime.State.CurrentMode);
+    }
+
+    [Fact]
+    public async Task EnterWorkMode_PostWorkflowFailureIsBestEffortAfterDisplaySuccess()
+    {
+        var order = new List<string>();
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()),
+            new FakeModeWorkflowService(order) { PostWorkResult = ModeWorkflowResult.Fail("desktop icons failed") },
+            new FakeDisplayTransitionService(order),
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterWorkModeAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(ModeState.WorkMode, result.CurrentState);
+        Assert.Equal(GameShellMode.Work, runtime.State.CurrentMode);
+    }
+
+    [Fact]
+    public async Task EnterWorkMode_CallerCancellationReturnsCancelledResult()
+    {
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var display = new FakeDisplayTransitionService { BlockUntilCancellation = true };
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()),
+            new FakeModeWorkflowService(),
+            display,
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        using var cancellation = new CancellationTokenSource();
+        var transition = orchestrator.EnterWorkModeAsync(cancellation.Token);
+        cancellation.Cancel();
+        var result = await transition;
+
+        Assert.Equal(ModeResultStatus.Cancelled, result.Status);
+        Assert.Equal(ModeState.Unknown, result.CurrentState);
+        Assert.Equal("Cancelled", runtime.State.LastResult);
+    }
+
+    [Fact]
     public async Task EnterWorkMode_DoesNotWaitForLegacyCompletionDelay()
     {
         var settings = new AppSettings
@@ -55,6 +133,23 @@ public sealed class ModeOrchestratorTests
 
     private sealed class FakeModeWorkflowService : IModeWorkflowService
     {
+        private readonly List<string>? _order;
+
+        public FakeModeWorkflowService(List<string>? order = null)
+        {
+            _order = order;
+        }
+
+        public ModeWorkflowResult PostWorkResult { get; init; } = ModeWorkflowResult.Ok();
+
+        public Task<ModeWorkflowResult> PrepareWorkWorkflowAsync(
+            AppSettings settings,
+            CancellationToken cancellationToken = default)
+        {
+            _order?.Add("prepare-work");
+            return Task.FromResult(ModeWorkflowResult.Ok());
+        }
+
         public Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
             AppSettings settings,
             GameShellMode mode,
@@ -83,12 +178,23 @@ public sealed class ModeOrchestratorTests
             AppSettings settings,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(ModeWorkflowResult.Ok());
+            _order?.Add("post-work");
+            return Task.FromResult(PostWorkResult);
         }
     }
 
     private sealed class FakeDisplayTransitionService : IDisplayTransitionService
     {
+        private readonly List<string>? _order;
+
+        public FakeDisplayTransitionService(List<string>? order = null)
+        {
+            _order = order;
+        }
+
+        public DisplayTransitionResult WorkModeResult { get; init; } = DisplayTransitionResult.Ok();
+        public bool BlockUntilCancellation { get; init; }
+
         public Task<DisplayTransitionResult> EnterConsoleModeAsync(
             DisplayIdentity? consoleDisplay,
             CancellationToken cancellationToken = default)
@@ -104,9 +210,15 @@ public sealed class ModeOrchestratorTests
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
 
-        public Task<DisplayTransitionResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
+        public async Task<DisplayTransitionResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(DisplayTransitionResult.Ok());
+            _order?.Add("display-work");
+            if (BlockUntilCancellation)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            return WorkModeResult;
         }
 
         public Task<DisplayTransitionResult> TestConsoleDisplayAsync(

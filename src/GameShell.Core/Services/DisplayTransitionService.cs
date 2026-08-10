@@ -289,27 +289,35 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         CancellationToken cancellationToken)
     {
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
+        _logger.LogInformation(
+            "WORK MODE TRANSITION [{TransitionId}] display restore captured current layout. Candidates={CandidateCount}, CurrentDisplays={CurrentDisplayCount}.",
+            WorkModeTransitionContext.CurrentId ?? "-",
+            candidates.Count,
+            current.Displays.Count);
 
-        foreach (var candidate in candidates)
+        for (var candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
         {
+            var candidate = candidates[candidateIndex];
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] display candidate {CandidateIndex} START LayoutId={LayoutId}, DisplayCount={DisplayCount}.", WorkModeTransitionContext.CurrentId ?? "-", candidateIndex + 1, candidate.Id, candidate.Displays.Count);
             if (DisplayLayoutVerifier.MatchesSnapshot(candidate, current))
             {
                 state.CurrentMode = GameShellMode.Work;
                 await _runtimeStateService.SaveAsync(state, cancellationToken);
+                _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] display candidate {CandidateIndex} SUCCESS; current layout already matched.", WorkModeTransitionContext.CurrentId ?? "-", candidateIndex + 1);
                 return DisplayTransitionResult.Ok();
             }
 
             var validate = await _layoutService.ValidateLayoutAsync(candidate, cancellationToken);
             if (!validate.Success)
             {
-                _logger.LogWarning("Work Mode candidate validation failed: {Message}", validate.Message);
+                _logger.LogWarning("WORK MODE TRANSITION [{TransitionId}] display candidate {CandidateIndex} VALIDATION FAILED: {Message}", WorkModeTransitionContext.CurrentId ?? "-", candidateIndex + 1, validate.Message);
                 continue;
             }
 
             var apply = await _layoutService.ApplyLayoutAsync(candidate, cancellationToken);
             if (!apply.Success)
             {
-                _logger.LogWarning("Work Mode candidate apply failed: {Message}", apply.Message);
+                _logger.LogWarning("WORK MODE TRANSITION [{TransitionId}] display candidate {CandidateIndex} APPLY FAILED: {Message}", WorkModeTransitionContext.CurrentId ?? "-", candidateIndex + 1, apply.Message);
                 continue;
             }
 
@@ -317,10 +325,11 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
             {
                 state.CurrentMode = GameShellMode.Work;
                 await _runtimeStateService.SaveAsync(state, cancellationToken);
+                _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] display candidate {CandidateIndex} SUCCESS after verification.", WorkModeTransitionContext.CurrentId ?? "-", candidateIndex + 1);
                 return DisplayTransitionResult.Ok();
             }
 
-            _logger.LogWarning("Work Mode candidate applied but verification failed.");
+            _logger.LogWarning("WORK MODE TRANSITION [{TransitionId}] display candidate {CandidateIndex} applied but verification failed.", WorkModeTransitionContext.CurrentId ?? "-", candidateIndex + 1);
         }
 
         return DisplayTransitionResult.Fail(

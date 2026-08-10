@@ -7,7 +7,7 @@
         Height="700"
         MinHeight="600"
         MinWidth="900"
-        Width="1100"
+        Width="1260"
         Background="#0E1116">
     <Grid>
         <wv2:WebView2 x:Name="WebView" />

@@ -113,7 +113,7 @@ public static class AppSettingsValidator
 
         foreach (var candidate in display.PcGamingProfiles.Where(profile => profile.Layout is not null))
         {
-            var baseName = string.IsNullOrWhiteSpace(candidate.Name) ? "Profil" : candidate.Name.Trim();
+            var baseName = string.IsNullOrWhiteSpace(candidate.Name) ? "PROFIL" : candidate.Name.Trim().ToUpperInvariant();
             var uniqueName = baseName;
             var suffix = 2;
 
@@ -133,7 +133,7 @@ public static class AppSettingsValidator
         {
             normalizedProfiles.Add(new DisplayLayoutProfile
             {
-                Name = "Domyslny",
+                Name = "DOMYSLNY",
                 Layout = display.PcGamingLayout
             });
         }

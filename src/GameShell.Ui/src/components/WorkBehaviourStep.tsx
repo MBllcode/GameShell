@@ -1,4 +1,5 @@
 import { SettingRow } from './SettingRow';
+import { SettingsSection } from './SettingsSection';
 
 type WorkBehaviour = {
   closeLauncher: boolean;
@@ -21,11 +22,17 @@ export function WorkBehaviourStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie Work Mode</h2>
       <p>Ustaw wygląd pulpitu po powrocie do Work Mode.</p>
-      <div className="settings-group">
-        <SettingRow title="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
-        <SettingRow title="Pokaż paski zadań" checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
-        <SettingRow title="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
-        <SettingRow title="Przywróć otwarte okna" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
+      <div className="settings-category-list">
+        <SettingsSection title="LAUNCHER">
+          <SettingRow title="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
+        </SettingsSection>
+        <SettingsSection title="PULPIT">
+          <SettingRow title="Pokaż paski zadań" checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
+          <SettingRow title="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
+        </SettingsSection>
+        <SettingsSection title="OKNA">
+          <SettingRow title="Przywróć otwarte okna" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
+        </SettingsSection>
       </div>
     </div>
   );

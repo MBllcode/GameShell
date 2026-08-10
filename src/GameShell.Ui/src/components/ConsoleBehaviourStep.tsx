@@ -1,5 +1,6 @@
 import type { DisplayLayoutProfile } from '../types/bridge';
 import { SettingRow } from './SettingRow';
+import { SettingsSection } from './SettingsSection';
 
 type PcGamingBehaviour = {
   hideDesktopIcons: boolean;
@@ -45,17 +46,16 @@ export function ConsoleBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie profilu</h2>
-      <section className="settings-section gaming-behaviour-section">
-        <h3>Pulpit po uruchomieniu</h3>
-        <p>Ustaw wygląd pulpitu po uruchomieniu profilu.</p>
-        <div className="field-grid">
-          <div className="profile-target-line" aria-live="polite">
-            <span>Aktywny profil</span>
-            <strong>{selectedProfileLabel}</strong>
-          </div>
+      <p>Ustaw wygląd pulpitu po uruchomieniu profilu.</p>
+      <div className="field-grid">
+        <div className="profile-target-line" aria-live="polite">
+          <span>Aktywny profil</span>
+          <strong>{selectedProfileLabel}</strong>
         </div>
-        <div className="settings-group">
-          {pcGamingBehaviourOptions.map((option) => (
+      </div>
+      <div className="settings-category-list">
+        <SettingsSection title="PULPIT">
+          {pcGamingBehaviourOptions.slice(0, 2).map((option) => (
             <SettingRow
               key={option.key}
               title={option.label}
@@ -65,8 +65,42 @@ export function ConsoleBehaviourStep({
               disabled={!hasProfiles}
             />
           ))}
-        </div>
-      </section>
+          {pcGamingBehaviourOptions.slice(4, 6).map((option) => (
+            <SettingRow
+              key={option.key}
+              title={option.label}
+              description={option.description}
+              checked={pcGamingBehaviour[option.key]}
+              onChange={(value) => onChangeBehaviourFlag(option.key, value)}
+              disabled={!hasProfiles}
+            />
+          ))}
+        </SettingsSection>
+        <SettingsSection title="OKNA">
+          {pcGamingBehaviourOptions.slice(2, 4).map((option) => (
+            <SettingRow
+              key={option.key}
+              title={option.label}
+              description={option.description}
+              checked={pcGamingBehaviour[option.key]}
+              onChange={(value) => onChangeBehaviourFlag(option.key, value)}
+              disabled={!hasProfiles}
+            />
+          ))}
+        </SettingsSection>
+        <SettingsSection title="LAUNCHER">
+          {pcGamingBehaviourOptions.slice(6).map((option) => (
+            <SettingRow
+              key={option.key}
+              title={option.label}
+              description={option.description}
+              checked={pcGamingBehaviour[option.key]}
+              onChange={(value) => onChangeBehaviourFlag(option.key, value)}
+              disabled={!hasProfiles}
+            />
+          ))}
+        </SettingsSection>
+      </div>
     </div>
   );
 }

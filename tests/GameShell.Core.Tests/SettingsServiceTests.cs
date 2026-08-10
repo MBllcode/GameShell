@@ -109,6 +109,38 @@ public sealed class SettingsServiceTests
         Assert.True(validated.PcGaming.BringLauncherToForeground);
     }
 
+    [Fact]
+    public void Validate_NormalizesPcGamingProfileNamesToUppercase()
+    {
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                ActivePcGamingProfileName = "salon",
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "salon",
+                        Layout = new DisplayLayoutSnapshot()
+                    }
+                ],
+                PcGamingProfileConfigurations =
+                [
+                    new PcGamingProfileConfiguration { ProfileName = "salon" }
+                ]
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        var profile = Assert.Single(validated.Display.PcGamingProfiles);
+        var configuration = Assert.Single(validated.Display.PcGamingProfileConfigurations);
+        Assert.Equal("SALON", profile.Name);
+        Assert.Equal("SALON", configuration.ProfileName);
+        Assert.Equal("SALON", validated.Display.ActivePcGamingProfileName);
+    }
+
     [Theory]
     [InlineData(100, 300)]
     [InlineData(700, 700)]

@@ -38,7 +38,10 @@ export function useDashboardActions(options: Options) {
       if (command === 'enterGameShellWithProfile' && typeof payload === 'object' && payload !== null && 'profileName' in payload) {
         const requestedName = String((payload as { profileName?: unknown }).profileName ?? '').trim();
         const matched = profiles.find((profile) => profile.name.toLowerCase() === requestedName.toLowerCase());
-        if (matched) { setActiveProfileName(matched.name); setSelectedProfileName(matched.name); setLayout(matched.layout); }
+        if (matched) {
+          setActiveProfileName(matched.name); setSelectedProfileName(matched.name); setLayout(matched.layout);
+          await saveCurrentSettings(isSetupComplete, { activePcGamingProfileName: matched.name, pcGamingLayout: matched.layout });
+        }
       }
       setMessage(command === 'enterWorkMode' && result.message === 'Enter Work Mode completed.' ? 'Przełączono do Work Mode.' : result.message);
     } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : 'Nie udało się uruchomić trybu.'); }

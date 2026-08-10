@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
+import { normalizePcGamingProfileName } from '../utils';
 import { areIdentitySetsEqual, extractDisplayIdentities, MAX_PROFILE_DISPLAYS, PROFILE_DISPLAY_LIMIT_MESSAGE, sameIdentity } from '../../../utils/displays';
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
@@ -65,7 +66,7 @@ export function useDisplayProfileWorkflow(options: Options) {
   }
 
   async function saveSelectedPcGamingLayout(profileName: string, identities: DisplayIdentity[]) {
-    const trimmedName = profileName.trim();
+    const trimmedName = normalizePcGamingProfileName(profileName);
     if (!trimmedName || identities.length === 0) { setError(messages.invalid); return; }
     if (identities.length > MAX_PROFILE_DISPLAYS) { setError(PROFILE_DISPLAY_LIMIT_MESSAGE); return; }
     const selectedDevices = identities.map((identity) => displays.find((display) => sameIdentity(display.identity, identity)) ?? null).filter((display): display is DisplayDeviceInfo => display !== null);

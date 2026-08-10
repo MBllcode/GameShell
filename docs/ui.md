@@ -49,6 +49,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 
 ## Krok Ekrany
 
+- Nazwy profili gamingowych sa automatycznie zapisywane wielkimi literami; wpisanie malych liter jest natychmiast normalizowane w polu.
 - Walidacja lokalna i rozdzielona:
   - `Podaj nazwe profilu.` pod polem nazwy,
   - `Wybierz co najmniej jeden ekran.` przy liscie ekranow.

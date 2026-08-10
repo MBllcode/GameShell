@@ -272,11 +272,13 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         if (result != DisplayConfigNative.ErrorSuccess)
         {
             _logger.LogError(
-                "SetDisplayConfig failed. ValidateOnly: {ValidateOnly}, ErrorCode: {ErrorCode}, Paths: {PathCount}, Modes: {ModeCount}.",
+                "WORK MODE TRANSITION [{TransitionId}] SetDisplayConfig failed. ValidateOnly={ValidateOnly}, ResultCode={ResultCode}, PathCount={PathCount}, ModeCount={ModeCount}, Flags={Flags}.",
+                WorkModeTransitionContext.CurrentId ?? "-",
                 validateOnly,
                 result,
                 paths.Length,
-                modes.Length);
+                modes.Length,
+                flags);
             return new DisplayOperationResult
             {
                 Success = false,
@@ -285,10 +287,12 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         }
 
         _logger.LogInformation(
-            "SetDisplayConfig {Operation} succeeded. Paths: {PathCount}, Modes: {ModeCount}.",
+            "WORK MODE TRANSITION [{TransitionId}] SetDisplayConfig {Operation} succeeded. PathCount={PathCount}, ModeCount={ModeCount}, Flags={Flags}.",
+            WorkModeTransitionContext.CurrentId ?? "-",
             validateOnly ? "validation" : "apply",
             paths.Length,
-            modes.Length);
+            modes.Length,
+            flags);
 
         return new DisplayOperationResult
         {

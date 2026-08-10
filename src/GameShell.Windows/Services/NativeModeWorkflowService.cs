@@ -9,6 +9,7 @@ namespace GameShell.Windows.Services;
 
 public sealed class NativeModeWorkflowService : IModeWorkflowService
 {
+    private static readonly TimeSpan LauncherShutdownTimeout = TimeSpan.FromSeconds(2);
     private const int SwHide = 0;
     private const int SwShow = 5;
     private const int SwMinimize = 6;
@@ -219,16 +220,6 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             await Task.CompletedTask;
         }, cancellationToken);
 
-        await TryStepAsync("close launcher", warnings, async () =>
-        {
-            if (settings.WorkMode.CloseLauncher)
-            {
-                CloseLauncher(settings);
-            }
-
-            await Task.CompletedTask;
-        }, cancellationToken);
-
         await TryStepAsync("show taskbars", warnings, async () =>
         {
             if (settings.WorkMode.ShowTaskbars)
@@ -241,15 +232,32 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         {
             if (settings.WorkMode.ShowDesktopIcons)
             {
-                RestoreDesktopIconsAsync(settings.WorkMode.DesktopIconsDelaySeconds);
+                await RestoreDesktopIconsAsync(settings.WorkMode.DesktopIconsDelaySeconds, cancellationToken);
             }
-
-            await Task.CompletedTask;
         }, cancellationToken);
 
         return warnings.Count == 0
             ? ModeWorkflowResult.Ok()
             : ModeWorkflowResult.Ok($"Workflow Work Mode zakonczony z ostrzezeniami: {string.Join("; ", warnings)}");
+    }
+
+    public async Task<ModeWorkflowResult> PrepareWorkWorkflowAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        var warnings = new List<string>();
+
+        await TryStepAsync("close launcher", warnings, async () =>
+        {
+            if (settings.WorkMode.CloseLauncher)
+            {
+                await CloseLauncherAsync(settings, cancellationToken);
+            }
+        }, cancellationToken);
+
+        return warnings.Count == 0
+            ? ModeWorkflowResult.Ok()
+            : ModeWorkflowResult.Ok($"Przygotowanie Work Mode zakonczone z ostrzezeniami: {string.Join("; ", warnings)}");
     }
 
     private async Task TryStepAsync(
@@ -259,9 +267,12 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var transitionLabel = WorkModeTransitionContext.CurrentId is null ? "MODE TRANSITION" : "WORK MODE TRANSITION";
+        _logger.LogInformation("{TransitionLabel} [{TransitionId}] STEP START {StepName}.", transitionLabel, WorkModeTransitionContext.CurrentId ?? "-", name);
         try
         {
             await action();
+            _logger.LogInformation("{TransitionLabel} [{TransitionId}] STEP SUCCESS {StepName}.", transitionLabel, WorkModeTransitionContext.CurrentId ?? "-", name);
         }
         catch (OperationCanceledException)
         {
@@ -270,36 +281,32 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         catch (Exception ex)
         {
             warnings.Add(name);
-            _logger.LogWarning(ex, "Native workflow step failed: {StepName}", name);
+            _logger.LogWarning(ex, "{TransitionLabel} [{TransitionId}] STEP FAILED {StepName}.", transitionLabel, WorkModeTransitionContext.CurrentId ?? "-", name);
         }
     }
 
-    private void RestoreDesktopIconsAsync(int delaySeconds)
+    private async Task RestoreDesktopIconsAsync(int delaySeconds, CancellationToken cancellationToken)
     {
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            if (SetDesktopIconsVisible(true))
             {
-                if (SetDesktopIconsVisible(true))
-                {
-                    return;
-                }
-
-                await RetryAsync(() => SetDesktopIconsVisible(true), CancellationToken.None);
-                var fallbackDelaySeconds = Math.Clamp(delaySeconds, 0, 5);
-                if (fallbackDelaySeconds == 0)
-                {
-                    return;
-                }
-
-                await Task.Delay(TimeSpan.FromSeconds(fallbackDelaySeconds));
-                await RetryAsync(() => SetDesktopIconsVisible(true), CancellationToken.None);
+                return;
             }
-            catch (Exception ex)
+
+            await RetryAsync(() => SetDesktopIconsVisible(true), cancellationToken);
+            var fallbackDelaySeconds = Math.Clamp(delaySeconds, 0, 5);
+            if (fallbackDelaySeconds > 0)
             {
-                _logger.LogWarning(ex, "Desktop icon restore failed.");
+                await Task.Delay(TimeSpan.FromSeconds(fallbackDelaySeconds), cancellationToken);
+                await RetryAsync(() => SetDesktopIconsVisible(true), cancellationToken);
             }
-        });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "WORK MODE TRANSITION [{TransitionId}] desktop icon restore failed.", WorkModeTransitionContext.CurrentId ?? "-");
+            throw;
+        }
     }
 
     private static async Task RetryAsync(Func<bool> action, CancellationToken cancellationToken)
@@ -690,9 +697,18 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         }
     }
 
-    private static void CloseLauncher(AppSettings settings)
+    private async Task CloseLauncherAsync(AppSettings settings, CancellationToken cancellationToken)
     {
-        foreach (var processName in GetLauncherProcessNames(settings).Distinct(StringComparer.OrdinalIgnoreCase))
+        var stopwatch = Stopwatch.StartNew();
+        var processNames = GetLauncherProcessNames(settings).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        _logger.LogInformation(
+            "WORK MODE [{TransitionId}] Awaiting=LauncherShutdown Timeout={TimeoutMs}ms TokenCanBeCanceled={TokenCanBeCanceled} TokenIsCancellationRequested={TokenIsCancellationRequested}.",
+            WorkModeTransitionContext.CurrentId ?? "-",
+            LauncherShutdownTimeout.TotalMilliseconds,
+            cancellationToken.CanBeCanceled,
+            cancellationToken.IsCancellationRequested);
+
+        foreach (var processName in processNames)
         {
             foreach (var process in Process.GetProcessesByName(processName))
             {
@@ -707,7 +723,75 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
                 }
                 catch
                 {
-                    // Best-effort launcher shutdown.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+        }
+
+        for (var attempt = 0; stopwatch.Elapsed < LauncherShutdownTimeout; attempt++)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "WORK MODE [{TransitionId}] CANCELLATION DETECTED Operation=LauncherShutdown ExceptionType={ExceptionType} CancellationTokenIsCancellationRequested={CancellationTokenIsCancellationRequested} ExternalTokenIsCancellationRequested={ExternalTokenIsCancellationRequested} TimeoutTokenIsCancellationRequested={TimeoutTokenIsCancellationRequested} ElapsedMs={ElapsedMs}.",
+                    WorkModeTransitionContext.CurrentId ?? "-",
+                    typeof(OperationCanceledException).FullName,
+                    cancellationToken.IsCancellationRequested,
+                    cancellationToken.IsCancellationRequested,
+                    false,
+                    stopwatch.ElapsedMilliseconds);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            var remaining = processNames.SelectMany(Process.GetProcessesByName).ToArray();
+            if (remaining.Length == 0)
+            {
+                _logger.LogInformation(
+                    "WORK MODE [{TransitionId}] LauncherShutdown completed. ElapsedMs={ElapsedMs}.",
+                    WorkModeTransitionContext.CurrentId ?? "-",
+                    stopwatch.ElapsedMilliseconds);
+                return;
+            }
+
+            foreach (var process in remaining)
+            {
+                process.Dispose();
+            }
+
+            _logger.LogInformation(
+                "WORK MODE [{TransitionId}] Awaiting=LauncherShutdownPoll Timeout=200ms TokenCanBeCanceled={TokenCanBeCanceled} TokenIsCancellationRequested={TokenIsCancellationRequested}.",
+                WorkModeTransitionContext.CurrentId ?? "-",
+                cancellationToken.CanBeCanceled,
+                cancellationToken.IsCancellationRequested);
+            await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);
+        }
+
+        _logger.LogWarning(
+            "WORK MODE [{TransitionId}] LauncherShutdown timed out as best-effort operation. TimeoutMs={TimeoutMs} ElapsedMs={ElapsedMs}; continuing Work Mode transition.",
+            WorkModeTransitionContext.CurrentId ?? "-",
+            LauncherShutdownTimeout.TotalMilliseconds,
+            stopwatch.ElapsedMilliseconds);
+
+        foreach (var processName in processNames)
+        {
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    process.Dispose();
                 }
             }
         }

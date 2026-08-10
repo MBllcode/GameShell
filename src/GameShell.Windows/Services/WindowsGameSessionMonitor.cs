@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
+using GameShell.Core.Services;
 using Microsoft.Extensions.Logging;
 
 namespace GameShell.Windows.Services;
@@ -27,6 +28,7 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
     public async Task StartAsync(IReadOnlyCollection<string> processNames, CancellationToken cancellationToken = default)
     {
         await StopAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var normalizedNames = processNames
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => Path.GetFileNameWithoutExtension(name.Trim()))
@@ -39,7 +41,7 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
             _processNames = normalizedNames;
             _detectedProcessId = null;
             _detectedProcessName = null;
-            _monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _monitorCancellation = new CancellationTokenSource();
             _monitorTask = MonitorAsync(_monitorCancellation.Token);
         }
     }
@@ -47,9 +49,12 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         Task? monitorTask;
+        CancellationToken monitorToken;
         lock (_gate)
         {
-            _monitorCancellation?.Cancel();
+            var monitorCancellation = _monitorCancellation;
+            monitorToken = monitorCancellation?.Token ?? CancellationToken.None;
+            monitorCancellation?.Cancel();
             monitorTask = _monitorTask;
             _monitorCancellation = null;
             _monitorTask = null;
@@ -59,7 +64,20 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
 
         if (monitorTask is not null)
         {
-            await monitorTask.WaitAsync(cancellationToken);
+            try
+            {
+                await monitorTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested && monitorToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(
+                    "WORK MODE [{TransitionId}] monitor shutdown cancellation consumed. Operation=GameSessionMonitorShutdown, ExceptionType={ExceptionType}, CancellationTokenIsCancellationRequested={CancellationTokenIsCancellationRequested}, ExternalTokenIsCancellationRequested={ExternalTokenIsCancellationRequested}, MonitorTokenIsCancellationRequested={MonitorTokenIsCancellationRequested}.",
+                    WorkModeTransitionContext.CurrentId ?? "-",
+                    exception.GetType().FullName,
+                    exception.CancellationToken.IsCancellationRequested,
+                    cancellationToken.IsCancellationRequested,
+                    monitorToken.IsCancellationRequested);
+            }
         }
     }
 

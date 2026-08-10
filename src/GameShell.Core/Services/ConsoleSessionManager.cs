@@ -14,6 +14,7 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _stateGate = new();
     private ConsoleSessionSnapshot _snapshot = new();
+    private static long _transitionSequence;
     private bool _disposed;
 
     public ConsoleSessionManager(
@@ -54,34 +55,98 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
     {
         if (!await _operationLock.WaitAsync(0, cancellationToken))
         {
+            _logger.LogWarning("WORK MODE TRANSITION rejected because another session operation is running.");
             return AlreadyRunning("Inna operacja sesji już trwa.");
         }
+
+        var transitionId = Interlocked.Increment(ref _transitionSequence).ToString();
+        using var transitionContext = WorkModeTransitionContext.Begin(transitionId);
+        using var transitionScope = _logger.BeginScope("WORK MODE TRANSITION [{TransitionId}]", transitionId);
 
         try
         {
             var current = GetSnapshot();
+            var settings = await _settingsService.LoadAsync(cancellationToken);
+            var activeLauncher = settings.Display.PcGamingProfileConfigurations
+                .FirstOrDefault(configuration => string.Equals(configuration.ProfileName, current.ProfileName, StringComparison.OrdinalIgnoreCase))?.Launcher.Type
+                ?? settings.Launcher.Type;
+            _logger.LogInformation(
+                "WORK MODE TRANSITION START [CurrentSessionState={CurrentSessionState}, ActiveProfile={ActiveProfile}, ActiveLauncher={ActiveLauncher}, ActiveGamePid={ActiveGamePid}, DisplayState={DisplayState}].",
+                current.State,
+                current.ProfileName ?? "(none)",
+                activeLauncher,
+                "unknown",
+                "runtime state queried by display transition");
+
             if (current.State is ConsoleSessionState.Idle)
             {
-                return await _modeOrchestrator.EnterWorkModeAsync(cancellationToken);
+                _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 1 START session is already idle; delegating display/work restore.", transitionId);
+                var idleResult = await _modeOrchestrator.EnterWorkModeAsync(cancellationToken);
+                if (!idleResult.Success)
+                {
+                    SetState(ConsoleSessionState.Faulted, current.ProfileName, idleResult.Message);
+                    _logger.LogError("WORK MODE TRANSITION FAILED [Step=orchestrator, Message={Message}, CurrentSessionStateAfterFailure={CurrentSessionStateAfterFailure}].", idleResult.Message, ConsoleSessionState.Faulted);
+                }
+                else
+                {
+                    _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 1 SUCCESS; CurrentSessionStateAfterSuccess={CurrentSessionStateAfterSuccess}.", transitionId, ConsoleSessionState.Idle);
+                }
+                return idleResult;
             }
 
             SetState(ConsoleSessionState.ExitingToWorkMode, current.ProfileName, null);
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 1 START stopping game session monitor.", transitionId);
             await _gameSessionMonitor.StopAsync(cancellationToken);
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 1 SUCCESS game session monitor stopped.", transitionId);
+
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 2 START orchestrator restore.", transitionId);
             var result = await _modeOrchestrator.EnterWorkModeAsync(cancellationToken);
             if (result.Success)
             {
                 SetState(ConsoleSessionState.Idle, null, null);
+                _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 2 SUCCESS; CurrentSessionStateAfterSuccess={CurrentSessionStateAfterSuccess}.", transitionId, ConsoleSessionState.Idle);
             }
             else
             {
                 SetState(ConsoleSessionState.Faulted, current.ProfileName, result.Message);
+                _logger.LogError("WORK MODE TRANSITION FAILED [Step=orchestrator, ExceptionType=ModeResult, Message={Message}, CurrentSessionStateAfterFailure={CurrentSessionStateAfterFailure}].", result.Message, ConsoleSessionState.Faulted);
             }
 
             return result;
         }
         catch (Exception exception)
         {
-            return Fail(currentProfileName: GetSnapshot().ProfileName, exception);
+            if (exception is OperationCanceledException canceledException)
+            {
+                const string cancellationMessage = "Operacja Work Mode została anulowana.";
+                SetState(ConsoleSessionState.Faulted, GetSnapshot().ProfileName, cancellationMessage);
+                _logger.LogWarning(
+                    canceledException,
+                    "WORK MODE TRANSITION CANCELLATION DETECTED [TransitionId={TransitionId}, Operation=ConsoleSessionManager, ExceptionType={ExceptionType}, CancellationTokenIsCancellationRequested={CancellationTokenIsCancellationRequested}, ExternalTokenIsCancellationRequested={ExternalTokenIsCancellationRequested}, TimeoutTokenIsCancellationRequested={TimeoutTokenIsCancellationRequested}, ElapsedMs=unknown].",
+                    transitionId,
+                    canceledException.GetType().FullName,
+                    canceledException.CancellationToken.IsCancellationRequested,
+                    cancellationToken.IsCancellationRequested,
+                    false);
+                return new ModeResult
+                {
+                    Status = ModeResultStatus.Cancelled,
+                    CurrentState = ModeState.Unknown,
+                    Message = cancellationMessage
+                };
+            }
+
+            var result = Fail(currentProfileName: GetSnapshot().ProfileName, exception);
+            var inner = exception.InnerException?.ToString() ?? "(none)";
+            _logger.LogError(
+                exception,
+                "WORK MODE TRANSITION FAILED [Step=session, ExceptionType={ExceptionType}, Message={Message}, StackTrace={StackTrace}, InnerException={InnerException}, CurrentSessionStateAfterFailure={CurrentSessionStateAfterFailure}].",
+                exception.GetType().FullName,
+                exception.Message,
+                exception.StackTrace ?? "(none)",
+                inner,
+                GetSnapshot().State);
+            return result;
         }
         finally
         {

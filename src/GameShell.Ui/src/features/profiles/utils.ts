@@ -19,6 +19,10 @@ type PcGamingProfileLauncherMap = Record<string, LauncherType>;
 type PcGamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
 type PcGamingProfileControllerShortcutMap = Record<string, ControllerShortcutSettings | null>;
 
+export function normalizePcGamingProfileName(value: string) {
+  return value.trim().toUpperCase();
+}
+
 export function toPcGamingBehaviourState(behaviour: Partial<PcGamingBehaviourState> | AppSettings['pcGaming'] | null | undefined): PcGamingBehaviourState {
   return {
     hideDesktopIcons: behaviour?.hideDesktopIcons ?? true,

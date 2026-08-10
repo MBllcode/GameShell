@@ -101,7 +101,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             switchingState: ModeState.SwitchingToWork,
             completedState: ModeState.WorkMode,
             transition: _ => _displayTransitionService.EnterWorkModeAsync(cancellationToken),
-            preWorkflow: null,
+            preWorkflow: settings => _modeWorkflowService.PrepareWorkWorkflowAsync(settings, cancellationToken),
             workflow: settings => _modeWorkflowService.RunWorkWorkflowAsync(settings, cancellationToken),
             completionDelay: _ => TimeSpan.Zero,
             runtimeMode: GameShellMode.Work,
@@ -134,20 +134,23 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
         var stopwatch = Stopwatch.StartNew();
         var displayTransitionSucceeded = false;
+        var transitionId = WorkModeTransitionContext.CurrentId ?? "-";
 
         try
         {
             var settings = await _settingsService.LoadAsync(cancellationToken);
             SetStatus(switchingState, operationName, null, null);
-            _logger.LogInformation("{OperationName} started with native DisplayConfig workflow.", operationName);
+            _logger.LogInformation("{OperationName} [{TransitionId}] started with native DisplayConfig workflow. CurrentState={CurrentState}.", operationName, transitionId, GetState());
 
             if (preWorkflow is not null)
             {
+                _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 2 START pre-display workflow.", transitionId);
                 var preWorkflowResult = await preWorkflow(settings);
                 if (!preWorkflowResult.Success)
                 {
                     stopwatch.Stop();
                     var message = preWorkflowResult.Message ?? $"{operationName} pre-workflow failed.";
+                    _logger.LogError("WORK MODE TRANSITION FAILED [Step=pre-display workflow, Message={Message}].", message);
                     SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, message);
                     await SaveRuntimeResultAsync(runtimeMode, "Failed", cancellationToken);
 
@@ -159,13 +162,17 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                         DurationMs = stopwatch.ElapsedMilliseconds
                     };
                 }
+
+                _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 2 SUCCESS pre-display workflow.", transitionId);
             }
 
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 3 START display transition.", transitionId);
             var transitionResult = await transition(settings);
             if (!transitionResult.Success)
             {
                 stopwatch.Stop();
                 var message = transitionResult.UserMessage ?? "Nie udało się przełączyć ekranów.";
+                _logger.LogError("WORK MODE TRANSITION FAILED [Step=display transition, ErrorCode={ErrorCode}, Message={Message}, CurrentStateAfterFailure={CurrentStateAfterFailure}].", transitionResult.ErrorCode, message, GetState());
                 SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, message);
                 await SaveRuntimeResultAsync(runtimeMode, "DisplayFailed", cancellationToken);
 
@@ -179,12 +186,15 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             }
 
             displayTransitionSucceeded = true;
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 3 SUCCESS display transition.", transitionId);
 
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 4 START post-display workflow.", transitionId);
             var workflowResult = await workflow(settings);
             if (!workflowResult.Success)
             {
                 stopwatch.Stop();
                 var message = workflowResult.Message ?? $"{operationName} workflow failed.";
+                _logger.LogError("WORK MODE TRANSITION FAILED [Step=post-display workflow, Message={Message}].", message);
                 if (scriptFailureIsWarning)
                 {
                     SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, message, runtimeMode);
@@ -211,6 +221,8 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 };
             }
 
+            _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 4 SUCCESS post-display workflow.", transitionId);
+
             var delay = completionDelay(settings);
             if (delay > TimeSpan.Zero)
             {
@@ -220,7 +232,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             stopwatch.Stop();
             SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, null, runtimeMode);
             await SaveRuntimeResultAsync(runtimeMode, "Success", cancellationToken);
-            _logger.LogInformation("{OperationName} completed in {DurationMs} ms.", operationName, stopwatch.ElapsedMilliseconds);
+            _logger.LogInformation("{OperationName} [{TransitionId}] completed in {DurationMs} ms. CurrentState={CurrentState}.", operationName, transitionId, stopwatch.ElapsedMilliseconds, GetState());
 
             return new ModeResult
             {
@@ -230,12 +242,21 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 DurationMs = stopwatch.ElapsedMilliseconds
             };
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
             stopwatch.Stop();
             SetStatus(ModeState.Unknown, operationName, stopwatch.ElapsedMilliseconds, "Operation cancelled.");
             await SaveRuntimeResultAsync(runtimeMode, "Cancelled", CancellationToken.None);
-            _logger.LogWarning("{OperationName} cancelled.", operationName);
+            _logger.LogWarning(
+                "{OperationName} CANCELLATION DETECTED [TransitionId={TransitionId}, Operation={OperationName}, ExceptionType={ExceptionType}, CancellationTokenIsCancellationRequested={CancellationTokenIsCancellationRequested}, ExternalTokenIsCancellationRequested={ExternalTokenIsCancellationRequested}, TimeoutTokenIsCancellationRequested={TimeoutTokenIsCancellationRequested}, ElapsedMs={ElapsedMs}].",
+                operationName,
+                transitionId,
+                operationName,
+                exception.GetType().FullName,
+                exception.CancellationToken.IsCancellationRequested,
+                cancellationToken.IsCancellationRequested,
+                false,
+                stopwatch.ElapsedMilliseconds);
 
             return new ModeResult
             {
@@ -252,7 +273,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             {
                 SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, ex.Message, runtimeMode);
                 await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", CancellationToken.None);
-                _logger.LogWarning(ex, "{OperationName} completed display transition but a later workflow step failed.", operationName);
+                _logger.LogWarning(ex, "WORK MODE TRANSITION [{TransitionId}] completed display transition but a later workflow step failed. ExceptionType={ExceptionType}, Message={Message}, InnerException={InnerException}.", transitionId, ex.GetType().FullName, ex.Message, ex.InnerException?.ToString() ?? "(none)");
 
                 return new ModeResult
                 {
@@ -265,7 +286,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
             SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, ex.Message);
             await SaveRuntimeResultAsync(runtimeMode, "Failed", CancellationToken.None);
-            _logger.LogError(ex, "{OperationName} failed.", operationName);
+            _logger.LogError(ex, "WORK MODE TRANSITION FAILED [{TransitionId}] [Step=orchestrator, ExceptionType={ExceptionType}, Message={Message}, StackTrace={StackTrace}, InnerException={InnerException}, CurrentStateAfterFailure={CurrentStateAfterFailure}].", transitionId, ex.GetType().FullName, ex.Message, ex.StackTrace ?? "(none)", ex.InnerException?.ToString() ?? "(none)", GetState());
 
             return new ModeResult
             {

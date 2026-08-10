@@ -1,6 +1,7 @@
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using GameShell.Core.Services;
+using GameShell.Windows.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -54,6 +55,69 @@ public sealed class ConsoleSessionManagerTests
         Assert.Equal(ConsoleSessionState.Idle, manager.GetSnapshot().State);
         Assert.Equal(1, monitor.StopCalls);
         Assert.Equal(1, orchestrator.WorkActivations);
+    }
+
+    [Fact]
+    public async Task WorkModeFailure_LeavesSessionFaulted()
+    {
+        var monitor = new FakeGameSessionMonitor();
+        var orchestrator = new FakeModeOrchestrator
+        {
+            WorkModeResult = new ModeResult
+            {
+                Status = ModeResultStatus.Failed,
+                CurrentState = ModeState.Error,
+                Message = "display restore failed"
+            }
+        };
+        using var manager = CreateManager(orchestrator, monitor);
+
+        await manager.EnterProfileAsync("LivingRoom");
+        var result = await manager.EnterWorkModeAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal(ConsoleSessionState.Faulted, manager.GetSnapshot().State);
+        Assert.Equal("display restore failed", manager.GetSnapshot().LastError);
+    }
+
+    [Fact]
+    public async Task WorkModeTransition_RejectsConcurrentRequest()
+    {
+        var monitor = new FakeGameSessionMonitor();
+        var orchestrator = new FakeModeOrchestrator { BlockWorkMode = true };
+        using var manager = CreateManager(orchestrator, monitor);
+
+        await manager.EnterProfileAsync("LivingRoom");
+        var first = manager.EnterWorkModeAsync();
+        await orchestrator.WorkModeStarted.Task;
+
+        var second = await manager.EnterWorkModeAsync();
+        orchestrator.ReleaseWorkMode.TrySetResult();
+        var firstResult = await first;
+
+        Assert.True(firstResult.Success);
+        Assert.Equal(ModeResultStatus.AlreadyRunning, second.Status);
+        Assert.Equal(1, orchestrator.WorkActivations);
+    }
+
+    [Fact]
+    public async Task GameSessionMonitor_StopConsumesItsOwnCancellation()
+    {
+        using var monitor = new WindowsGameSessionMonitor(NullLogger<WindowsGameSessionMonitor>.Instance);
+
+        await monitor.StartAsync([]);
+        await monitor.StopAsync();
+    }
+
+    [Fact]
+    public async Task GameSessionMonitor_DoesNotUseActivationTokenAsMonitorLifetime()
+    {
+        using var activationCancellation = new CancellationTokenSource();
+        using var monitor = new WindowsGameSessionMonitor(NullLogger<WindowsGameSessionMonitor>.Instance);
+
+        await monitor.StartAsync([], activationCancellation.Token);
+        activationCancellation.Cancel();
+        await monitor.StopAsync();
     }
 
     [Fact]
@@ -181,9 +245,13 @@ public sealed class ConsoleSessionManagerTests
 
     private sealed class FakeModeOrchestrator : IModeOrchestrator
     {
+        public TaskCompletionSource WorkModeStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseWorkMode { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int ProfileActivations { get; private set; }
         public int ConsoleActivations { get; private set; }
         public int WorkActivations { get; private set; }
+        public ModeResult WorkModeResult { get; init; } = SuccessResult(ModeState.WorkMode);
+        public bool BlockWorkMode { get; init; }
 
         public Task<AppStatus> GetStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppStatus());
 
@@ -202,13 +270,30 @@ public sealed class ConsoleSessionManagerTests
         public Task<ModeResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
         {
             WorkActivations++;
-            return Task.FromResult(SuccessResult(ModeState.WorkMode));
+            return EnterWorkModeCoreAsync(cancellationToken);
+        }
+
+        private async Task<ModeResult> EnterWorkModeCoreAsync(CancellationToken cancellationToken)
+        {
+            WorkModeStarted.TrySetResult();
+            if (BlockWorkMode)
+            {
+                await ReleaseWorkMode.Task.WaitAsync(cancellationToken);
+            }
+            return WorkModeResult;
         }
 
         private static ModeResult SuccessResult(ModeState state = ModeState.GameShell) => new()
         {
             Status = ModeResultStatus.Success,
             CurrentState = state
+        };
+
+        private static ModeResult FailedResult(string message) => new()
+        {
+            Status = ModeResultStatus.Failed,
+            CurrentState = ModeState.Error,
+            Message = message
         };
     }
 }
