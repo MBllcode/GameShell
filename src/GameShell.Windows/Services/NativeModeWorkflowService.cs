@@ -137,6 +137,18 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         var behaviour = mode == GameShellMode.PcGaming ? settings.PcGaming : settings.GameShell;
         Process? launcherProcess = null;
 
+        await TryStepAsync("minimize remaining windows after display transition", warnings, async () =>
+        {
+            if (behaviour.MinimizeRemainingWindows)
+            {
+                MinimizeRemainingWindows(settings, behaviour);
+                MinimizeCurrentWindow();
+                MinimizeExplorerWindows();
+            }
+
+            await Task.CompletedTask;
+        }, cancellationToken);
+
         await TryStepAsync("start launcher", warnings, async () =>
         {
             if (behaviour.StartLauncher)
