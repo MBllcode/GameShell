@@ -28,6 +28,7 @@ export function useGameShellBridge({
       sendBridgeCommand<AppStatus>('getStatus'),
       sendBridgeCommand<AppSettings>('getSettings'),
       sendBridgeCommand<DisplayDeviceInfo[]>('getDisplays').catch((reason: unknown) => {
+        console.error('[GameShell] getDisplays failed', reason);
         if (isMounted) {
           callbacksRef.current.onDisplayError(reason instanceof Error ? reason.message : 'Nie udało się odczytać listy ekranów.');
         }
@@ -36,6 +37,7 @@ export function useGameShellBridge({
     ])
       .then(([status, settings, displays]) => {
         if (!isMounted) return;
+        console.info(`[GameShell] getDisplays returned ${displays.length} display(s)`);
         callbacksRef.current.onStatus(status);
         callbacksRef.current.onSettings(settings);
         callbacksRef.current.onDisplays(displays);

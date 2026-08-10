@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react';
+import { sendBridgeCommand } from '../services/webViewBridge';
+import type { DependencyStatus } from '../types/bridge';
 import type { DisplayLayoutProfile } from '../types/bridge';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
@@ -38,6 +41,51 @@ export function LauncherStep({
 }) {
   const hasProfiles = pcGamingProfiles.length > 0;
   const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
+  const [dependencies, setDependencies] = useState<DependencyStatus[]>([]);
+  const [dependencyError, setDependencyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const refreshDependencies = () => {
+      void sendBridgeCommand<DependencyStatus[]>('getDependencies')
+        .then((nextDependencies) => {
+          if (isMounted) {
+            setDependencies(nextDependencies);
+            setDependencyError(null);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setDependencyError('Nie udało się sprawdzić dostępności launcherów.');
+          }
+        });
+    };
+
+    refreshDependencies();
+    const refreshTimer = window.setInterval(refreshDependencies, 2000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, []);
+
+  const selectedLauncherName = launcher === 'Playnite Fullscreen'
+    ? 'Playnite'
+    : launcher === 'Steam Big Picture'
+      ? 'Steam'
+      : 'Xbox App';
+  const getDependencyName = (launcherType: LauncherType) => launcherType === 'Playnite Fullscreen'
+    ? 'Playnite'
+    : launcherType === 'Steam Big Picture'
+      ? 'Steam'
+      : 'Xbox App';
+  const selectedDependency = dependencies.find((dependency) => dependency.name === selectedLauncherName);
+
+  const openDownloadPage = () => {
+    void sendBridgeCommand('openDependencyDownloadPage', { name: selectedLauncherName })
+      .catch(() => setDependencyError('Nie udało się otworzyć strony pobierania launchera.'));
+  };
 
   return (
     <div className="wizard-copy">
@@ -51,20 +99,37 @@ export function LauncherStep({
         </div>
       </div>
       <div className="launcher-grid" aria-label="Launcher" aria-disabled={!hasProfiles}>
-        {launcherOptions.map((item) => (
-          <button
-            className={`launcher-card ${launcher === item.value ? 'selected' : ''}`}
-            key={item.value}
-            type="button"
-            onClick={() => setLauncher(item.value)}
-            disabled={!hasProfiles}
-          >
-            <span className="launcher-badge">{item.badge}</span>
-            <strong>{item.title}</strong>
-            <small>{item.description}</small>
-          </button>
-        ))}
+        {launcherOptions.map((item) => {
+          const dependency = dependencies.find((candidate) => candidate.name === getDependencyName(item.value));
+
+          return (
+            <button
+              className={`launcher-card ${launcher === item.value ? 'selected' : ''}`}
+              key={item.value}
+              type="button"
+              onClick={() => setLauncher(item.value)}
+              disabled={!hasProfiles}
+            >
+              <span className="launcher-badge">{item.badge}</span>
+              <strong>{item.title}</strong>
+              <small>{item.description}</small>
+              {dependency ? <span className={`launcher-status ${dependency.isDetected ? 'detected' : 'missing'}`}>{dependency.isDetected ? 'Wykryto' : 'Nie wykryto'}</span> : null}
+            </button>
+          );
+        })}
       </div>
+      {selectedDependency && !selectedDependency.isDetected ? (
+        <div className="launcher-install-panel" role="alert">
+          <div>
+            <h3>Nie wykryto: {selectedDependency.name}</h3>
+            <p>{selectedDependency.message} Zainstaluj launcher, aby móc uruchomić ten profil.</p>
+          </div>
+          <button className="secondary-button" type="button" onClick={openDownloadPage} disabled={!hasProfiles}>
+            Pobierz {selectedDependency.name}
+          </button>
+        </div>
+      ) : null}
+      {dependencyError ? <p className="error-line" role="alert">{dependencyError}</p> : null}
     </div>
   );
 }

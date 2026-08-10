@@ -30,9 +30,6 @@ internal sealed record NativeDisplayPath
     public DisplayConfigPathInfo PathInfo { get; init; }
     public DisplayConfigSourceMode SourceMode { get; init; }
     public DisplayConfigTargetMode? TargetMode { get; init; }
-    public uint PreferredWidth { get; init; }
-    public uint PreferredHeight { get; init; }
-    public DisplayConfigTargetMode? PreferredTargetMode { get; init; }
 
     public double RefreshRateHz()
     {

@@ -92,8 +92,6 @@ internal sealed class DisplayConfigMapper
             PositionY = path.PositionY,
             Width = path.Width,
             Height = path.Height,
-            NativeWidth = checked((int)path.PreferredWidth),
-            NativeHeight = checked((int)path.PreferredHeight),
             Orientation = MapOrientation(path.Rotation),
             RefreshRateNumerator = path.RefreshRateNumerator,
             RefreshRateDenominator = path.RefreshRateDenominator,

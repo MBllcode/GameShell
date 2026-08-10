@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using GameShell.Core.Models;
 using GameShell.Core.Services;
 using GameShell.Windows.Displays;
@@ -8,6 +9,14 @@ namespace GameShell.Core.Tests;
 
 public sealed class DisplayConfigMapperTests
 {
+    [Fact]
+    public void DisplayConfigNativeStructs_MatchWindowsX64Layout()
+    {
+        Assert.Equal(20, Marshal.SizeOf<DisplayConfigPathSourceInfo>());
+        Assert.Equal(48, Marshal.SizeOf<DisplayConfigPathTargetInfo>());
+        Assert.Equal(72, Marshal.SizeOf<DisplayConfigPathInfo>());
+    }
+
     [Fact]
     public void MapSnapshot_MapsSingleActiveDisplay()
     {

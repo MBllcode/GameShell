@@ -50,11 +50,14 @@ export interface AppStatus {
 export interface DisplayIdentity {
   monitorDevicePath: string;
   friendlyName: string;
+  lastKnownFriendlyName: string;
   edidManufacturerId: number;
   edidProductCodeId: number;
   connectorInstance: number;
   adapterLuid: number;
   targetId: number;
+  sourceId: number;
+  outputTechnology: string;
 }
 
 export interface DisplayDeviceInfo {
@@ -62,6 +65,7 @@ export interface DisplayDeviceInfo {
   name: string;
   isPrimary: boolean;
   isEnabled: boolean;
+  isAvailable: boolean;
   identity: DisplayIdentity;
   sourceDeviceName: string;
   sourceId: number;
@@ -76,11 +80,15 @@ export interface DisplayDeviceInfo {
   refreshRateNumerator: number;
   refreshRateDenominator: number;
   refreshRateHz: number;
+  currentModeAvailable: boolean;
+  preferredWidth: number;
+  preferredHeight: number;
 }
 
 export interface DisplayPathSnapshot {
   identity: DisplayIdentity;
   isActive: boolean;
+  isAvailable: boolean;
   isPrimary: boolean;
   positionX: number;
   positionY: number;
@@ -90,6 +98,9 @@ export interface DisplayPathSnapshot {
   refreshRateNumerator: number;
   refreshRateDenominator: number;
   refreshRateHz: number;
+  currentModeAvailable: boolean;
+  preferredWidth: number;
+  preferredHeight: number;
   sourceId: number;
   targetId: number;
   adapterLuid: number;

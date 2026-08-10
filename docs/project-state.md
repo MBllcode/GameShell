@@ -9,6 +9,15 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Logika domenowa i workflow w `GameShell.Core`.
 - Integracje Windows i DisplayConfig API w `GameShell.Windows`.
 
+## Stabilnosc DisplayConfig
+
+- Display subsystem zostal przywrocony do ostatniego znanego stabilnego stanu z commita `3f9cfb6` (`Initial GameShell snapshot with dynamic profile behaviour`).
+- Runtime uzywa klasycznych flag `QDC_ONLY_ACTIVE_PATHS`, `QDC_ALL_PATHS` oraz `QDC_DATABASE_CURRENT`; nie uzywa `QDC_VIRTUAL_MODE_AWARE`.
+- Apply uzywa klasycznych `DISPLAYCONFIG_PATH_INFO` i `DISPLAYCONFIG_MODE_INFO` z legacy `ModeInfoIdx` oraz flag `SDC_USE_SUPPLIED_DISPLAY_CONFIG`, `SDC_ALLOW_CHANGES`, `SDC_VALIDATE`, `SDC_APPLY` i `SDC_SAVE_TO_DATABASE`.
+- Eksperymentalne virtual-aware flags, packed virtual indices, runtime/discovery merge i dodatkowa walidacja virtual indices nie sa aktywne.
+- ABI native struktur DisplayConfig jest chronione testem rozmiarow: source `20`, target `48`, path `72` bajty.
+- Problem identyfikacji Samsung S90F pozostaje odroczony i nie jest czescia stabilizacji display switching.
+
 ## Frontend po refaktorze
 
 - `App.tsx` jest wyłącznie kompozycją stanu, feature coordinatorów i `AppView`.
@@ -105,7 +114,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja: build UI przeszedł, TypeScript przeszedł, testy .NET `56/56`, pakowanie zakończone sukcesem. `npm run test:mapper` ma nadal niezwiązany failure `Share` vs `Create`.
+- Ostatnia walidacja: build solution przeszedl, testy .NET `57/57`, build UI przeszedl, pakowanie EXE zakonczone sukcesem. Stabilnosc profili PC, KONSOLA i Work Mode jest teraz weryfikowana manualnie.
 
 ## Utrzymanie repo
 

@@ -12,8 +12,8 @@ export function extractDisplayIdentities(layout: DisplayLayoutSnapshot) {
 export function sameIdentity(left: DisplayIdentity, right: DisplayIdentity) {
   const leftPath = left.monitorDevicePath?.trim();
   const rightPath = right.monitorDevicePath?.trim();
-  if (leftPath && rightPath) {
-    return leftPath.toLowerCase() === rightPath.toLowerCase();
+  if (leftPath && rightPath && leftPath.toLowerCase() === rightPath.toLowerCase()) {
+    return true;
   }
 
   if (left.adapterLuid !== 0
@@ -55,8 +55,10 @@ export function summarizeLayout(layout: DisplayLayoutSnapshot) {
   return active.map((display) => `${display.identity.friendlyName || 'Ekran'} ${display.width} × ${display.height}`).join(' / ');
 }
 
-export function formatDisplayResolution(display: { width: number; height: number }) {
-  return display.width > 0 && display.height > 0 ? `${display.width} × ${display.height}` : 'Rozdzielczość nieznana';
+export function formatDisplayResolution(display: { width: number; height: number; preferredWidth?: number; preferredHeight?: number }) {
+  const width = display.width > 0 ? display.width : display.preferredWidth ?? 0;
+  const height = display.height > 0 ? display.height : display.preferredHeight ?? 0;
+  return width > 0 && height > 0 ? `${width} × ${height}` : 'Rozdzielczość nieznana';
 }
 
 export function formatDisplayRefresh(display: { refreshRateHz: number }) {

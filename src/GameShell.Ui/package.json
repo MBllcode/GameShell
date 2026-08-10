@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
+    "test:display-identity": "node --experimental-strip-types --test tests/displayIdentity.test.ts",
     "test:mapper": "node --experimental-strip-types --test tests/controllerDisplayMapper.test.ts",
     "test:encoding": "node --experimental-strip-types --test tests/encoding.test.ts",
     "dev": "vite",
