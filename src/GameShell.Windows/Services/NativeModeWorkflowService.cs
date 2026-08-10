@@ -400,17 +400,39 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
 
     private static void MinimizeRemainingWindows(AppSettings settings, GameShellSettings behaviour)
     {
-        foreach (var process in EnumerateCandidateWindowProcesses(settings, behaviour))
+        var protectedNames = CreateNameSet(behaviour.ProtectedProcessNames);
+        protectedNames.Add(Process.GetCurrentProcess().ProcessName);
+
+        EnumWindows((window, _) =>
         {
+            if (!IsWindowVisible(window))
+            {
+                return true;
+            }
+
             try
             {
-                ShowWindow(process.MainWindowHandle, SwMinimize);
+                GetWindowThreadProcessId(window, out var processId);
+                if (processId == 0)
+                {
+                    return true;
+                }
+
+                using var process = Process.GetProcessById(processId);
+                if (protectedNames.Contains(process.ProcessName))
+                {
+                    return true;
+                }
+
+                ShowWindow(window, SwMinimize);
             }
             catch
             {
                 // Best-effort window cleanup.
             }
-        }
+
+            return true;
+        }, IntPtr.Zero);
     }
 
     private static void MinimizeCurrentWindow()
