@@ -864,6 +864,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IDisplayLayoutApplicationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayTransitionService, DisplayTransitionService>();
         services.AddSingleton<IModeOrchestrator, ModeOrchestrator>();
+        services.AddSingleton<IGameSessionMonitor, WindowsGameSessionMonitor>();
+        services.AddSingleton<ILauncherRecoveryStrategy, WindowsLauncherRecoveryStrategy>();
+        services.AddSingleton<IConsoleSessionManager, ConsoleSessionManager>();
         services.AddSingleton<IModeCommandService, ModeCommandService>();
         services.AddSingleton<IDependencyDetectionService, DependencyDetectionService>();
         services.AddSingleton<SdlControllerShortcutService>();

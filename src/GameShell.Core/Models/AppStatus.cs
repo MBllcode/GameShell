@@ -4,6 +4,7 @@ public sealed class AppStatus
 {
     public ModeState State { get; init; } = ModeState.Unknown;
     public string? CurrentMode { get; init; }
+    public string? SessionState { get; init; }
     public bool IsBusy { get; init; }
     public string DisplayMode { get; init; } = "NativeDisplayConfig";
     public string? SelectedConsoleDisplay { get; init; }

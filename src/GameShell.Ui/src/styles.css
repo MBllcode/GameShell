@@ -4,7 +4,6 @@
   --bg-panel: #1C1F1D;
   --bg-panel-hover: #202421;
   --bg-panel-active: #1E5128;
-  --bg-elevated: #181B19;
   --border-subtle: #2A2D2B;
   --border-default: #343A36;
   --border-active: #4E9F3D;
@@ -1094,19 +1093,25 @@ h1 {
   padding-top: 9px;
 }
 
-.sidebar-state-line {
+.status-row {
   min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 24px;
+  box-sizing: border-box;
 }
 
-.sidebar-state-line strong {
+.status-row > strong,
+.status-row > .sidebar-controller-name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
   font-size: 0.82rem;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1122,7 +1127,7 @@ h1 {
   white-space: nowrap;
 }
 
-.sidebar-state-line .work-return-status {
+.status-row .work-return-status {
   flex: 0 0 auto;
 }
 
@@ -1134,6 +1139,12 @@ h1 {
 
 .sidebar-state-detail {
   color: var(--text-primary) !important;
+}
+
+.sidebar-session-state {
+  color: var(--accent-soft) !important;
+  font-family: var(--font-technical);
+  text-transform: uppercase;
 }
 
 .sidebar-state-action {
@@ -1168,15 +1179,6 @@ h1 {
   text-transform: uppercase;
 }
 
-.sidebar-controller-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.sidebar-controller-name,
 .sidebar-controller-empty {
   min-width: 0;
   margin: 0;
@@ -1186,10 +1188,6 @@ h1 {
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sidebar-controller-row .work-return-status {
-  flex: 0 0 auto;
 }
 
 .sidebar-global-settings {
@@ -1500,15 +1498,10 @@ h1 {
   font-weight: 850;
 }
 
-.section-shortcuts button:hover:not(:disabled) {
+.section-shortcuts button:hover {
   border-color: var(--border-active);
   background: var(--bg-panel-hover);
   box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.section-shortcuts button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
 }
 
 .section-shortcuts span {
@@ -2599,9 +2592,7 @@ h1 {
 }
 
 .keyboard-shortcut-body {
-  grid-template-columns: minmax(0, 420px) auto;
-  align-items: end;
-  justify-content: space-between;
+  grid-template-columns: 1fr;
 }
 
 .shortcut-control-label {
@@ -2609,27 +2600,35 @@ h1 {
   gap: 6px;
 }
 
-.keyboard-shortcut-control-row {
-  min-width: 0;
+.keyboard-shortcut-row {
+  width: 100%;
   display: flex;
-  align-items: start;
-  gap: 8px;
+  align-items: center;
+  gap: 16px;
 }
 
-.keyboard-shortcut-control-row .hotkey-field {
+.keyboard-shortcut-field {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 50%;
 }
 
-.keyboard-shortcut-remove {
+.keyboard-shortcut-field .hotkey-field,
+.keyboard-shortcut-field .hotkey-input {
+  width: 100%;
+}
+
+.keyboard-shortcut-row .shortcut-saved-status {
   flex: 0 0 auto;
-  min-height: var(--button-height);
-  margin-top: 0;
-  padding: 7px 13px;
-  font-family: var(--font-technical);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
+  padding-bottom: 0;
+}
+
+.keyboard-shortcut-row .controller-shortcut-remove {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.shortcut-control-label > .hotkey-field {
+  min-width: 0;
 }
 
 .shortcut-control-label .hotkey-field-hint {
@@ -3320,6 +3319,35 @@ h1 {
 }
 
 @media (max-width: 900px) {
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .app-shell,
+  .setup-window {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .setup-main,
+  .wizard-main,
+  .dashboard-main {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .setup-page {
+    min-height: 0;
+    overflow: visible;
+    padding: 22px 20px;
+  }
+
+  .dashboard-page,
+  .wizard-main .setup-page {
+    padding: 22px 20px;
+  }
+
   .setup-window {
     grid-template-columns: 1fr;
   }
@@ -3459,5 +3487,157 @@ h1 {
   .footer-actions-left,
   .footer-actions-right {
     justify-content: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .setup-page,
+  .dashboard-page,
+  .wizard-main .setup-page {
+    padding: 16px 12px;
+  }
+
+  .wizard-copy h2,
+  .dashboard-section-head h2 {
+    font-size: 1rem;
+  }
+
+  .wizard-copy > p:not(.eyebrow),
+  .dashboard-section-subtitle,
+  .intro {
+    font-size: 0.8rem;
+  }
+
+  .masthead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .status-pill {
+    min-width: 0;
+  }
+
+  .dashboard-section-head,
+  .profile-name-header,
+  .component-row,
+  .field-with-action,
+  .notice-panel,
+  .summary-list div {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-section-head,
+  .profile-name-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .component-actions,
+  .field-with-action,
+  .dialog-actions,
+  .button-row {
+    width: 100%;
+  }
+
+  .component-actions,
+  .dialog-actions,
+  .button-row {
+    justify-content: stretch;
+  }
+
+  .component-actions > button,
+  .field-with-action > button,
+  .dialog-actions > button,
+  .button-row > button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .notice-panel {
+    gap: 6px;
+  }
+
+  .summary-list div {
+    gap: 3px;
+    padding: 8px 10px;
+  }
+
+  .profile-module-header,
+  .profile-module-header-actions,
+  .profile-actions,
+  .profile-settings-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-module-header-actions,
+  .profile-actions,
+  .profile-actions .delete-action,
+  .profile-actions .launch-action {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .profile-module-header-actions > button,
+  .profile-actions > button {
+    width: 100%;
+  }
+
+  .profile-context {
+    align-self: flex-start;
+  }
+
+  .gaming-behaviour-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .setting-row {
+    padding: 10px 11px;
+  }
+
+  .display-grid,
+  .display-list {
+    grid-template-columns: 1fr;
+  }
+
+  .controller-shortcut-actions {
+    flex-direction: column;
+  }
+
+  .controller-shortcut-actions > button,
+  .controller-shortcut-remove {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .setup-footer {
+    position: sticky;
+    bottom: 0;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .footer-actions-left,
+  .footer-actions-right {
+    width: 100%;
+  }
+
+  .footer-actions-left > button,
+  .footer-actions-right > button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .dialog-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .dialog-panel {
+    width: 100%;
+    padding: 14px;
   }
 }

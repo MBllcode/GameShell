@@ -20,4 +20,6 @@ public sealed record ControllerInputSnapshot
     public IReadOnlySet<ControllerButton> PressedButtons { get; }
     public long SequenceNumber { get; }
     public DateTimeOffset Timestamp { get; }
+
+    public bool IsPressed(ControllerButton button) => PressedButtons.Contains(button);
 }

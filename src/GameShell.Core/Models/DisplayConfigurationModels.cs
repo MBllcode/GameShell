@@ -9,6 +9,12 @@ public enum DisplayOrientation
     Unknown = 255
 }
 
+public enum DisplayResolutionMode
+{
+    Native = 0,
+    Saved = 1
+}
+
 public sealed record DisplayIdentity
 {
     public string MonitorDevicePath { get; init; } = string.Empty;
@@ -61,6 +67,8 @@ public sealed class DisplayPathSnapshot
     public int PositionY { get; init; }
     public int Width { get; init; }
     public int Height { get; init; }
+    public int NativeWidth { get; init; }
+    public int NativeHeight { get; init; }
     public DisplayOrientation Orientation { get; init; } = DisplayOrientation.Unknown;
     public uint RefreshRateNumerator { get; init; }
     public uint RefreshRateDenominator { get; init; }
@@ -69,6 +77,7 @@ public sealed class DisplayPathSnapshot
     public long AdapterLuid { get; init; }
     public string SourceDeviceName { get; init; } = string.Empty;
     public string ConnectionTechnology { get; init; } = string.Empty;
+    public DisplayResolutionMode ResolutionMode { get; init; } = DisplayResolutionMode.Native;
 
     public double RefreshRateHz => RefreshRateDenominator == 0
         ? 0

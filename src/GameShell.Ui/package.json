@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "test:mapper": "node --experimental-strip-types --test tests/controllerDisplayMapper.test.ts",
+    "test:encoding": "node --experimental-strip-types --test tests/encoding.test.ts",
     "dev": "vite",
     "preview": "vite preview"
   },

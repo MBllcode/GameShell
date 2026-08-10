@@ -35,6 +35,7 @@ export type ModeState = 'Unknown' | 'WorkMode' | 'GameShell' | 'SwitchingToConso
 export interface AppStatus {
   state: ModeState;
   currentMode: string | null;
+  sessionState: string | null;
   isBusy: boolean;
   displayMode: string;
   selectedConsoleDisplay: string | null;

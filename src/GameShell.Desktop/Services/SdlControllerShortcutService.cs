@@ -313,6 +313,7 @@ public sealed class SdlControllerShortcutService : IDisposable
         long sequenceNumber;
         bool stateChanged;
         string capturedButtonsForLog;
+        var leftStickY = SdlNative.SDL_GetGamepadAxis(_gamepad, SdlNative.SdlGamepadAxis.LeftY);
         lock (_syncRoot)
         {
             controllerId = _lastControllerId!;

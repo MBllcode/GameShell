@@ -9,6 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>GameShell</AssemblyName>
     <RootNamespace>GameShell.Desktop</RootNamespace>
+    <ApplicationIcon>Assets\GameShell.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,9 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\GameShell.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Resource Include="Assets\GameShell.ico" />
     <Content Include="Assets\GameShellShortcut.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

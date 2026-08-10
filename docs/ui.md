@@ -7,6 +7,23 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Interfejs ma pozostac ciemny, techniczny i oszczedny.
 - Nie zmieniamy logiki biznesowej podczas prac stricte wizualnych.
 - Potwierdzenia wymagajace decyzji uzytkownika realizujemy modalami aplikacji, nie `window.confirm`.
+- UI pokazuje tylko stabilne funkcje GameShell: profile ekranów, lifecycle sesji, launcher/recovery, zachowanie pulpitu i skróty kontrolera. Nie pokazuje opcji korekcji fullscreen, borderless ani rozdzielczości gry.
+
+## Struktura frontendu
+
+- `App.tsx` odpowiada za wysokopoziomowe składanie stanu, feature coordinatorów i `AppView`; nie zawiera stron ani lokalnych efektów workflow.
+- `features/dashboard` zawiera dashboard, jego model, akcje oraz rozpoczęcie/edycję flow profilu.
+- `features/profiles` zawiera edycję profili, mutacje profilu i konfigurację ekranów.
+- `features/settings` zawiera stan formularza, hydratację, payload i persystencję ustawień.
+- `features/setup` zawiera flow kreatora, nawigację, zapis oraz model strony setupu.
+- Nie dodajemy barrel files `index.ts`, jeśli nie są potrzebne do konkretnego importu.
+
+## Encoding
+
+- Wszystkie frontendowe pliki źródłowe `.ts`, `.tsx`, `.css`, `.html` i `.json` zapisujemy jako UTF-8.
+- `src/index.html` ma pojedynczy `<meta charset="UTF-8" />` wysoko w sekcji `head`.
+- Nie naprawiamy tekstu w runtime przez dekodowanie bajtów, `TextDecoder`, `decodeURIComponent`, `escape` ani konwersje ANSI.
+- `npm run test:encoding` skanuje frontendowe źródła i pilnuje kluczowych polskich napisów oraz braku mojibake.
 
 ## Tokens i styl
 
@@ -26,6 +43,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Sidebar pokazuje aktualny tryb i skrocone fakty konfiguracji.
 - W module `STAN` sidebar pokazuje drugorzedny status kontrolera z realtime `controllerStatus`; przy braku urzadzenia wyswietla `Brak kontrolera`, bez badge `ROZLACZONY`.
 - Work Mode jest prezentowany w obszarze sidebar/profilu, nie jako glowna karta quick-switch.
+- Przy aktywnej sesji konsolowej sidebar pokazuje osobny, zwiezly status lifecycle sesji obok informacji o trybie; status nie wymaga osobnego pollingu UI. Jest to status nadzoru GameShell, a nie zastapienie lifecycle launchera.
 - Dashboard ma byc zwarty i czytelny; unikamy pustych, wysokich kart bez informacji.
 - Przy pustej liscie profili boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne. Profilowe akcje i ustawienia sa wtedy wyszarzone oraz nieaktywne; `+ Dodaj profil` i ustawienia globalne pozostaja aktywne.
 
@@ -65,5 +83,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 ## Checklista przed commit
 
 - `npm run build` w `src/GameShell.Ui`
+- `npm run test:encoding` w `src/GameShell.Ui`
 - `dotnet build GameShell.sln`
 - (zalecane) `dotnet test GameShell.sln`
+

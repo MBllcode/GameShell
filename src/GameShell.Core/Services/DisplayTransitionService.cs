@@ -51,14 +51,6 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
 
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
-        if (DisplayLayoutVerifier.IsConsoleLayout(current, consoleDisplays))
-        {
-            state.CurrentMode = GameShellMode.Console;
-            EnsureWorkReturnLayout(state, current);
-            await _runtimeStateService.SaveAsync(state, cancellationToken);
-            return DisplayTransitionResult.Ok();
-        }
-
         state.PreviousDisplayLayout = current;
         EnsureWorkReturnLayout(state, current);
         await _runtimeStateService.SaveAsync(state, cancellationToken);
@@ -125,14 +117,6 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
-
-        if (DisplayLayoutVerifier.IsConsoleLayout(current, [targetDisplay]))
-        {
-            state.CurrentMode = GameShellMode.PcGaming;
-            EnsureWorkReturnLayout(state, current);
-            await _runtimeStateService.SaveAsync(state, cancellationToken);
-            return DisplayTransitionResult.Ok();
-        }
 
         state.PreviousDisplayLayout = current;
         EnsureWorkReturnLayout(state, current);
@@ -248,7 +232,8 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
         var target = await buildTargetLayout(current);
 
-        if (DisplayLayoutVerifier.MatchesSnapshot(target, current))
+        if (DisplayLayoutVerifier.MatchesSnapshot(target, current)
+            && targetMode is not (GameShellMode.Console or GameShellMode.PcGaming))
         {
             state.CurrentMode = targetMode;
             if (targetMode is GameShellMode.Console or GameShellMode.PcGaming)

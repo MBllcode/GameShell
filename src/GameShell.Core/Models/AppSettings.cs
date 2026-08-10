@@ -88,6 +88,8 @@ public class GameShellSettings
 
 public sealed class PcGamingSettings : GameShellSettings
 {
+    public List<string> GameProcessNames { get; set; } = [];
+
     public PcGamingSettings()
     {
         HideDesktopIcons = true;

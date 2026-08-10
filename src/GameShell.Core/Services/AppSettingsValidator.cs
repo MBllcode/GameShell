@@ -409,6 +409,7 @@ public static class AppSettingsValidator
             BringLauncherToForeground = source.BringLauncherToForeground,
             ProtectedProcessNames = source.ProtectedProcessNames is null ? [] : [..source.ProtectedProcessNames],
             CloseOnlyProcessNames = source.CloseOnlyProcessNames is null ? [] : [..source.CloseOnlyProcessNames],
+            GameProcessNames = source.GameProcessNames is null ? [] : [..source.GameProcessNames],
             CompletionDelaySeconds = source.CompletionDelaySeconds
         };
     }

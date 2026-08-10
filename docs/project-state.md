@@ -9,11 +9,48 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Logika domenowa i workflow w `GameShell.Core`.
 - Integracje Windows i DisplayConfig API w `GameShell.Windows`.
 
+## Frontend po refaktorze
+
+- `App.tsx` jest wyłącznie kompozycją stanu, feature coordinatorów i `AppView`.
+- `features/dashboard` posiada dashboardowy model i akcje, w tym rozpoczęcie oraz edycję flow profilu.
+- `features/profiles` posiada edycję profili, mutacje i stan konfiguracji ekranów.
+- `features/settings` posiada formularz ustawień, hydratację, budowanie payloadu i persystencję.
+- `features/setup` posiada `setupFlow.ts`, stan kreatora, nawigację, zapis oraz model strony setupu.
+- Przeniesienie plików nie zmienia publicznych API hooków, UI, bridge ani kompozycji `App.tsx`.
+
+## Encoding UI
+
+- Źródłowy problem mojibake był fizycznie w dwóch plikach wydzielonych po refaktorze: `useDashboardSetupActions.ts` i `setupFlow.ts`.
+- Przywrócono historyczne polskie stringi bez zmiany copy ani znaczenia.
+- Wszystkie źródła frontendowe `.ts`, `.tsx`, `.css`, `.html` i `.json` przechodzą ścisłe dekodowanie UTF-8.
+- `src/GameShell.Ui/index.html` zawiera pojedynczy charset UTF-8.
+- WebView2 ładuje statyczny build przez virtual host, a bridge używa natywnego JSON Unicode; nie ma ręcznych konwersji ANSI/ASCII.
+- Regression check: `npm run test:encoding`.
+
 ## Tryby aplikacji
 
 - `Console Mode`: aktywuje jeden wybrany ekran konsolowy.
 - `PC Gaming`: stosuje zapisany profil ekranow (fallback do Console Mode).
 - `Work Mode`: przywraca `WorkReturnLayout` zapisany przed sesja gamingowa.
+
+## Console Session i launcher lifecycle
+
+- `ConsoleSessionManager` jest warstwa aplikacyjna nad `ModeOrchestrator`; nie kopiuje logiki DisplayConfig, launchera ani Work Mode.
+- Wszystkie wejscia profilu (dashboard, tray, hotkey, kontroler i single-instance) nadal przechodza przez `IModeCommandService`, ktory deleguje operacje sesji do jednego managera.
+- Stany sesji: `Idle`, `EnteringProfile`, `LauncherActive`, `LaunchingGame`, `GameActive`, `ReturningToLauncher`, `ExitingToWorkMode`, `Faulted`.
+- Udana aktywacja profilu wykonuje istniejacy workflow i ustawia `LauncherActive`. Playnite zachowuje normalny lifecycle gry; GameShell nie przywraca ani nie restartuje launchera po kazdym zamknieciu gry.
+- Jawne Work Mode zatrzymuje monitor, wykonuje istniejacy workflow przywracania i konczy sesje stanem `Idle`.
+- Duplikaty aktywacji sa odrzucane, przejscia sa serializowane, a bledy sa logowane i koncza sie stanem `Faulted`, z mozliwoscia ponowienia komendy.
+- `IGameSessionMonitor` jest osobnym kontraktem. Implementacja Windows sprawdza tylko jawnie skonfigurowane `PcGaming.GameProcessNames`; pusta lista oznacza brak heurystycznego wykrywania gry.
+- Po `GameDetected` GameShell zmienia wyłącznie stan sesji na `GameActive` i monitoruje zakończenie skonfigurowanego procesu. Nie modyfikuje HWND gry, jej stylu, rozmiaru, pozycji ani focusu.
+- GameShell celowo nie wymusza fullscreen/windowed/borderless, aspect ratio, wewnętrznej rozdzielczości, `Alt+Enter` ani syntetycznego inputu. Te ustawienia pozostają odpowiedzialnością gry.
+- `ILauncherRecoveryStrategy` dziala tylko po `GameExited`: czeka 3 sekundy, sprawdza widoczne okno i `Process.Responding`, probuje przywrocic istniejace okno, a dopiero potem wykonuje graceful close, ograniczone terminate i restart. Normalny powrot Playnite nie powoduje restartu.
+- Recovery po game exit ma bounded graceful close, launcher-only terminate, restart z istniejącej konfiguracji launchera i oczekiwanie na zdrowe okno; nie uruchamia Work Mode automatycznie.
+- `SetFocus` nie jest wywolywane z watku GameShell, bo nie jest to watek UI Playnite. Uzywane sa tylko `ShowWindow(SW_RESTORE)`, `BringWindowToTop` i `SetForegroundWindow`.
+- W kodzie GameShell nie ma restartu SDL/controller service ani konfiguracji Steam Input. Dla launchera Steam logowany jest typ launchera i lista procesow, ale Steam Input nie jest zmieniany.
+- Recovery ma implementacje Windows z obsluga Playnite oraz bezpiecznym fallbackiem opartym o skonfigurowany executable launchera. Nie jest czescia normalnego workflow `NativeModeWorkflowService`.
+- Manager i monitor sa singletonami DI, wiec dzialaja w tray/background bez MainWindow i WebView.
+- Sidebar dashboardu pokazuje niepusty stan sesji (`launcher aktywny`, `gra aktywna`, `powrot do launchera` lub `blad sesji`) odczytany z tego samego `getStatus`, ktory odswieza pozostale dane trybu.
 
 ## Stan UI
 
@@ -60,13 +97,21 @@ Aktualne, robocze podsumowanie stanu projektu.
 ## Build, test, package
 
 - Build calosci: `./build.ps1`
+- Build UI: `Set-Location .\src\GameShell.Ui; npm run build`
+- TypeScript: `Set-Location .\src\GameShell.Ui; npx tsc -b --pretty false`
+- Regression check encodingu: `Set-Location .\src\GameShell.Ui; npm run test:encoding`
 - Testy: `dotnet test GameShell.sln`
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
+- Ostatnia walidacja: build UI przeszedł, TypeScript przeszedł, testy .NET `56/56`, pakowanie zakończone sukcesem. `npm run test:mapper` ma nadal niezwiązany failure `Share` vs `Create`.
 
 ## Utrzymanie repo
 
 - Trzymamy aktualne bundlowane assety UI w `src/GameShell.Desktop/wwwroot`.
 - Fallback EXE z timestampem (`artifacts/installer/GameShell-*.exe`) sa traktowane jako tymczasowe artefakty i sa ignorowane przez git.
 - Aktualny screenshot dashboardu trzymamy jako `docs/panel-glowny.png`.
+
+## Controller stack
+
+The controller stack is physical controller -> SDL3 -> GameShell shortcuts and realtime status. GameShell does not intercept controller input for games and does not display an overlay over the game.
