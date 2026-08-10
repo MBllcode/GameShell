@@ -9,7 +9,8 @@ public sealed class AppStatus
     public string DisplayMode { get; init; } = "NativeDisplayConfig";
     public string? SelectedConsoleDisplay { get; init; }
     public bool HasPcGamingLayout { get; init; }
-    public string ActiveLauncher { get; init; } = "Playnite";
+    public string? ActiveProfileName { get; init; }
+    public string? ActiveLauncher { get; init; }
     public string? LastOperation { get; init; }
     public long? LastOperationDurationMs { get; init; }
     public string? LastError { get; init; }

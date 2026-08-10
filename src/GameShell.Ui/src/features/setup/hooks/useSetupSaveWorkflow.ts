@@ -1,15 +1,16 @@
 import type { OverwriteProfileAction } from '../../profiles/hooks/useDisplayProfileWorkflow';
+import type { SetupMode } from '../setupFlow';
 
 type Options = {
-  isCreatingProfileFlow: boolean;
+  setupMode: SetupMode;
   currentStepId: string;
   commitGamingDisplayDraft: (allowOverwrite: boolean, action: OverwriteProfileAction) => Promise<boolean>;
   persistAndReturnToDashboard: () => Promise<void>;
 };
 
-export function useSetupSaveWorkflow({ isCreatingProfileFlow, currentStepId, commitGamingDisplayDraft, persistAndReturnToDashboard }: Options) {
+export function useSetupSaveWorkflow({ setupMode, currentStepId, commitGamingDisplayDraft, persistAndReturnToDashboard }: Options) {
   return async function saveAndReturnToDashboard() {
-    if (isCreatingProfileFlow || currentStepId === 'gaming-display') {
+    if (setupMode === 'CreateProfile' || currentStepId === 'gaming-display') {
       const committed = await commitGamingDisplayDraft(false, 'save');
       if (!committed) return;
       await new Promise((resolve) => setTimeout(resolve, 0));

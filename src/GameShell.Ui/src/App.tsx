@@ -14,20 +14,25 @@ import { useAppRuntimeState } from './features/app/hooks/useAppRuntimeState';
 import { useSetupFlowController } from './features/setup/hooks/useSetupFlowController';
 import { AppView } from './AppView';
 import { resolvePreferredProfileNameForPostSaveSelection } from './features/profiles/utils';
+import { resolveWorkingProfileName } from './features/setup/setupRouting';
 
 export function App() {
   const runtimeState = useAppRuntimeState();
   const { status, setStatus, settings, setSettings, isRemovingProfile, setIsRemovingProfile, activeModeAction, setActiveModeAction } = runtimeState;
   const setupState = useSetupWorkflowState();
-  const { stepIndex, setStepIndex, message, setMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading, isVeryFirstConfiguration, setIsVeryFirstConfiguration, isSetupComplete, setIsSetupComplete, isEditingSection, setIsEditingSection, isCreatingProfileFlow, setIsCreatingProfileFlow, hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow, hasUnsavedChanges, setHasUnsavedChanges, pendingNavigationAction, setPendingNavigationAction, showUnsavedDialog, setShowUnsavedDialog, showOverwriteProfileDialog, setShowOverwriteProfileDialog, pendingOverwriteProfileAction, setPendingOverwriteProfileAction, displayProfileDraft, displayValidationState, setDisplayValidationState, displayProfileDraftRef, pendingSettingsOverrideRef, syncDisplayProfileDraft, markUnsavedChanges, handleDisplayDraftChange, handleDisplayValidationStateChange } = setupState;
+  const { stepIndex, setStepIndex, message, setMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading, setupMode, setSetupMode, isHydrated, setIsHydrated, bootstrapRoute, setBootstrapRoute, editingProfileId, setEditingProfileId, isSetupComplete, setIsSetupComplete, hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow, hasUnsavedChanges, setHasUnsavedChanges, pendingNavigationAction, setPendingNavigationAction, showUnsavedDialog, setShowUnsavedDialog, showOverwriteProfileDialog, setShowOverwriteProfileDialog, pendingOverwriteProfileAction, setPendingOverwriteProfileAction, displayProfileDraft, displayValidationState, setDisplayValidationState, displayProfileDraftRef, pendingSettingsOverrideRef, syncDisplayProfileDraft, markUnsavedChanges, handleDisplayDraftChange, handleDisplayValidationStateChange } = setupState;
+  const isVeryFirstConfiguration = setupMode === 'FirstRun';
+  const isEditingSection = setupMode === 'EditProfile' || setupMode === 'EditGlobal';
+  const isCreatingProfileFlow = setupMode === 'CreateProfile';
   const [selectedPcGamingBehaviourProfileName, setSelectedPcGamingBehaviourProfileName] = useState('');
+  const workingProfileName = resolveWorkingProfileName(setupMode, displayProfileDraft.profileName, selectedPcGamingBehaviourProfileName);
   const displayState = useDisplayConfigurationState({ selectedProfileName: selectedPcGamingBehaviourProfileName });
   const { displays, setDisplays, isRefreshingDisplays, setIsRefreshingDisplays, displayListError, setDisplayListError, selectedConsoleDisplay, setSelectedConsoleDisplay, selectedConsoleDisplays, setSelectedConsoleDisplays, pcGamingLayout, setPcGamingLayout, pcGamingProfiles, setPcGamingProfiles, activePcGamingProfileName, setActivePcGamingProfileName, pcGamingProfileBehaviours, setPcGamingProfileBehaviours, pcGamingProfileLaunchers, setPcGamingProfileLaunchers, pcGamingProfileHotkeys, setPcGamingProfileHotkeys, pcGamingProfileControllerShortcuts, setPcGamingProfileControllerShortcuts, workModeControllerShortcut, setWorkModeControllerShortcut, profileHotkeyValidationError, setProfileHotkeyValidationError, profileControllerValidationError, setProfileControllerValidationError } = displayState;
   const formState = useSettingsFormState();
   const { hotkeys, setHotkeys, launcher, setLauncher, consoleBehaviour, setConsoleBehaviour, pcGamingBehaviour, setPcGamingBehaviour, workBehaviour, setWorkBehaviour, finishOptions, setFinishOptions } = formState;
 
   const profileFeature = useProfileEditingFeature({
-    selectedProfileName: selectedPcGamingBehaviourProfileName,
+    workingProfileName,
     pcGamingBehaviour,
     profileBehaviours: pcGamingProfileBehaviours,
     profileLaunchers: pcGamingProfileLaunchers,
@@ -51,7 +56,7 @@ export function App() {
   const { mutations: profileMutations, controllerCapture } = profileFeature;
 
   const setupPageActions = useSetupPageActions({
-    selectedProfileName: selectedPcGamingBehaviourProfileName,
+    workingProfileName,
     setLauncher,
     setWorkBehaviour,
     setFinishOptions,
@@ -69,8 +74,9 @@ export function App() {
     displayProfileDraftRef,
     displays,
     profiles: pcGamingProfiles,
-    selectedProfileName: selectedPcGamingBehaviourProfileName,
+    selectedProfileName: workingProfileName,
     isCreatingProfileFlow,
+    isFirstRun: isVeryFirstConfiguration,
     isEditingSection,
     pcGamingBehaviour,
     launcher,
@@ -101,11 +107,9 @@ export function App() {
 
   const flow = useSetupFlowController({
     stepIndex,
-    isVeryFirstConfiguration,
-    isEditingSection,
-    isCreatingProfileFlow,
+    setupMode,
     activePcGamingProfileName,
-    selectedProfileName: selectedPcGamingBehaviourProfileName,
+    selectedProfileName: workingProfileName,
     profiles: pcGamingProfiles,
     profileBehaviours: pcGamingProfileBehaviours,
     profileLaunchers: pcGamingProfileLaunchers,
@@ -145,7 +149,9 @@ export function App() {
     workBehaviour,
     finishOptions,
     isSetupComplete,
-    isEditingSection,
+    bootstrapRoute,
+    setEditingProfileId,
+    setStepIndex,
     pcGamingProfilesCount: pcGamingProfiles.length,
     preferredProfileName: () => resolvePreferredProfileNameForPostSaveSelection(displayProfileDraftRef.current.profileName, selectedPcGamingBehaviourProfileName),
     pendingSettingsOverrideRef,
@@ -166,13 +172,14 @@ export function App() {
     setPcGamingBehaviour,
     setWorkBehaviour,
     setFinishOptions,
-    setIsVeryFirstConfiguration,
+    setupMode,
     setIsSetupComplete,
     setHasUnsavedChanges,
     setSettings,
     setStatus,
-    setIsEditingSection,
-    setIsCreatingProfileFlow,
+    setSetupMode,
+    setIsHydrated,
+    setBootstrapRoute,
     setIsSaving,
     setError,
     setMessage,
@@ -215,22 +222,22 @@ export function App() {
     setMessage,
     syncDisplayProfileDraft,
     setStepIndex,
-    setIsEditingSection,
-    setIsCreatingProfileFlow,
+    setSetupMode,
     setHasAdvancedInCreateProfileFlow,
     setIsSetupComplete,
     setProfileHotkeyValidationError,
     setProfileControllerValidationError,
     setHotkeys,
-    setShowOverwriteProfileDialog
+    setPcGamingBehaviour,
+    setShowOverwriteProfileDialog,
+    setBootstrapRoute,
+    setEditingProfileId
   });
 
   const setupNavigationFeature = useSetupNavigationFeature({
-    isVeryFirstConfiguration,
-    isCreatingProfileFlow,
+    setupMode,
     hasAdvancedInCreateProfileFlow,
     hasUnsavedChanges,
-    isEditingSection,
     isLastStep,
     canSelectSidebarStep,
     currentStepId: currentStep.id,
@@ -256,8 +263,9 @@ export function App() {
     setMessage,
     setStepIndex,
     setHasAdvancedInCreateProfileFlow,
-    setIsEditingSection,
-    setIsCreatingProfileFlow,
+    setSetupMode,
+    setBootstrapRoute,
+    setEditingProfileId,
     setIsSetupComplete,
     setIsSaving,
     setHasUnsavedChanges
@@ -276,12 +284,13 @@ export function App() {
     flow,
     footerMessage,
     status,
-    selectedProfileName: selectedPcGamingBehaviourProfileName
+    selectedProfileName: workingProfileName
   });
 
   return <AppView
     isInitialLoading={isInitialLoading}
-    isSetupComplete={isSetupComplete}
+    isHydrated={isHydrated}
+    bootstrapRoute={bootstrapRoute}
     dashboard={dashboardPage}
     setup={setupPage}
   />;

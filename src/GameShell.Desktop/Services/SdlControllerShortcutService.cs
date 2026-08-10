@@ -544,12 +544,15 @@ public sealed class SdlControllerShortcutService : IDisposable
         lock (_syncRoot) { if (_isExecutingCommand) return; _isExecutingCommand = true; }
         try
         {
+            _logger.LogInformation(
+                "[WORKMODE REQUEST] Timestamp={Timestamp} TransitionId=controller-shortcut.",
+                DateTimeOffset.Now.ToString("O"));
             var result = await _modeCommandService.EnterWorkModeAsync(cancellationToken);
             _logger.LogInformation(
                 "Controller shortcut Work Mode transition finished. Status={Status}, Message={Message}.",
                 result.Status,
                 result.Message);
-            _webViewBridge.NotifyStatusChanged();
+            _webViewBridge.NotifyStatusChanged("controller-shortcut");
         }
         catch (Exception ex) { _logger.LogWarning(ex, "Controller shortcut failed for Work Mode."); }
         finally { lock (_syncRoot) { _isExecutingCommand = false; } }

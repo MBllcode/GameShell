@@ -9,9 +9,11 @@ export type StepId =
   | 'app-behaviour'
   | 'finish';
 
+export type SetupMode = 'None' | 'FirstRun' | 'CreateProfile' | 'EditProfile' | 'EditGlobal';
+
 export type SetupStep = { id: StepId; title: string; subtitle: string };
 
-export const steps: SetupStep[] = [
+export const FIRST_RUN_STEPS: SetupStep[] = [
   { id: 'welcome', title: 'Start', subtitle: 'Najważniejsze ustawienia' },
   { id: 'gaming-display', title: 'Ekrany', subtitle: 'Ekrany używane przez profil' },
   { id: 'launcher', title: 'Launcher profilu', subtitle: 'Aplikacja uruchamiana z profilem' },
@@ -23,22 +25,16 @@ export const steps: SetupStep[] = [
   { id: 'finish', title: 'Zakończenie', subtitle: 'Sprawdź ustawienia profilu' },
 ];
 
-export const profileSettingsStepIds: StepId[] = ['gaming-display', 'launcher', 'console-behaviour', 'controller'];
-export const globalSettingsStepIds: StepId[] = ['work-behaviour', 'work-shortcuts', 'app-behaviour'];
+export const PROFILE_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['gaming-display', 'launcher', 'console-behaviour', 'controller'].includes(step.id));
+export const GLOBAL_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['work-behaviour', 'work-shortcuts', 'app-behaviour'].includes(step.id));
+export const steps = FIRST_RUN_STEPS;
 
-export function isGlobalSettingsStep(stepId: StepId) {
-  return globalSettingsStepIds.includes(stepId);
+export function getSetupSteps(mode: SetupMode) {
+  return mode === 'FirstRun' ? FIRST_RUN_STEPS : mode === 'EditGlobal' ? GLOBAL_STEPS : PROFILE_STEPS;
 }
 
-export function resolveSetupSteps(isVeryFirstConfiguration: boolean, isCreatingProfileFlow: boolean, isEditingSection: boolean, currentStepId: StepId) {
-  const activeStepIds = isVeryFirstConfiguration
-    ? steps.map((step) => step.id)
-    : isCreatingProfileFlow
-      ? profileSettingsStepIds
-      : isEditingSection
-        ? isGlobalSettingsStep(currentStepId) ? globalSettingsStepIds : profileSettingsStepIds
-        : steps.map((step) => step.id);
-  const activeSteps = activeStepIds.map((id) => steps.find((step) => step.id === id) ?? null).filter((step): step is SetupStep => step !== null);
-  const activeStepIndexes = activeSteps.map((step) => steps.findIndex((entry) => entry.id === step.id));
+export function resolveSetupSteps(mode: SetupMode, currentStepId: StepId) {
+  const activeSteps = getSetupSteps(mode);
+  const activeStepIndexes = activeSteps.map((step) => FIRST_RUN_STEPS.findIndex((entry) => entry.id === step.id));
   return { activeSteps, activeStepIndexes };
 }

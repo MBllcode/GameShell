@@ -40,7 +40,8 @@ export interface AppStatus {
   displayMode: string;
   selectedConsoleDisplay: string | null;
   hasPcGamingLayout: boolean;
-  activeLauncher: string;
+  activeProfileName: string | null;
+  activeLauncher: string | null;
   lastOperation: string | null;
   lastOperationDurationMs: number | null;
   lastError: string | null;

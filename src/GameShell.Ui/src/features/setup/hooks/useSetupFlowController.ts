@@ -7,14 +7,12 @@ import type { LauncherType } from '../../../utils/modes';
 import type { PcGamingBehaviourState, HotkeySettingsState } from '../../settings/hooks/useSettingsFormState';
 import { syncActiveDisplaySelections } from '../../displays/syncActiveDisplaySelections';
 import { defaultProfileHotkeys } from '../../settings/hooks/useSettingsFormState';
-import { resolveSetupSteps, steps, type StepId } from '../setupFlow';
+import { resolveSetupSteps, steps, type SetupMode, type StepId } from '../setupFlow';
 import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
 
 type Options = {
   stepIndex: number;
-  isVeryFirstConfiguration: boolean;
-  isEditingSection: boolean;
-  isCreatingProfileFlow: boolean;
+  setupMode: SetupMode;
   activePcGamingProfileName: string | null;
   selectedProfileName: string;
   profiles: DisplayLayoutProfile[];
@@ -35,7 +33,7 @@ type Options = {
 
 export function useSetupFlowController(options: Options) {
   const indexedStep = steps[options.stepIndex] ?? steps[0];
-  const { activeSteps, activeStepIndexes } = resolveSetupSteps(options.isVeryFirstConfiguration, options.isCreatingProfileFlow, options.isEditingSection, indexedStep.id);
+  const { activeSteps, activeStepIndexes } = resolveSetupSteps(options.setupMode, indexedStep.id);
   const fallbackStepIndex = activeStepIndexes[0] ?? 0;
   const currentFlowPosition = activeStepIndexes.indexOf(options.stepIndex);
   const resolvedFlowPosition = currentFlowPosition >= 0 ? currentFlowPosition : 0;
@@ -49,6 +47,10 @@ export function useSetupFlowController(options: Options) {
   }, [options.displays]);
 
   useEffect(() => {
+    if (options.setupMode === 'FirstRun') {
+      options.setSelectedProfileName('');
+      return;
+    }
     const hasSelectedProfile = options.selectedProfileName.length > 0
       && options.profiles.some((profile) => profile.name === options.selectedProfileName);
 
@@ -89,7 +91,7 @@ export function useSetupFlowController(options: Options) {
     activeStepIndexes,
     currentStep,
     resolvedFlowPosition,
-    isNonFirstRunEditingSession: !options.isVeryFirstConfiguration && options.isEditingSection,
+    isNonFirstRunEditingSession: options.setupMode === 'EditProfile' || options.setupMode === 'EditGlobal',
     isLastStep: resolvedFlowPosition === activeStepIndexes.length - 1,
     canGoBack: resolvedFlowPosition > 0
   };

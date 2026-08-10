@@ -8,6 +8,8 @@
     "test:display-identity": "node --experimental-strip-types --test tests/displayIdentity.test.ts",
     "test:mapper": "node --experimental-strip-types --test tests/controllerDisplayMapper.test.ts",
     "test:encoding": "node --experimental-strip-types --test tests/encoding.test.ts",
+    "test:setup-routing": "node --experimental-strip-types --test tests/setupRouting.test.ts",
+    "test:runtime-status": "node --experimental-strip-types --test tests/runtimeStatus.test.ts",
     "dev": "vite",
     "preview": "vite preview"
   },

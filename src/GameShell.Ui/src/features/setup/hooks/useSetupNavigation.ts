@@ -1,17 +1,17 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppSettings } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
+import type { SetupMode } from '../setupFlow';
+import type { BootstrapRoute } from '../setupRouting';
 
 export type PendingNavigationAction = 'goBack' | 'goNext' | 'returnToDashboard';
 export type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
 export type SetupStepId = string;
 
 type UseSetupNavigationOptions = {
-  isVeryFirstConfiguration: boolean;
-  isCreatingProfileFlow: boolean;
+  setupMode: SetupMode;
   hasAdvancedInCreateProfileFlow: boolean;
   hasUnsavedChanges: boolean;
-  isEditingSection: boolean;
   isLastStep: boolean;
   canSelectSidebarStep: boolean;
   currentStepId: SetupStepId;
@@ -38,8 +38,9 @@ type UseSetupNavigationOptions = {
   setMessage: (value: string) => void;
   setStepIndex: (value: number) => void;
   setHasAdvancedInCreateProfileFlow: (value: boolean) => void;
-  setIsEditingSection: (value: boolean) => void;
-  setIsCreatingProfileFlow: (value: boolean) => void;
+  setSetupMode: (value: SetupMode) => void;
+  setBootstrapRoute: (value: BootstrapRoute) => void;
+  setEditingProfileId: (value: string | null) => void;
   setIsSetupComplete: (value: boolean) => void;
   setIsSaving: (value: boolean) => void;
   setHasUnsavedChanges: (value: boolean) => void;
@@ -47,19 +48,19 @@ type UseSetupNavigationOptions = {
 
 export function useSetupNavigation(options: UseSetupNavigationOptions) {
   const {
-    isVeryFirstConfiguration, isCreatingProfileFlow, hasAdvancedInCreateProfileFlow, hasUnsavedChanges,
-    isEditingSection, isLastStep, canSelectSidebarStep, currentStepId, stepIndex, activeStepIndexes,
+    setupMode, hasAdvancedInCreateProfileFlow, hasUnsavedChanges,
+    isLastStep, canSelectSidebarStep, currentStepId, stepIndex, activeStepIndexes,
     resolvedFlowPosition, isSetupComplete, pendingNavigationAction, pendingOverwriteProfileAction,
     settings, pendingSettingsOverrideRef, saveAndReturnToDashboard, saveCurrentSettings,
     persistAndReturnToDashboard, commitGamingDisplayDraft, resolveStepIndex, applySettingsToState,
     resetDisplayProfileDraft, setPendingNavigationAction, setPendingOverwriteProfileAction,
     setShowOverwriteProfileDialog, setShowUnsavedDialog, setError, setMessage, setStepIndex,
-    setHasAdvancedInCreateProfileFlow, setIsEditingSection, setIsCreatingProfileFlow, setIsSetupComplete,
+    setHasAdvancedInCreateProfileFlow, setSetupMode, setBootstrapRoute, setEditingProfileId, setIsSetupComplete,
     setIsSaving, setHasUnsavedChanges
   } = options;
 
   function requestNavigation(action: PendingNavigationAction) {
-    if (isVeryFirstConfiguration || action === 'goNext' || (isCreatingProfileFlow && action === 'goBack') || (isCreatingProfileFlow && action === 'returnToDashboard' && !hasAdvancedInCreateProfileFlow) || !hasUnsavedChanges) {
+    if (setupMode === 'FirstRun' || action === 'goNext' || (setupMode === 'CreateProfile' && action === 'goBack') || (setupMode === 'CreateProfile' && action === 'returnToDashboard' && !hasAdvancedInCreateProfileFlow) || !hasUnsavedChanges) {
       void executeNavigation(action);
       return;
     }
@@ -90,9 +91,9 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
     if (typeof nextIndex === 'number') {
       setStepIndex(nextIndex);
-      if (isCreatingProfileFlow) setHasAdvancedInCreateProfileFlow(true);
+      if (setupMode === 'CreateProfile') setHasAdvancedInCreateProfileFlow(true);
     }
-    setMessage(isEditingSection ? 'Możesz przejść dalej lub zapisać zmiany.' : 'Gotowe.');
+    setMessage(setupMode === 'FirstRun' ? 'Gotowe.' : 'Możesz przejść dalej lub zapisać zmiany.');
   }
 
   async function continueFromGamingDisplayStep(allowOverwrite: boolean) {
@@ -100,9 +101,9 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
     if (typeof nextIndex === 'number') {
       setStepIndex(nextIndex);
-      if (isCreatingProfileFlow) setHasAdvancedInCreateProfileFlow(true);
+      if (setupMode === 'CreateProfile') setHasAdvancedInCreateProfileFlow(true);
     }
-    setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
+    setMessage(setupMode === 'FirstRun' ? 'Gotowe.' : 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.');
   }
 
   async function executeNavigation(action: PendingNavigationAction) {
@@ -117,8 +118,9 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
       return;
     }
     setError(null);
-    setIsEditingSection(false);
-    setIsCreatingProfileFlow(false);
+    setSetupMode('None');
+    setBootstrapRoute('Dashboard');
+    setEditingProfileId(null);
     setHasAdvancedInCreateProfileFlow(false);
     setIsSetupComplete(true);
     resetDisplayProfileDraft();
@@ -159,7 +161,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     }
     const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
     if (typeof nextIndex === 'number') setStepIndex(nextIndex);
-    setMessage(isEditingSection ? 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.' : 'Gotowe.');
+    setMessage(setupMode === 'FirstRun' ? 'Gotowe.' : 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.');
   }
 
   async function handleUnsavedDialogSave() {

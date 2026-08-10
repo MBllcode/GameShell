@@ -10,53 +10,76 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
 {
     private const int SwRestore = 9;
     private readonly ILogger<WindowsLauncherRecoveryStrategy> _logger;
+    private readonly LauncherFocusRecoveryCoordinator _focusRecoveryCoordinator;
 
-    public WindowsLauncherRecoveryStrategy(ILogger<WindowsLauncherRecoveryStrategy> logger)
+    public WindowsLauncherRecoveryStrategy(
+        ILogger<WindowsLauncherRecoveryStrategy> logger,
+        LauncherFocusRecoveryCoordinator? focusRecoveryCoordinator = null)
     {
         _logger = logger;
+        _focusRecoveryCoordinator = focusRecoveryCoordinator ?? new LauncherFocusRecoveryCoordinator();
     }
 
     public async Task<LauncherRecoveryResult> RecoverAsync(
         AppSettings settings,
         string? profileName,
+        int? gameProcessId = null,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Launcher return begin.");
-        await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        _logger.LogInformation("PLAYNITE POST-GAME RECOVERY START");
+        await Task.Delay(TimeSpan.FromMilliseconds(1500), cancellationToken);
 
         var launcher = ResolveLauncher(settings, profileName);
         var processNames = GetLauncherProcessNames(launcher).ToArray();
         var diagnostics = FindLauncherDiagnostics(processNames);
+        _logger.LogInformation(
+            "GamePid={GamePid}, PlaynitePid={PlaynitePid}, WaitedForOwnRecoveryMs={WaitedForOwnRecoveryMs}.",
+            gameProcessId,
+            diagnostics?.ProcessId,
+            1500);
         if (diagnostics is not null)
         {
             LogDiagnostics("launcher return", diagnostics);
-            if (diagnostics.IsHealthy && diagnostics.IsForeground)
-            {
-                _logger.LogInformation("Launcher return healthy.");
-                return LauncherRecoveryResult.Recovered("Launcher returned normally");
-            }
-
-            _logger.LogInformation("Launcher return unhealthy; starting bounded recovery.");
-            TryRecoverFocus(diagnostics.MainWindowHandle);
-            await Task.Delay(TimeSpan.FromMilliseconds(400), cancellationToken);
-            var afterFocus = FindLauncherDiagnostics(processNames);
-            if (afterFocus is not null)
-            {
-                LogDiagnostics("after focus recovery", afterFocus);
-                if (afterFocus.IsHealthy && afterFocus.IsForeground)
-                {
-                    _logger.LogInformation("Launcher return healthy after focus recovery.");
-                    return LauncherRecoveryResult.Recovered("Launcher recovered after focus recovery");
-                }
-            }
         }
-
-        _logger.LogWarning("Launcher recovery started.");
-        if (diagnostics is not null)
+        else
         {
-            CloseLauncherProcesses(processNames);
-            await WaitForLauncherExitAsync(processNames, cancellationToken);
+            _logger.LogInformation("LauncherWindowFound=false, ForegroundBefore=unknown, Result=FAILED.");
         }
+
+        if (diagnostics is { IsHealthy: true, IsForeground: true })
+        {
+            _logger.LogInformation("Result=SUCCESS; healthy Playnite return required no recovery.");
+            return LauncherRecoveryResult.Recovered("Launcher returned normally");
+        }
+
+        var focusResult = await _focusRecoveryCoordinator.RecoverAsync(
+            () => FindLauncherDiagnostics(processNames)?.ToFocusInspection(),
+            TryRecoverFocus,
+            (attempt, inspection) =>
+            {
+                if (inspection is not null)
+                {
+                    LogFocusInspection($"attempt {attempt}/2", inspection);
+                }
+
+                _logger.LogInformation(
+                    "Attempt={Attempt}/2, ForegroundAfter={ForegroundAfter}, ForegroundConfirmed={ForegroundConfirmed}, Result={Result}.",
+                    attempt == 0 ? "0" : attempt,
+                    inspection?.ForegroundProcessId,
+                    inspection?.IsForeground,
+                    inspection is { IsHealthy: true, IsForeground: true } ? "SUCCESS" : "FAILED");
+            },
+            cancellationToken);
+
+        if (focusResult.Success)
+        {
+            _logger.LogInformation("PLAYNITE POST-GAME RECOVERY END Result=SUCCESS.");
+            return LauncherRecoveryResult.Recovered("Launcher recovered after focus recovery");
+        }
+
+        _logger.LogWarning("PLAYNITE RECOVERY FALLBACK RESTART");
+        CloseLauncherProcesses(processNames);
+        await WaitForLauncherExitAsync(processNames, cancellationToken);
 
         var remaining = FindLauncherProcesses(processNames);
         if (remaining.Count > 0)
@@ -265,19 +288,33 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
     private void LogDiagnostics(string phase, LauncherDiagnostics diagnostics)
     {
         _logger.LogInformation(
-            "Launcher focus diagnostics ({Phase}): PID={LauncherPid}, MainHWND={MainHwnd}, ForegroundHWND={ForegroundHwnd}, ForegroundPID={ForegroundPid}, ActiveHWND={ActiveHwnd}, Visible={Visible}, Enabled={Enabled}, Minimized={Minimized}, Responding={Responding}, IsForeground={IsForeground}.",
+            "Launcher focus diagnostics ({Phase}): LauncherWindowFound=true, HWND={MainHwnd}, Visible={Visible}, Minimized={Minimized}, Responding={Responding}, ForegroundBeforePid={ForegroundBeforePid}, ForegroundPid={ForegroundPid}, PlaynitePid={LauncherPid}, ForegroundConfirmed={IsForeground}.",
             phase,
-            diagnostics.ProcessId,
             FormatHandle(diagnostics.MainWindowHandle),
-            FormatHandle(diagnostics.ForegroundWindow),
-            diagnostics.ForegroundProcessId,
-            FormatHandle(diagnostics.ActiveWindow),
             diagnostics.IsVisible,
-            diagnostics.IsEnabled,
             diagnostics.IsMinimized,
             diagnostics.IsResponding,
+            diagnostics.ForegroundProcessId,
+            diagnostics.ForegroundProcessId,
+            diagnostics.ProcessId,
             diagnostics.IsForeground);
     }
+
+    private void LogFocusInspection(string phase, LauncherFocusInspection inspection)
+    {
+        _logger.LogInformation(
+            "Launcher focus diagnostics ({Phase}): LauncherWindowFound={WindowFound}, HWND={Hwnd}, Visible={Visible}, Minimized={Minimized}, Responding={Responding}, ForegroundAfterPid={ForegroundAfterPid}, ForegroundPid={ForegroundPid}, PlaynitePid={PlaynitePid}, ForegroundConfirmed={ForegroundConfirmed}.",
+            phase,
+            inspection.WindowExists,
+            FormatHandle(inspection.WindowHandle),
+            inspection.IsVisible,
+            inspection.IsMinimized,
+            inspection.IsResponding,
+            inspection.ForegroundProcessId,
+                inspection.ForegroundProcessId,
+            inspection.ProcessId,
+            inspection.IsForeground);
+            }
 
     private void TryRecoverFocus(IntPtr launcherWindow)
     {
@@ -287,11 +324,7 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         }
 
         _logger.LogInformation("Focus recovery attempt: restoring and foregrounding Playnite HWND={MainHwnd}.", FormatHandle(launcherWindow));
-        if (!IsWindowVisible(launcherWindow) || IsIconic(launcherWindow))
-        {
-            ShowWindow(launcherWindow, SwRestore);
-        }
-
+        ShowWindow(launcherWindow, SwRestore);
         BringWindowToTop(launcherWindow);
         SetForegroundWindow(launcherWindow);
         _logger.LogInformation("Focus recovery SetForegroundWindow/BringWindowToTop calls completed; SetFocus skipped because this background thread does not own Playnite's UI thread.");
@@ -299,7 +332,7 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
 
     private static IntPtr FindTopLevelWindow(int processId)
     {
-        var result = IntPtr.Zero;
+        var candidates = new List<(IntPtr Handle, bool Visible, long Area)>();
         EnumWindows((window, _) =>
         {
             GetWindowThreadProcessId(window, out var ownerProcessId);
@@ -308,10 +341,25 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
                 return true;
             }
 
-            result = window;
-            return false;
+            if ((GetWindowLong(window, ExStyleIndex) & ToolWindowStyle) != 0)
+            {
+                return true;
+            }
+
+            if (!GetWindowRect(window, out var bounds))
+            {
+                return true;
+            }
+
+            var area = Math.Max(0, bounds.Right - bounds.Left) * (long)Math.Max(0, bounds.Bottom - bounds.Top);
+            candidates.Add((window, IsWindowVisible(window), area));
+            return true;
         }, IntPtr.Zero);
-        return result;
+        return candidates
+            .OrderByDescending(candidate => candidate.Visible)
+            .ThenByDescending(candidate => candidate.Area)
+            .Select(candidate => candidate.Handle)
+            .FirstOrDefault();
     }
 
     private static string FormatHandle(IntPtr handle)
@@ -339,10 +387,37 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         bool IsForeground)
     {
         public bool IsHealthy => IsVisible && IsEnabled && !IsMinimized && IsResponding;
+
+        public LauncherFocusInspection ToFocusInspection() => new(
+            ProcessId,
+            MainWindowHandle,
+            MainWindowHandle != IntPtr.Zero,
+            IsVisible,
+            IsMinimized,
+            IsResponding,
+            ForegroundProcessId);
+    }
+
+    private const int ExStyleIndex = -20;
+    private const long ToolWindowStyle = 0x00000080L;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
     }
 
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr window, out WindowRect rectangle);
+
+    [DllImport("user32.dll")]
+    private static extern long GetWindowLong(IntPtr window, int index);
 
     [DllImport("user32.dll")]
     private static extern bool IsWindowEnabled(IntPtr window);

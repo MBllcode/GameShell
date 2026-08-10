@@ -5,6 +5,7 @@ import { areIdentitySetsEqual, extractDisplayIdentities, MAX_PROFILE_DISPLAYS, P
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../utils';
+import { canContinueWorkingProfile } from '../../setup/setupRouting';
 
 export type DisplayProfileDraft = { profileName: string; identities: DisplayIdentity[] };
 export type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
@@ -16,6 +17,7 @@ type Options = {
   profiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   isCreatingProfileFlow: boolean;
+  isFirstRun: boolean;
   isEditingSection: boolean;
   pcGamingBehaviour: Record<string, boolean>;
   launcher: string;
@@ -54,7 +56,7 @@ export function useDisplayProfileWorkflow(options: Options) {
     ready: (name: string) => name ? `Profil ekranów gotowy: ${name}. Kliknij Dalej, aby kontynuować.` : 'Odświeżono listę ekranów.',
     empty: 'Nie znaleziono ekranów.'
   };
-  const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isEditingSection, pcGamingBehaviour, launcher, hotkeys, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, setProfileBehaviours, setProfileLaunchers, setProfileHotkeys, setProfileControllerShortcuts, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
+  const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isFirstRun, isEditingSection, pcGamingBehaviour, launcher, hotkeys, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, setProfileBehaviours, setProfileLaunchers, setProfileHotkeys, setProfileControllerShortcuts, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
 
   async function refreshDisplays() {
     setIsRefreshingDisplays(true); setDisplayListError(null); setError(null);
@@ -74,12 +76,35 @@ export function useDisplayProfileWorkflow(options: Options) {
     const primary = selectedDevices.find((display) => display.isPrimary) ?? selectedDevices[0];
     const layout: DisplayLayoutSnapshot = { id: `${Date.now()}`, capturedAt: new Date().toISOString(), displays: selectedDevices.map((display) => ({ identity: display.identity, isActive: true, isAvailable: display.isAvailable, isPrimary: sameIdentity(primary.identity, display.identity), positionX: display.positionX - primary.positionX, positionY: display.positionY - primary.positionY, width: display.width, height: display.height, orientation: display.orientation, refreshRateNumerator: display.refreshRateNumerator, refreshRateDenominator: display.refreshRateDenominator, refreshRateHz: display.refreshRateHz, currentModeAvailable: display.currentModeAvailable, preferredWidth: display.preferredWidth, preferredHeight: display.preferredHeight, sourceId: display.sourceId, targetId: display.targetId, adapterLuid: display.adapterLuid, sourceDeviceName: display.sourceDeviceName, connectionTechnology: display.connectionTechnology })) };
     const existingProfile = profiles.find((profile) => profile.name.toLowerCase() === trimmedName.toLowerCase()) ?? null;
-    const nextProfiles = existingProfile ? profiles.map((profile) => profile.name.toLowerCase() === trimmedName.toLowerCase() ? { ...profile, name: existingProfile.name, layout } : profile) : [...profiles, { name: trimmedName, layout }];
-    const resolvedProfileName = existingProfile?.name ?? trimmedName;
-    const nextProfileBehaviours = { ...profileBehaviours, [resolvedProfileName]: profileBehaviours[resolvedProfileName] ?? pcGamingBehaviour };
-    const nextProfileLaunchers = { ...profileLaunchers, [resolvedProfileName]: profileLaunchers[resolvedProfileName] ?? launcher };
-    const nextProfileHotkeys = { ...profileHotkeys, [resolvedProfileName]: existingProfile ? (profileHotkeys[resolvedProfileName] ?? { enterProfile: hotkeys.pcGamingMode }) : { enterProfile: '' } };
-    const nextProfileControllerShortcuts = { ...profileControllerShortcuts, [resolvedProfileName]: existingProfile ? (profileControllerShortcuts[resolvedProfileName] ?? null) : null };
+    const selectedProfile = isEditingSection
+      ? profiles.find((profile) => profile.name.toLowerCase() === selectedProfileName.toLowerCase()) ?? null
+      : null;
+    const isRenamingSelectedProfile = Boolean(selectedProfile && !existingProfile);
+    const profileBeingUpdated = isRenamingSelectedProfile ? selectedProfile : existingProfile;
+    const resolvedProfileName = profileBeingUpdated?.name === trimmedName ? profileBeingUpdated.name : trimmedName;
+    const nextProfiles = profileBeingUpdated
+      ? profiles.map((profile) => profile.name.toLowerCase() === profileBeingUpdated.name.toLowerCase() ? { ...profile, name: resolvedProfileName, layout } : profile)
+      : [...profiles, { name: trimmedName, layout }];
+    const sourceProfileName = profileBeingUpdated?.name;
+    const nextProfileBehaviours = { ...profileBehaviours };
+    const nextProfileLaunchers = { ...profileLaunchers };
+    const nextProfileHotkeys = { ...profileHotkeys };
+    const nextProfileControllerShortcuts = { ...profileControllerShortcuts };
+    if (sourceProfileName && sourceProfileName !== resolvedProfileName) {
+      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[sourceProfileName] ?? pcGamingBehaviour;
+      nextProfileLaunchers[resolvedProfileName] = nextProfileLaunchers[sourceProfileName] ?? launcher;
+      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[sourceProfileName] ?? { enterProfile: hotkeys.pcGamingMode };
+      nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[sourceProfileName] ?? null;
+      delete nextProfileBehaviours[sourceProfileName];
+      delete nextProfileLaunchers[sourceProfileName];
+      delete nextProfileHotkeys[sourceProfileName];
+      delete nextProfileControllerShortcuts[sourceProfileName];
+    } else {
+      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[resolvedProfileName] ?? pcGamingBehaviour;
+      nextProfileLaunchers[resolvedProfileName] = nextProfileLaunchers[resolvedProfileName] ?? launcher;
+      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[resolvedProfileName] ?? (profileBeingUpdated ? { enterProfile: hotkeys.pcGamingMode } : { enterProfile: '' });
+      nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[resolvedProfileName] ?? (profileBeingUpdated ? null : null);
+    }
     setProfiles(nextProfiles); setActiveProfileName(resolvedProfileName); setLayout(layout); setSelectedProfileName(resolvedProfileName); setProfileBehaviours(nextProfileBehaviours); setProfileLaunchers(nextProfileLaunchers); setProfileHotkeys(nextProfileHotkeys); setProfileControllerShortcuts(nextProfileControllerShortcuts);
     pendingSettingsOverrideRef.current = { pcGamingProfiles: nextProfiles, activePcGamingProfileName: resolvedProfileName, pcGamingLayout: layout, pcGamingProfileBehaviours: nextProfileBehaviours, pcGamingProfileLaunchers: nextProfileLaunchers, pcGamingProfileHotkeys: nextProfileHotkeys, pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts };
     markUnsavedChanges(); setError(null); setMessage(isEditingSection ? messages.prepared(resolvedProfileName) : messages.ready(resolvedProfileName));
@@ -89,8 +114,7 @@ export function useDisplayProfileWorkflow(options: Options) {
     const draft = displayProfileDraftRef.current; const profileName = draft.profileName.trim(); const identities = draft.identities;
     setDisplayValidationState({ showNameError: profileName.length === 0, showSelectionError: identities.length === 0 });
     const hasDraft = profileName.length > 0 && identities.length > 0;
-    if ((profileName.length > 0 || identities.length > 0) && !hasDraft || (isCreatingProfileFlow && !hasDraft)) { setError(messages.invalid); return false; }
-    if (!hasDraft && profiles.length === 0) { setError(messages.noProfiles); return false; }
+    if ((profileName.length > 0 || identities.length > 0) && !hasDraft || !canContinueWorkingProfile(isFirstRun ? 'FirstRun' : isCreatingProfileFlow ? 'CreateProfile' : isEditingSection ? 'EditProfile' : 'None', profileName, identities.length)) { setError(messages.invalid); return false; }
     if (identities.length > MAX_PROFILE_DISPLAYS) { setError(PROFILE_DISPLAY_LIMIT_MESSAGE); return false; }
     if (hasDraft) {
       const existingProfile = profiles.find((profile) => profile.name.toLowerCase() === profileName.toLowerCase()) ?? null;

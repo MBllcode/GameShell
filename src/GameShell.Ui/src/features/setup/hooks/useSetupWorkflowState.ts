@@ -3,6 +3,8 @@ import type { DisplayIdentity } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { DisplayProfileDraft, DisplayValidationState, OverwriteProfileAction } from '../../profiles/hooks/useDisplayProfileWorkflow';
 import type { PendingNavigationAction } from './useSetupNavigation';
+import type { SetupMode } from '../setupFlow';
+import type { BootstrapRoute } from '../setupRouting';
 
 export function useSetupWorkflowState() {
   const [stepIndex, setStepIndex] = useState(0);
@@ -10,10 +12,11 @@ export function useSetupWorkflowState() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isVeryFirstConfiguration, setIsVeryFirstConfiguration] = useState(true);
+  const [setupMode, setSetupMode] = useState<SetupMode>('None');
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [bootstrapRoute, setBootstrapRoute] = useState<BootstrapRoute>('Loading');
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
-  const [isEditingSection, setIsEditingSection] = useState(false);
-  const [isCreatingProfileFlow, setIsCreatingProfileFlow] = useState(false);
   const [hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [pendingNavigationAction, setPendingNavigationAction] = useState<PendingNavigationAction | null>(null);
@@ -37,8 +40,9 @@ export function useSetupWorkflowState() {
 
   return {
     stepIndex, setStepIndex, message, setMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading,
-    isVeryFirstConfiguration, setIsVeryFirstConfiguration, isSetupComplete, setIsSetupComplete, isEditingSection, setIsEditingSection,
-    isCreatingProfileFlow, setIsCreatingProfileFlow, hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow,
+    setupMode, setSetupMode, isHydrated, setIsHydrated, bootstrapRoute, setBootstrapRoute, editingProfileId, setEditingProfileId, isVeryFirstConfiguration: setupMode === 'FirstRun', isEditingSection: setupMode === 'EditProfile' || setupMode === 'EditGlobal',
+    isCreatingProfileFlow: setupMode === 'CreateProfile', isSetupComplete, setIsSetupComplete,
+    hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow,
     hasUnsavedChanges, setHasUnsavedChanges, pendingNavigationAction, setPendingNavigationAction, showUnsavedDialog, setShowUnsavedDialog,
     showOverwriteProfileDialog, setShowOverwriteProfileDialog, pendingOverwriteProfileAction, setPendingOverwriteProfileAction,
     displayProfileDraft, displayValidationState, setDisplayValidationState, displayProfileDraftRef, pendingSettingsOverrideRef, syncDisplayProfileDraft,

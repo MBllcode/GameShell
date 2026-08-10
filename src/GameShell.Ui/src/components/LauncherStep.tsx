@@ -1,28 +1,32 @@
 import { useEffect, useState } from 'react';
+import { LauncherIcon, type LauncherBrand } from './LauncherIcon';
 import { sendBridgeCommand } from '../services/webViewBridge';
 import type { DependencyStatus } from '../types/bridge';
 import type { DisplayLayoutProfile } from '../types/bridge';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 
-const launcherOptions: Array<{ value: LauncherType; title: string; description: string; badge: string }> = [
+const launcherOptions: Array<{ value: LauncherType; title: string; description: string; badge: string; brand: LauncherBrand }> = [
   {
     value: 'Playnite Fullscreen',
     title: 'Playnite Fullscreen',
-    description: 'Wygodna obsługa wielu launcherów kontrolerem.',
-    badge: 'Polecany'
+    description: 'Łączy gry z różnych launcherów w jednej bibliotece.',
+    badge: 'PLAYNITE',
+    brand: 'playnite'
   },
   {
     value: 'Steam Big Picture',
     title: 'Steam Big Picture',
     description: 'Uruchamia Steam w trybie Big Picture.',
-    badge: 'Steam'
+    badge: 'STEAM',
+    brand: 'steam'
   },
   {
     value: 'Xbox App',
     title: 'Xbox App',
     description: 'Otwiera aplikację Xbox i bibliotekę Game Pass.',
-    badge: 'Xbox'
+    badge: 'XBOX',
+    brand: 'xbox'
   }
 ];
 
@@ -39,7 +43,7 @@ export function LauncherStep({
   launcher: LauncherType;
   setLauncher: (launcher: LauncherType) => void;
 }) {
-  const hasProfiles = pcGamingProfiles.length > 0;
+  const hasWorkingProfile = selectedProfileName.trim().length > 0;
   const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
   const [dependencies, setDependencies] = useState<DependencyStatus[]>([]);
   const [dependencyError, setDependencyError] = useState<string | null>(null);
@@ -98,22 +102,25 @@ export function LauncherStep({
           <strong>{selectedProfileLabel}</strong>
         </div>
       </div>
-      <div className="launcher-grid" aria-label="Launcher" aria-disabled={!hasProfiles}>
+      <div className="launcher-grid" aria-label="Launcher" aria-disabled={!hasWorkingProfile}>
         {launcherOptions.map((item) => {
           const dependency = dependencies.find((candidate) => candidate.name === getDependencyName(item.value));
 
           return (
             <button
-              className={`launcher-card ${launcher === item.value ? 'selected' : ''}`}
+              className={`launcher-card launcher-card--${item.brand} ${launcher === item.value ? 'selected' : ''}`}
               key={item.value}
               type="button"
               onClick={() => setLauncher(item.value)}
-              disabled={!hasProfiles}
+              disabled={!hasWorkingProfile}
             >
-              <span className="launcher-badge">{item.badge}</span>
+              <span className="launcher-card-heading">
+                <LauncherIcon brand={item.brand} />
+                <span className="launcher-badge">{item.badge}</span>
+              </span>
               <strong>{item.title}</strong>
               <small>{item.description}</small>
-              {dependency ? <span className={`launcher-status ${dependency.isDetected ? 'detected' : 'missing'}`}>{dependency.isDetected ? 'Wykryto' : 'Nie wykryto'}</span> : null}
+              {dependency ? <span className={`launcher-status ${dependency.isDetected ? 'detected' : 'missing'}`}>{dependency.isDetected ? 'WYKRYTO' : 'NIE WYKRYTO'}</span> : null}
             </button>
           );
         })}
@@ -124,7 +131,7 @@ export function LauncherStep({
             <h3>Nie wykryto: {selectedDependency.name}</h3>
             <p>{selectedDependency.message} Zainstaluj launcher, aby móc uruchomić ten profil.</p>
           </div>
-          <button className="secondary-button" type="button" onClick={openDownloadPage} disabled={!hasProfiles}>
+          <button className="secondary-button" type="button" onClick={openDownloadPage} disabled={!hasWorkingProfile}>
             Pobierz {selectedDependency.name}
           </button>
         </div>

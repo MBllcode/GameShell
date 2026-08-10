@@ -7,10 +7,14 @@ import { useSettingsPersistence } from './useSettingsPersistence';
 import type { SettingsPayloadOverrides, BuildSettingsPayloadState } from '../buildSettingsPayload';
 import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../../profiles/utils';
 import type { LauncherType } from '../../../utils/modes';
+import type { SetupMode } from '../../setup/setupFlow';
+import { assertSetupStateInvariants, resolveBootstrapState, type BootstrapRoute } from '../../setup/setupRouting';
+import { steps } from '../../setup/setupFlow';
 
 type Options = BuildSettingsPayloadState & {
   isSetupComplete: boolean;
-  isEditingSection: boolean;
+  setupMode: SetupMode;
+  bootstrapRoute: BootstrapRoute;
   pcGamingProfilesCount: number;
   preferredProfileName: () => string;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
@@ -31,13 +35,15 @@ type Options = BuildSettingsPayloadState & {
   setPcGamingBehaviour: (value: BuildSettingsPayloadState['pcGamingBehaviour']) => void;
   setWorkBehaviour: (value: BuildSettingsPayloadState['workBehaviour']) => void;
   setFinishOptions: (value: BuildSettingsPayloadState['finishOptions']) => void;
-  setIsVeryFirstConfiguration: (value: boolean) => void;
+  setSetupMode: (value: SetupMode) => void;
+  setEditingProfileId: (value: string | null) => void;
   setIsSetupComplete: (value: boolean) => void;
   setHasUnsavedChanges: (value: boolean) => void;
   setSettings: (value: AppSettings) => void;
   setStatus: Dispatch<SetStateAction<AppStatus>>;
-  setIsEditingSection: (value: boolean) => void;
-  setIsCreatingProfileFlow: (value: boolean) => void;
+  setIsHydrated: (value: boolean) => void;
+  setBootstrapRoute: (value: BootstrapRoute) => void;
+  setStepIndex: (value: number) => void;
   setIsSaving: (value: boolean) => void;
   setError: (value: string | null) => void;
   setMessage: (value: string) => void;
@@ -66,8 +72,6 @@ export function useSettingsIntegrationFeature(options: Options) {
     setPcGamingBehaviour: options.setPcGamingBehaviour,
     setWorkBehaviour: options.setWorkBehaviour,
     setFinishOptions: options.setFinishOptions,
-    setIsVeryFirstConfiguration: options.setIsVeryFirstConfiguration,
-    setIsSetupComplete: options.setIsSetupComplete,
     setHasUnsavedChanges: options.setHasUnsavedChanges,
     pendingSettingsOverrideRef: options.pendingSettingsOverrideRef
   });
@@ -77,18 +81,41 @@ export function useSettingsIntegrationFeature(options: Options) {
     onSettings: (settings) => {
       options.setSettings(settings);
       applySettingsToState(settings);
+      const bootstrap = resolveBootstrapState(true, settings.ui?.isFirstRunCompleted ?? false);
+      assertSetupStateInvariants(bootstrap.route, bootstrap.setupMode, bootstrap.editingProfileId);
+      options.setBootstrapRoute(bootstrap.route);
+      options.setSetupMode(bootstrap.setupMode);
+      options.setEditingProfileId(bootstrap.editingProfileId);
+      options.setIsSetupComplete(bootstrap.isSetupComplete);
+      options.setStepIndex(bootstrap.currentStepIndex);
+      const profiles = settings.display?.pcGamingProfiles ?? [];
+      const selectedProfileId = settings.display?.activePcGamingProfileName ?? profiles[0]?.name ?? null;
+      console.info('BOOTSTRAP STATE', {
+        isFirstRunCompleted: settings.ui?.isFirstRunCompleted ?? false,
+        profilesCount: profiles.length,
+        selectedProfileId: bootstrap.setupMode === 'FirstRun' ? null : selectedProfileId,
+        editingProfileId: bootstrap.editingProfileId,
+        setupMode: bootstrap.setupMode,
+        bootstrapRoute: bootstrap.route,
+        isSetupComplete: bootstrap.isSetupComplete,
+        currentStep: steps[bootstrap.currentStepIndex]?.id ?? null,
+        profileDraftName: bootstrap.profileDraftName
+      });
     },
     onDisplays: options.setDisplays,
     onDisplayError: options.setDisplayListError,
     onControllerStatus: options.applyControllerStatus,
     onError: options.setError,
     onInitialLoadingChange: options.setInitialLoading
+    ,onHydrationComplete: () => options.setIsHydrated(true)
   });
 
   const buildSettingsPayload = useSettingsPayload(options);
   const persistence = useSettingsPersistence({
     isSetupComplete: options.isSetupComplete,
-    isEditingSection: options.isEditingSection,
+    settings: options.settings,
+    setupMode: options.setupMode,
+    bootstrapRoute: options.bootstrapRoute,
     pcGamingProfilesCount: options.pcGamingProfilesCount,
     preferredProfileName: options.preferredProfileName,
     pendingSettingsOverrideRef: options.pendingSettingsOverrideRef,
@@ -97,8 +124,9 @@ export function useSettingsIntegrationFeature(options: Options) {
     setSettings: options.setSettings,
     setStatus: options.setStatus,
     setSelectedProfileName: options.setSelectedProfileName,
-    setIsEditingSection: options.setIsEditingSection,
-    setIsCreatingProfileFlow: options.setIsCreatingProfileFlow,
+    setSetupMode: options.setSetupMode,
+    setBootstrapRoute: options.setBootstrapRoute,
+    setEditingProfileId: options.setEditingProfileId,
     setIsSetupComplete: options.setIsSetupComplete,
     setIsSaving: options.setIsSaving,
     setError: options.setError,

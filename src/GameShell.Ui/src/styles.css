@@ -11,6 +11,9 @@
   --accent-strong: #62B44F;
   --accent-soft: #D8E9A8;
   --accent-muted: #315f3b;
+  --playnite-accent: #FF8A00;
+  --steam-accent: #66C0F4;
+  --xbox-accent: #107C10;
   --text-primary: #F1F5EE;
   --text-secondary: #C7D0C1;
   --text-muted: #8E9788;
@@ -3112,22 +3115,45 @@ h1 {
   width: min(960px, 100%);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
   gap: 10px;
   margin-top: 14px;
 }
 
 .launcher-card {
+  --launcher-accent: var(--accent);
+  --launcher-border: var(--border-default);
+  --launcher-tint: var(--bg-panel);
   min-height: 144px;
   min-width: 0;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   justify-items: start;
   gap: 9px;
   padding: var(--card-padding);
   border: 1px solid var(--border-default);
+  border-left-color: var(--launcher-border);
   background: var(--bg-panel);
   color: var(--text-primary);
   text-align: left;
+}
+
+.launcher-card--playnite {
+  --launcher-accent: var(--playnite-accent);
+  --launcher-border: rgba(255, 138, 0, 0.68);
+  --launcher-tint: rgba(255, 138, 0, 0.1);
+}
+
+.launcher-card--steam {
+  --launcher-accent: var(--steam-accent);
+  --launcher-border: rgba(102, 192, 244, 0.62);
+  --launcher-tint: rgba(102, 192, 244, 0.1);
+}
+
+.launcher-card--xbox {
+  --launcher-accent: var(--xbox-accent);
+  --launcher-border: rgba(16, 124, 16, 0.7);
+  --launcher-tint: rgba(16, 124, 16, 0.1);
 }
 
 .launcher-card:not(:disabled) {
@@ -3135,21 +3161,37 @@ h1 {
 }
 
 .launcher-card:hover {
-  border-color: var(--border-active);
+  border-color: var(--launcher-border);
   background: var(--bg-panel-hover);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--launcher-accent);
 }
 
 .launcher-card.selected {
-  border-color: var(--border-active);
-  background: var(--bg-panel-active);
-  box-shadow: inset 3px 0 0 var(--accent);
+  border-color: var(--launcher-accent);
+  background: var(--launcher-tint);
+  box-shadow: inset 3px 0 0 var(--launcher-accent);
+}
+
+.launcher-card-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launcher-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--launcher-accent);
 }
 
 .launcher-badge {
   min-height: 22px;
-  color: var(--accent-strong);
-  border-color: var(--border-active);
+  color: var(--launcher-accent);
+  border: 1px solid var(--launcher-border);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .launcher-card strong {
@@ -3164,8 +3206,7 @@ h1 {
 }
 
 .launcher-status {
-  align-self: end;
-  margin-top: 2px;
+  margin-top: auto;
   color: var(--text-muted);
 }
 

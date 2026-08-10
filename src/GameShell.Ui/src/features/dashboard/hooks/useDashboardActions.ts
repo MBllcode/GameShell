@@ -34,7 +34,24 @@ export function useDashboardActions(options: Options) {
     try {
       if (saveBeforeRun || hasUnsavedChanges) await saveCurrentSettings(isSetupComplete);
       const result = await sendBridgeCommand<ModeResult>(command, payload);
-      setStatus(await sendBridgeCommand<AppStatus>('getStatus'));
+      if (command === 'enterWorkMode') {
+        console.info('[GETSTATUS REQUEST FROM UI]', { timestamp: new Date().toISOString(), source: 'enterWorkMode completion' });
+      }
+      const nextStatus = await sendBridgeCommand<AppStatus>('getStatus');
+      if (command === 'enterWorkMode') {
+        console.info('[UI STATUS RECEIVED]', {
+          timestamp: new Date().toISOString(),
+          currentMode: nextStatus.currentMode,
+          sessionState: nextStatus.sessionState,
+          activeProfileName: nextStatus.activeProfileName,
+          activeLauncher: nextStatus.activeLauncher,
+          source: 'enterWorkMode completion'
+        });
+      }
+      setStatus(nextStatus);
+      if (command === 'enterWorkMode' && nextStatus.currentMode === 'Work' && nextStatus.sessionState === 'Idle') {
+        setActiveProfileName(null);
+      }
       if (command === 'enterGameShellWithProfile' && typeof payload === 'object' && payload !== null && 'profileName' in payload) {
         const requestedName = String((payload as { profileName?: unknown }).profileName ?? '').trim();
         const matched = profiles.find((profile) => profile.name.toLowerCase() === requestedName.toLowerCase());

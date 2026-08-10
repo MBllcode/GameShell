@@ -14,6 +14,7 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _stateGate = new();
     private ConsoleSessionSnapshot _snapshot = new();
+    private long _sessionGeneration;
     private static long _transitionSequence;
     private bool _disposed;
 
@@ -89,11 +90,20 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
                 }
                 else
                 {
+                    SetState(ConsoleSessionState.Idle, null, null);
+                    var committedSnapshot = GetSnapshot();
                     _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 1 SUCCESS; CurrentSessionStateAfterSuccess={CurrentSessionStateAfterSuccess}.", transitionId, ConsoleSessionState.Idle);
+                    _logger.LogInformation(
+                        "[WORKMODE SESSION COMMIT] Timestamp={Timestamp} TransitionId={TransitionId} RuntimeMode=Work SessionState={SessionState} ActiveProfileName={ActiveProfileName} ActiveLauncher=null.",
+                        DateTimeOffset.Now.ToString("O"),
+                        transitionId,
+                        committedSnapshot.State,
+                        committedSnapshot.ProfileName ?? "null");
                 }
                 return idleResult;
             }
 
+            AdvanceSessionGeneration();
             SetState(ConsoleSessionState.ExitingToWorkMode, current.ProfileName, null);
             _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 1 START stopping game session monitor.", transitionId);
             await _gameSessionMonitor.StopAsync(cancellationToken);
@@ -104,6 +114,13 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
             if (result.Success)
             {
                 SetState(ConsoleSessionState.Idle, null, null);
+                var committedSnapshot = GetSnapshot();
+                _logger.LogInformation(
+                    "[WORKMODE SESSION COMMIT] Timestamp={Timestamp} TransitionId={TransitionId} RuntimeMode=Work SessionState={SessionState} ActiveProfileName={ActiveProfileName} ActiveLauncher=null.",
+                    DateTimeOffset.Now.ToString("O"),
+                    transitionId,
+                    committedSnapshot.State,
+                    committedSnapshot.ProfileName ?? "null");
                 _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 2 SUCCESS; CurrentSessionStateAfterSuccess={CurrentSessionStateAfterSuccess}.", transitionId, ConsoleSessionState.Idle);
             }
             else
@@ -191,6 +208,7 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             await _gameSessionMonitor.StartAsync(processNames, cancellationToken);
+            AdvanceSessionGeneration();
             SetState(ConsoleSessionState.LauncherActive, profileName, null);
             _logger.LogInformation("Console session entered for profile {ProfileName}.", profileName ?? "Console");
             return result;
@@ -211,8 +229,12 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         {
             if (_snapshot.State == ConsoleSessionState.LauncherActive)
             {
-                _snapshot = _snapshot with { State = ConsoleSessionState.GameActive, ChangedAt = DateTimeOffset.Now };
+                SetStateLocked(ConsoleSessionState.GameActive, _snapshot.ProfileName, null, "GameDetected");
                 _logger.LogInformation("Game detected PID={ProcessId}; console session is now active.", args.ProcessId);
+            }
+            else
+            {
+                _logger.LogInformation("RUNTIME STATE UPDATE Source=GameDetected SessionId={SessionId} ignored because session state is {State}.", _snapshot.SessionGeneration, _snapshot.State);
             }
         }
     }
@@ -226,8 +248,10 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
 
         try
         {
+            var callbackSessionGeneration = GetSnapshot().SessionGeneration;
             if (GetSnapshot().State != ConsoleSessionState.GameActive)
             {
+                _logger.LogInformation("RUNTIME STATE UPDATE Source=GameExited SessionId={SessionId} ignored because session state is {State}.", callbackSessionGeneration, GetSnapshot().State);
                 return;
             }
 
@@ -236,7 +260,12 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
             SetState(ConsoleSessionState.ReturningToLauncher, profileName, null);
             _logger.LogInformation("Game exited; waiting for launcher return.");
             var settings = await _settingsService.LoadAsync();
-            var result = await _launcherRecoveryStrategy.RecoverAsync(settings, profileName);
+            var result = await _launcherRecoveryStrategy.RecoverAsync(settings, profileName, args.ProcessId);
+            if (GetSnapshot().SessionGeneration != callbackSessionGeneration || GetSnapshot().State != ConsoleSessionState.ReturningToLauncher)
+            {
+                _logger.LogInformation("RUNTIME STATE UPDATE Source=GameExited SessionId={SessionId} ignored because session generation changed.", callbackSessionGeneration);
+                return;
+            }
             if (result.Success)
             {
                 SetState(ConsoleSessionState.LauncherActive, profileName, null);
@@ -262,16 +291,30 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
     {
         lock (_stateGate)
         {
-            _snapshot = new ConsoleSessionSnapshot
-            {
-                State = state,
-                ProfileName = profileName,
-                LastError = error,
-                ChangedAt = DateTimeOffset.Now
-            };
+            SetStateLocked(state, profileName, error, "ConsoleSessionManager");
         }
+    }
 
-        _logger.LogInformation("Console session state changed to {State}.", state);
+    private void SetStateLocked(ConsoleSessionState state, string? profileName, string? error, string source)
+    {
+        var previous = _snapshot;
+        _snapshot = new ConsoleSessionSnapshot
+        {
+            State = state,
+            SessionGeneration = _sessionGeneration,
+            ProfileName = profileName,
+            LastError = error,
+            ChangedAt = DateTimeOffset.Now
+        };
+        _logger.LogInformation("RUNTIME STATE UPDATE Source={Source} SessionId={SessionId} OldState={OldState} NewState={NewState}.", source, _sessionGeneration, previous.State, state);
+    }
+
+    private void AdvanceSessionGeneration()
+    {
+        lock (_stateGate)
+        {
+            _sessionGeneration++;
+        }
     }
 
     private ModeResult Fail(string? currentProfileName, Exception exception)

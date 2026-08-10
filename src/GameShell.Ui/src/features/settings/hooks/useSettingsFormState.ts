@@ -44,10 +44,7 @@ export const defaultConsoleBehaviour: ConsoleBehaviourState = {
 };
 
 export const defaultPcGamingBehaviour: PcGamingBehaviourState = {
-  ...defaultConsoleBehaviour,
-  closeVisibleWindows: false,
-  minimizeRemainingWindows: false,
-  hideCursor: false
+  ...defaultConsoleBehaviour
 };
 
 export const defaultWorkBehaviour: WorkBehaviourState = {
@@ -57,18 +54,20 @@ export const defaultWorkBehaviour: WorkBehaviourState = {
   doNotMinimizeWindows: true
 };
 
+export const defaultFinishOptions: FinishOptions = {
+  startWithWindows: true,
+  startMinimized: false,
+  startMenuShortcut: true,
+  desktopShortcut: true
+};
+
 export function useSettingsFormState() {
   const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', pcGamingMode: '', workMode: '' });
   const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
   const [consoleBehaviour, setConsoleBehaviour] = useState<ConsoleBehaviourState>({ ...defaultConsoleBehaviour });
   const [pcGamingBehaviour, setPcGamingBehaviour] = useState<PcGamingBehaviourState>({ ...defaultPcGamingBehaviour });
   const [workBehaviour, setWorkBehaviour] = useState<WorkBehaviourState>({ ...defaultWorkBehaviour });
-  const [finishOptions, setFinishOptions] = useState<FinishOptions>({
-    startWithWindows: false,
-    startMinimized: false,
-    startMenuShortcut: true,
-    desktopShortcut: false
-  });
+  const [finishOptions, setFinishOptions] = useState<FinishOptions>({ ...defaultFinishOptions });
 
   return {
     hotkeys,

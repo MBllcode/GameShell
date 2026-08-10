@@ -2,10 +2,15 @@ import { sendBridgeCommand } from '../../../services/webViewBridge';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppSettings, AppStatus } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../buildSettingsPayload';
+import type { SetupMode } from '../../setup/setupFlow';
+import { resolvePersistedCompletion, resolvePostSaveSetupComplete, resolveSaveCompletion } from '../../setup/setupRouting';
+import type { BootstrapRoute } from '../../setup/setupRouting';
 
 type UseSettingsPersistenceOptions = {
+  settings: AppSettings | null;
   isSetupComplete: boolean;
-  isEditingSection: boolean;
+  setupMode: SetupMode;
+  bootstrapRoute: BootstrapRoute;
   pcGamingProfilesCount: number;
   preferredProfileName: () => string;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
@@ -14,8 +19,9 @@ type UseSettingsPersistenceOptions = {
   setSettings: (settings: AppSettings) => void;
   setStatus: Dispatch<SetStateAction<AppStatus>>;
   setSelectedProfileName: (profileName: string) => void;
-  setIsEditingSection: (value: boolean) => void;
-  setIsCreatingProfileFlow: (value: boolean) => void;
+  setSetupMode: (value: SetupMode) => void;
+  setBootstrapRoute: (value: BootstrapRoute) => void;
+  setEditingProfileId: (value: string | null) => void;
   setIsSetupComplete: (value: boolean) => void;
   setIsSaving: (value: boolean) => void;
   setError: (value: string | null) => void;
@@ -23,8 +29,10 @@ type UseSettingsPersistenceOptions = {
 };
 
 export function useSettingsPersistence({
+  settings,
   isSetupComplete,
-  isEditingSection,
+  setupMode,
+  bootstrapRoute,
   pcGamingProfilesCount,
   preferredProfileName,
   pendingSettingsOverrideRef,
@@ -33,22 +41,24 @@ export function useSettingsPersistence({
   setSettings,
   setStatus,
   setSelectedProfileName,
-  setIsEditingSection,
-  setIsCreatingProfileFlow,
+  setSetupMode,
+  setBootstrapRoute,
+  setEditingProfileId,
   setIsSetupComplete,
   setIsSaving,
   setError,
   setMessage
 }: UseSettingsPersistenceOptions) {
-  async function saveCurrentSettings(isFirstRunCompleted = isSetupComplete, overrides?: SettingsPayloadOverrides) {
-    const savedSettings = await sendBridgeCommand<AppSettings>('saveSettings', buildSettingsPayload(isFirstRunCompleted, overrides));
+  async function saveCurrentSettings(isFirstRunCompleted = settings?.ui?.isFirstRunCompleted ?? false, overrides?: SettingsPayloadOverrides) {
+    const completion = resolvePersistedCompletion(setupMode, settings?.ui?.isFirstRunCompleted ?? false, isFirstRunCompleted);
+    const savedSettings = await sendBridgeCommand<AppSettings>('saveSettings', buildSettingsPayload(completion, overrides));
     setSettings(savedSettings);
     applySettingsToState(savedSettings);
     setStatus((current) => ({
       ...current,
       selectedConsoleDisplay: savedSettings.display.consoleDisplay?.friendlyName ?? null,
       hasPcGamingLayout: Boolean(savedSettings.display.pcGamingLayout) || (savedSettings.display.pcGamingProfiles?.length ?? 0) > 0,
-      activeLauncher: savedSettings.launcher.type
+      activeLauncher: current.currentMode === 'Work' ? null : savedSettings.launcher.type
     }));
     return savedSettings;
   }
@@ -62,11 +72,11 @@ export function useSettingsPersistence({
     }
 
     setIsSaving(true);
-    setMessage(isEditingSection ? 'Zapisywanie zmian...' : 'Zapisywanie ustawień...');
+    setMessage(setupMode === 'EditProfile' ? 'Zapisywanie zmian...' : 'Zapisywanie ustawień...');
 
     try {
       const preferredName = preferredProfileName();
-      const savedSettings = await saveCurrentSettings(true, pendingSettingsOverrideRef.current ?? undefined);
+      const savedSettings = await saveCurrentSettings(resolveSaveCompletion(setupMode, isSetupComplete), pendingSettingsOverrideRef.current ?? undefined);
       pendingSettingsOverrideRef.current = null;
       const savedProfiles = savedSettings.display?.pcGamingProfiles ?? [];
       const matchedPreferred = preferredName
@@ -75,9 +85,10 @@ export function useSettingsPersistence({
       if (matchedPreferred) {
         setSelectedProfileName(matchedPreferred);
       }
-      setIsEditingSection(false);
-      setIsCreatingProfileFlow(false);
-      setIsSetupComplete(savedSettings.ui.isFirstRunCompleted);
+      setSetupMode('None');
+      setBootstrapRoute('Dashboard');
+      setEditingProfileId(null);
+      setIsSetupComplete(resolvePostSaveSetupComplete(setupMode, savedSettings.ui.isFirstRunCompleted));
       setMessage('Zapisano zmiany.');
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');

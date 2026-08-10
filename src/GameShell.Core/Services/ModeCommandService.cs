@@ -24,16 +24,18 @@ public sealed class ModeCommandService : IModeCommandService
     private async Task<AppStatus> GetComposedStatusAsync(CancellationToken cancellationToken)
     {
         var status = await _modeOrchestrator.GetStatusAsync(cancellationToken);
+        var session = _consoleSessionManager.GetSnapshot();
         return new AppStatus
         {
             State = status.State,
             CurrentMode = status.CurrentMode,
-            SessionState = _consoleSessionManager.GetSnapshot().State.ToString(),
+            SessionState = session.State.ToString(),
+            ActiveProfileName = session.ProfileName,
             IsBusy = status.IsBusy,
             DisplayMode = status.DisplayMode,
             SelectedConsoleDisplay = status.SelectedConsoleDisplay,
             HasPcGamingLayout = status.HasPcGamingLayout,
-            ActiveLauncher = status.ActiveLauncher,
+            ActiveLauncher = string.Equals(status.CurrentMode, GameShellMode.Work.ToString(), StringComparison.Ordinal) ? null : status.ActiveLauncher,
             LastOperation = status.LastOperation,
             LastOperationDurationMs = status.LastOperationDurationMs,
             LastError = status.LastError,

@@ -26,6 +26,32 @@ public sealed class ModeOrchestratorTests
     }
 
     [Fact]
+    public async Task WorkModeStatus_ClearsActiveLauncher()
+    {
+        var settings = new AppSettings
+        {
+            Launcher = { Type = "Playnite" },
+            Display =
+            {
+                PcGamingProfiles = [new DisplayLayoutProfile { Name = "PC" }],
+                ActivePcGamingProfileName = "PC"
+            }
+        };
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            new FakeDisplayTransitionService(),
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming }),
+            NullLogger<ModeOrchestrator>.Instance);
+
+        await orchestrator.EnterWorkModeAsync();
+        var status = await orchestrator.GetStatusAsync();
+
+        Assert.Equal("Work", status.CurrentMode);
+        Assert.Null(status.ActiveLauncher);
+    }
+
+    [Fact]
     public async Task EnterWorkMode_DisplayFailureDoesNotRunPostWorkflowOrChangeRuntimeMode()
     {
         var order = new List<string>();

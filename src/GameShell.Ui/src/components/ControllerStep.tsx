@@ -47,7 +47,7 @@ export function ControllerStep({
 }) {
   const [showHotkeySaved, setShowHotkeySaved] = useState(false);
   const hotkeySavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasProfiles = pcGamingProfiles.length > 0;
+  const hasWorkingProfile = selectedProfileName.trim().length > 0;
   const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
   const currentHotkey = isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode;
   const selectedControllerButtons = controllerShortcut?.buttons ?? [];
@@ -133,7 +133,7 @@ export function ControllerStep({
                   value={currentHotkey}
                   onChange={handleHotkeyChange}
                   placeholder={isWorkMode ? 'np. Ctrl+Alt+W' : 'np. Ctrl+Alt+P'}
-                  disabled={!isWorkMode && !hasProfiles}
+                  disabled={!isWorkMode && !hasWorkingProfile}
                   error={hotkeyValidationError}
                 />
               </label>
@@ -232,7 +232,7 @@ export function ControllerStep({
                 </div>
               )}
               <div className="controller-shortcut-actions">
-                <button className="primary-button controller-shortcut-listen-button" type="button" disabled={!isWorkMode && !hasProfiles} onClick={onStartControllerCapture}>
+                <button className="primary-button controller-shortcut-listen-button" type="button" disabled={!isWorkMode && !hasWorkingProfile} onClick={onStartControllerCapture}>
                   {hasControllerShortcut ? 'Zmień kombinację' : 'Przypisz kombinację'}
                 </button>
                 {hasControllerShortcut ? (

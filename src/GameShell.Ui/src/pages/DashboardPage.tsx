@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../types/bridge';
 import { summarizeLayout } from '../utils/displays';
 import { formatCurrentMode, formatSessionState } from '../utils/status';
@@ -55,11 +55,12 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const [showDeleteProfileDialog, setShowDeleteProfileDialog] = useState(false);
   const dashboardSelectedProfileName = selectedProfileName || activeProfileName || pcGamingProfiles[0]?.name || '';
-  const isWorkModeActive = status.currentMode === 'Work' || (status.currentMode === null && pcGamingProfiles.length > 0);
+  const runtimeActiveProfileName = status.activeProfileName;
+  const isWorkModeActive = status.currentMode === 'Work';
   const isPcGamingActive = status.currentMode === 'PcGaming';
   const isConsoleModeActive = status.currentMode === 'Console';
-  const activeGamingProfileLayout = activeProfileName
-    ? pcGamingProfiles.find((profile) => profile.name === activeProfileName)?.layout ?? null
+  const activeGamingProfileLayout = runtimeActiveProfileName
+    ? pcGamingProfiles.find((profile) => profile.name === runtimeActiveProfileName)?.layout ?? null
     : null;
   const resolvedGamingLayout = activeGamingProfileLayout ?? pcGamingLayout;
   const visibleLayoutSummary = isWorkModeActive
@@ -70,12 +71,21 @@ export function DashboardPage({
         ? status.selectedConsoleDisplay ?? 'Brak wybranego ekranu Console Mode'
         : pcGamingLayout ? summarizeLayout(pcGamingLayout) : 'Brak zapisanego profilu';
   const shouldShowLauncherFact = !isWorkModeActive;
-  const activeProfileLauncher = activeProfileName ? pcGamingProfileLaunchers[activeProfileName] : null;
-  const visibleLauncher = activeProfileLauncher ?? launcher;
+  const visibleLauncher = status.activeLauncher ?? 'Brak aktywnego launchera';
   const selectedProfile = pcGamingProfiles.find((profile) => profile.name === dashboardSelectedProfileName) ?? null;
   const canRunSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
   const canDeleteSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
   const profileCountLabel = pcGamingProfiles.length === 1 ? 'profil' : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4 ? 'profile' : 'profili';
+
+  useEffect(() => {
+    console.info('[DASHBOARD RUNTIME STATE]', {
+      timestamp: new Date().toISOString(),
+      currentMode: status.currentMode,
+      sessionState: status.sessionState,
+      activeProfileName: status.activeProfileName,
+      activeLauncher: status.activeLauncher
+    });
+  }, [status.currentMode, status.sessionState, status.activeProfileName, status.activeLauncher]);
 
   return (
     <main className="app-shell">
@@ -91,7 +101,7 @@ export function DashboardPage({
             ) : (
               <div className="sidebar-state-content">
                 <div className="status-row"><strong>{formatCurrentMode(status)}</strong>{isPcGamingActive ? <span className="work-return-status">AKTYWNY</span> : null}</div>
-                {isPcGamingActive ? <p>Profil: {activeProfileName || 'Nie wybrano'}</p> : null}
+                {isPcGamingActive ? <p>Profil: {runtimeActiveProfileName || 'Nie wybrano'}</p> : null}
                 {status.sessionState && status.sessionState !== 'Idle' ? <p className="sidebar-session-state">Sesja: {formatSessionState(status.sessionState)}</p> : null}
                 <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
                 {shouldShowLauncherFact ? <small>{visibleLauncher}</small> : null}
@@ -126,7 +136,7 @@ export function DashboardPage({
                     <div className="profile-quick-list" role="listbox" aria-label="Lista profili gamingowych">
                       {pcGamingProfiles.map((profile) => {
                         const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
-                        const isProfileConfiguredAsActive = activeProfileName === profile.name;
+                        const isProfileConfiguredAsActive = runtimeActiveProfileName === profile.name;
                         const isProfileSelectedForEditing = dashboardSelectedProfileName === profile.name;
                         const isPcGamingNow = status.currentMode === 'PcGaming';
                         const stateLabel = isPcGamingNow && isProfileConfiguredAsActive ? 'AKTYWNY' : isProfileSelectedForEditing ? 'ZAZNACZONY' : 'GOTOWY';

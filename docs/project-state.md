@@ -53,11 +53,15 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Token zycia monitora gamingowego jest niezalezny od tokena requestu aktywacji profilu. Wlasne anulowanie monitora podczas `StopAsync` jest oczekiwanym zakonczeniem, a nie bledem sesji.
 - Przywracanie layoutu ekranow i glowna zmiana stanu sa krytyczne. Zamkniecie launchera, taskbary i ikony pulpitu sa best-effort; bounded timeout launchera jest ostrzezeniem i nie przerywa Work Mode.
 - Duplikaty aktywacji sa odrzucane, przejscia sa serializowane, a bledy sa logowane i koncza sie stanem `Faulted`, z mozliwoscia ponowienia komendy.
+- Runtime snapshot Work Mode jest skladany atomowo przez `ModeCommandService`: `CurrentMode=Work`, `SessionState=Idle`, `ActiveProfileName=null` i `ActiveLauncher=null`. Udany `enterWorkMode` emituje `statusChanged`, a frontend renderuje stan przede wszystkim z tego snapshotu.
+- `ConsoleSessionManager` uniewaznia `SessionGeneration` przy wyjsciu z sesji gamingowej. Opoznione callbacki monitora i recovery sa ignorowane, gdy stan nie jest juz `GameActive`/`ReturningToLauncher`, wiec nie moga przywrocic `LauncherActive` po Work Mode.
+- Wejscie do Work Mode z dashboardu i z pada korzysta z tego samego `IModeCommandService`. Skrot SDL3 uruchamia komendę z watku pollingu, dlatego `WebViewBridge.NotifyStatusChanged` musi publikowac event przez WPF Dispatcher; bez tego backend zmienial stan, ale WebView2 nie odswiezal sidebara.
+- Przy diagnostyce przeplywu uzywamy logow `[WORKMODE REQUEST]`, `[WORKMODE SESSION COMMIT]`, `[WORKMODE BACKEND COMMIT]`, `[STATUSCHANGED EMIT]`, `[STATUSCHANGED RECEIVED]`, `[GETSTATUS RESPONSE]`, `[UI STATUS RECEIVED]` i `[DASHBOARD RUNTIME STATE]`. Log aplikacji jest w `%LOCALAPPDATA%\GameShell\Logs\gameshell-yyyy-MM-dd.log`.
 - `IGameSessionMonitor` jest osobnym kontraktem. Implementacja Windows sprawdza tylko jawnie skonfigurowane `PcGaming.GameProcessNames`; pusta lista oznacza brak heurystycznego wykrywania gry.
 - Po `GameDetected` GameShell zmienia wyłącznie stan sesji na `GameActive` i monitoruje zakończenie skonfigurowanego procesu. Nie modyfikuje HWND gry, jej stylu, rozmiaru, pozycji ani focusu.
 - GameShell celowo nie wymusza fullscreen/windowed/borderless, aspect ratio, wewnętrznej rozdzielczości, `Alt+Enter` ani syntetycznego inputu. Te ustawienia pozostają odpowiedzialnością gry.
-- `ILauncherRecoveryStrategy` dziala tylko po `GameExited`: czeka 3 sekundy, sprawdza widoczne okno i `Process.Responding`, probuje przywrocic istniejace okno, a dopiero potem wykonuje graceful close, ograniczone terminate i restart. Normalny powrot Playnite nie powoduje restartu.
-- Recovery po game exit ma bounded graceful close, launcher-only terminate, restart z istniejącej konfiguracji launchera i oczekiwanie na zdrowe okno; nie uruchamia Work Mode automatycznie.
+- `ILauncherRecoveryStrategy` dziala tylko po `GameExited`: czeka 1500 ms na wlasny powrot launchera, ponownie wyszukuje widoczne nietoolowe okno Playnite, a potem wykonuje najwyzej dwie proby `ShowWindow(SW_RESTORE)`, `BringWindowToTop` i `SetForegroundWindow`, sprawdzajac PID foregroundu po kazdej probie.
+- Recovery po game exit ma bounded graceful close przed ewentualnym restartem, loguje stan okna i foregroundu bez deklarowania naprawy inputu kontrolera, nie restartuje zdrowego Playnite i nie uruchamia Work Mode automatycznie.
 - `SetFocus` nie jest wywolywane z watku GameShell, bo nie jest to watek UI Playnite. Uzywane sa tylko `ShowWindow(SW_RESTORE)`, `BringWindowToTop` i `SetForegroundWindow`.
 - W kodzie GameShell nie ma restartu SDL/controller service ani konfiguracji Steam Input. Dla launchera Steam logowany jest typ launchera i lista procesow, ale Steam Input nie jest zmieniany.
 - Recovery ma implementacje Windows z obsluga Playnite oraz bezpiecznym fallbackiem opartym o skonfigurowany executable launchera. Nie jest czescia normalnego workflow `NativeModeWorkflowService`.
@@ -118,7 +122,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja: build solution przeszedl, testy .NET `66/66`, build UI i test UTF-8 przeszly, pakowanie EXE zakonczone sukcesem. Stabilnosc profili PC, KONSOLA i Work Mode jest teraz weryfikowana manualnie.
+- Ostatnia walidacja: build solution przeszedl, testy .NET `76/76`, test runtime UI `1/1`, test setup routing `20/20`, build UI i pakowanie EXE zakonczone sukcesem. Reprodukcja manualna potwierdzila Work Mode z przycisku i z pada; wejscie z pada wymaga publikacji `statusChanged` przez WPF Dispatcher.
 
 ## Utrzymanie repo
 
@@ -129,3 +133,15 @@ Aktualne, robocze podsumowanie stanu projektu.
 ## Controller stack
 
 The controller stack is physical controller -> SDL3 -> GameShell shortcuts and realtime status. GameShell does not intercept controller input for games and does not display an overlay over the game.
+
+## Repository map
+
+- `GameShell.Core`: modele, kontrakty i orkiestracja trybow/sesji.
+- `GameShell.Windows`: integracje Win32, DisplayConfig, monitoring procesow i recovery launchera.
+- `GameShell.Desktop`: host WPF, tray, hotkeye, SDL3 i bridge WebView2.
+- `GameShell.Ui`: zrodla React/TypeScript, testy UI i bundlowane assety kopiowane do desktopu.
+- `tests/GameShell.Core.Tests`: testy xUnit dla workflow, sesji, display i recovery.
+- `docs`: stan projektu i dokumentacja UI.
+- `docs/repository-hash-map.sha256`: mapa SHA-256 plikow repozytorium z pominieciem `.git`, katalogow `bin`, `obj`, `node_modules`, `dist` oraz samego manifestu hashy.
+
+Manifest hashy jest regenerowany po zmianach z repo root. Hash manifestu nie moze zawierac samego siebie, bo tworzyloby to cykliczna wartosc.

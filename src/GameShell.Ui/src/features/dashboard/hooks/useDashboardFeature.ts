@@ -7,6 +7,9 @@ import { steps } from '../../setup/setupFlow';
 import { useDashboardActions } from './useDashboardActions';
 import { useDashboardPageModel } from './useDashboardPageModel';
 import { useDashboardSetupActions } from './useDashboardSetupActions';
+import type { SetupMode } from '../../setup/setupFlow';
+import type { BootstrapRoute } from '../../setup/setupRouting';
+import type { PcGamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
 
 type Options = {
   status: AppStatus;
@@ -40,13 +43,15 @@ type Options = {
   setMessage: Dispatch<SetStateAction<string>>;
   syncDisplayProfileDraft: (draft: { profileName: string; identities: DisplayIdentity[] }) => void;
   setStepIndex: Dispatch<SetStateAction<number>>;
-  setIsEditingSection: Dispatch<SetStateAction<boolean>>;
-  setIsCreatingProfileFlow: Dispatch<SetStateAction<boolean>>;
+  setSetupMode: Dispatch<SetStateAction<SetupMode>>;
+  setBootstrapRoute: Dispatch<SetStateAction<BootstrapRoute>>;
+  setEditingProfileId: Dispatch<SetStateAction<string | null>>;
   setHasAdvancedInCreateProfileFlow: Dispatch<SetStateAction<boolean>>;
   setIsSetupComplete: Dispatch<SetStateAction<boolean>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
+  setPcGamingBehaviour: Dispatch<SetStateAction<PcGamingBehaviourState>>;
   setShowOverwriteProfileDialog: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -76,14 +81,16 @@ export function useDashboardFeature(options: Options) {
     profiles: options.pcGamingProfiles,
     selectedProfileName: options.selectedProfileName,
     setStepIndex: options.setStepIndex,
-    setIsEditingSection: options.setIsEditingSection,
-    setIsCreatingProfileFlow: options.setIsCreatingProfileFlow,
+    setSetupMode: options.setSetupMode,
+    setBootstrapRoute: options.setBootstrapRoute,
+    setEditingProfileId: options.setEditingProfileId,
     setHasAdvancedInCreateProfileFlow: options.setHasAdvancedInCreateProfileFlow,
     setIsSetupComplete: options.setIsSetupComplete,
     syncDisplayProfileDraft: options.syncDisplayProfileDraft,
     setProfileHotkeyValidationError: options.setProfileHotkeyValidationError,
     setProfileControllerValidationError: options.setProfileControllerValidationError,
     setHotkeys: options.setHotkeys,
+    setPcGamingBehaviour: options.setPcGamingBehaviour,
     setShowOverwriteProfileDialog: options.setShowOverwriteProfileDialog,
     setMessage: options.setMessage
   });

@@ -83,7 +83,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
       profileControllerValidationError: displayState.profileControllerValidationError,
       profileLaunchers: displayState.pcGamingProfileLaunchers,
       profileHotkeys: displayState.pcGamingProfileHotkeys,
-      activeProfileName: displayState.activePcGamingProfileName
+      activeProfileName: options.selectedProfileName || displayState.activePcGamingProfileName
     },
     controller: {
       workModeControllerShortcut: displayState.workModeControllerShortcut,

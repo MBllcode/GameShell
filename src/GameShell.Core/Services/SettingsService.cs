@@ -36,6 +36,10 @@ public sealed class SettingsService : ISettingsService
         {
             var defaults = CreateDefaultSettings();
             await SaveAsync(defaults, cancellationToken);
+            _logger.LogInformation(
+                "FIRST RUN COMPLETION LOADED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
+                defaults.Ui.IsFirstRunCompleted,
+                SettingsPath);
             return defaults;
         }
 
@@ -43,7 +47,12 @@ public sealed class SettingsService : ISettingsService
         {
             await using var stream = File.OpenRead(SettingsPath);
             var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken);
-            return AppSettingsValidator.Validate(settings ?? CreateDefaultSettings());
+            var validated = AppSettingsValidator.Validate(settings ?? CreateDefaultSettings());
+            _logger.LogInformation(
+                "FIRST RUN COMPLETION LOADED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
+                validated.Ui.IsFirstRunCompleted,
+                SettingsPath);
+            return validated;
         }
         catch (JsonException ex)
         {
@@ -63,6 +72,10 @@ public sealed class SettingsService : ISettingsService
         var validated = AppSettingsValidator.Validate(settings);
         await using var stream = File.Create(SettingsPath);
         await JsonSerializer.SerializeAsync(stream, validated, JsonOptions, cancellationToken);
+        _logger.LogInformation(
+            "FIRST RUN COMPLETION SAVED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
+            validated.Ui.IsFirstRunCompleted,
+            SettingsPath);
     }
 
     private static AppSettings CreateDefaultSettings() => new();

@@ -39,7 +39,7 @@ export function ConsoleBehaviourStep({
   pcGamingBehaviour: PcGamingBehaviour;
   onChangeBehaviourFlag: (key: PcGamingBehaviourKey, value: boolean) => void;
 }) {
-  const hasProfiles = pcGamingProfiles.length > 0;
+  const hasWorkingProfile = selectedProfileName.trim().length > 0;
   const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
 
   return (
@@ -62,7 +62,7 @@ export function ConsoleBehaviourStep({
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
-              disabled={!hasProfiles}
+              disabled={!hasWorkingProfile}
             />
           ))}
           {pcGamingBehaviourOptions.slice(4, 6).map((option) => (
@@ -72,7 +72,7 @@ export function ConsoleBehaviourStep({
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
-              disabled={!hasProfiles}
+              disabled={!hasWorkingProfile}
             />
           ))}
         </SettingsSection>
@@ -84,7 +84,7 @@ export function ConsoleBehaviourStep({
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
-              disabled={!hasProfiles}
+              disabled={!hasWorkingProfile}
             />
           ))}
         </SettingsSection>
@@ -96,7 +96,7 @@ export function ConsoleBehaviourStep({
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
-              disabled={!hasProfiles}
+              disabled={!hasWorkingProfile}
             />
           ))}
         </SettingsSection>

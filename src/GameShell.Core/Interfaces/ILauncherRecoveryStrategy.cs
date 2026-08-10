@@ -7,6 +7,7 @@ public interface ILauncherRecoveryStrategy
     Task<LauncherRecoveryResult> RecoverAsync(
         AppSettings settings,
         string? profileName,
+        int? gameProcessId = null,
         CancellationToken cancellationToken = default);
 }
 

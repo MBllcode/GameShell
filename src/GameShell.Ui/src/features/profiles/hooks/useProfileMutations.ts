@@ -35,7 +35,7 @@ const defaultProfileHotkeys: ProfileHotkeysState = { enterProfile: '' };
 const defaultControllerShortcutHoldDurationMs = 700;
 
 type UseProfileMutationsOptions = {
-  selectedProfileName: string;
+  workingProfileName: string;
   pcGamingBehaviour: PcGamingBehaviourState;
   profileBehaviours: PcGamingProfileBehaviourMap;
   profileLaunchers: PcGamingProfileLauncherMap;
@@ -58,7 +58,7 @@ type UseProfileMutationsOptions = {
 };
 
 export function useProfileMutations({
-  selectedProfileName,
+  workingProfileName,
   pcGamingBehaviour,
   profileBehaviours,
   profileLaunchers,
@@ -86,14 +86,14 @@ export function useProfileMutations({
   }, [markUnsavedChanges, setPcGamingBehaviour, setProfileBehaviours]);
 
   const updatePcGamingBehaviourFlag = useCallback((key: PcGamingBehaviourKey, value: boolean) => {
-    if (!selectedProfileName) {
+    if (!workingProfileName) {
       setPcGamingBehaviour((current) => ({ ...current, [key]: value }));
       return;
     }
 
-    const currentProfileBehaviour = profileBehaviours[selectedProfileName] ?? pcGamingBehaviour;
-    setPcGamingBehaviourForProfile(selectedProfileName, { ...currentProfileBehaviour, [key]: value });
-  }, [pcGamingBehaviour, profileBehaviours, selectedProfileName, setPcGamingBehaviour, setPcGamingBehaviourForProfile]);
+    const currentProfileBehaviour = profileBehaviours[workingProfileName] ?? pcGamingBehaviour;
+    setPcGamingBehaviourForProfile(workingProfileName, { ...currentProfileBehaviour, [key]: value });
+  }, [pcGamingBehaviour, profileBehaviours, workingProfileName, setPcGamingBehaviour, setPcGamingBehaviourForProfile]);
 
   const setProfileLauncher = useCallback((profileName: string, nextLauncher: LauncherType) => {
     setProfileLaunchers((current) => ({ ...current, [profileName]: nextLauncher }));
@@ -116,10 +116,10 @@ export function useProfileMutations({
     }));
     markUnsavedChanges();
 
-    if (selectedProfileName === profileName) {
+    if (workingProfileName === profileName) {
       setHotkeys((current) => ({ ...current, pcGamingMode: key === 'enterProfile' ? normalizedValue : current.pcGamingMode }));
     }
-  }, [markUnsavedChanges, profileHotkeys, selectedProfileName, setError, setHotkeys, setProfileHotkeyValidationError, setProfileHotkeys, workModeHotkey]);
+  }, [markUnsavedChanges, profileHotkeys, setError, setHotkeys, setProfileHotkeyValidationError, setProfileHotkeys, workModeHotkey, workingProfileName]);
 
   const updateProfileControllerShortcut = useCallback((profileName: string, buttons: string[]) => {
     const normalizedButtons = normalizeControllerButtons(buttons);

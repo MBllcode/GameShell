@@ -16,7 +16,7 @@ type FinishOptions = {
 };
 
 type Options = {
-  selectedProfileName: string;
+  workingProfileName: string;
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
   setWorkBehaviour: Dispatch<SetStateAction<WorkBehaviour>>;
   setFinishOptions: Dispatch<SetStateAction<FinishOptions>>;
@@ -32,12 +32,12 @@ type Options = {
 
 export function useSetupPageActions(options: Options) {
   const updateProfileLauncher = (nextLauncher: LauncherType) => {
-    if (!options.selectedProfileName) {
+    if (!options.workingProfileName) {
       options.setLauncher(nextLauncher);
       options.markUnsavedChanges();
       return;
     }
-    options.setProfileLauncher(options.selectedProfileName, nextLauncher);
+    options.setProfileLauncher(options.workingProfileName, nextLauncher);
   };
 
   return {
@@ -53,11 +53,11 @@ export function useSetupPageActions(options: Options) {
     startControllerCapture: (profileId: string) => { void options.startControllerCapture(profileId); },
     cancelControllerCapture: () => { void options.cancelControllerCapture(); },
     removeWorkControllerShortcut: () => options.updateWorkModeControllerShortcut([]),
-    removeProfileControllerShortcut: () => options.updateProfileControllerShortcut(options.selectedProfileName, []),
+    removeProfileControllerShortcut: () => options.updateProfileControllerShortcut(options.workingProfileName, []),
     removeWorkHotkey: () => options.updateWorkModeHotkey(''),
-    removeProfileHotkey: () => options.updateProfileHotkey(options.selectedProfileName, 'enterProfile', ''),
-    changeProfileHotkey: (value: string) => options.updateProfileHotkey(options.selectedProfileName, 'enterProfile', value),
-    updateProfileHotkey: (value: string) => options.updateProfileHotkey(options.selectedProfileName, 'enterProfile', value),
-    updateProfileControllerShortcut: (buttons: string[]) => options.updateProfileControllerShortcut(options.selectedProfileName, buttons)
+    removeProfileHotkey: () => options.updateProfileHotkey(options.workingProfileName, 'enterProfile', ''),
+    changeProfileHotkey: (value: string) => options.updateProfileHotkey(options.workingProfileName, 'enterProfile', value),
+    updateProfileHotkey: (value: string) => options.updateProfileHotkey(options.workingProfileName, 'enterProfile', value),
+    updateProfileControllerShortcut: (buttons: string[]) => options.updateProfileControllerShortcut(options.workingProfileName, buttons)
   };
 }

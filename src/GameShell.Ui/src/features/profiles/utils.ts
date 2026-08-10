@@ -27,10 +27,10 @@ export function toPcGamingBehaviourState(behaviour: Partial<PcGamingBehaviourSta
   return {
     hideDesktopIcons: behaviour?.hideDesktopIcons ?? true,
     hideTaskbar: behaviour?.hideTaskbar ?? true,
-    closeVisibleWindows: behaviour?.closeVisibleWindows ?? false,
-    minimizeRemainingWindows: behaviour?.minimizeRemainingWindows ?? false,
+    closeVisibleWindows: behaviour?.closeVisibleWindows ?? true,
+    minimizeRemainingWindows: behaviour?.minimizeRemainingWindows ?? true,
     moveCursorToCorner: behaviour?.moveCursorToCorner ?? true,
-    hideCursor: behaviour?.hideCursor ?? false,
+    hideCursor: behaviour?.hideCursor ?? true,
     startLauncher: behaviour?.startLauncher ?? true,
     bringLauncherToForeground: behaviour?.bringLauncherToForeground ?? true
   };

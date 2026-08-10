@@ -10,6 +10,7 @@ export function useGameShellBridge({
   onControllerStatus,
   onError,
   onInitialLoadingChange
+  ,onHydrationComplete
 }: {
   onStatus: (status: AppStatus) => void;
   onSettings: (settings: AppSettings) => void;
@@ -18,9 +19,10 @@ export function useGameShellBridge({
   onControllerStatus: (status: ControllerStatusInfo) => void;
   onError: (message: string) => void;
   onInitialLoadingChange: (isLoading: boolean) => void;
+  onHydrationComplete: () => void;
 }) {
-  const callbacksRef = useRef({ onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange });
-  callbacksRef.current = { onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange };
+  const callbacksRef = useRef({ onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete });
+  callbacksRef.current = { onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete };
 
   useEffect(() => {
     let isMounted = true;
@@ -41,11 +43,13 @@ export function useGameShellBridge({
         callbacksRef.current.onStatus(status);
         callbacksRef.current.onSettings(settings);
         callbacksRef.current.onDisplays(displays);
+        callbacksRef.current.onHydrationComplete();
         callbacksRef.current.onInitialLoadingChange(false);
       })
       .catch((reason: unknown) => {
         if (isMounted) {
           callbacksRef.current.onError(reason instanceof Error ? reason.message : 'Nie udało się odczytać statusu aplikacji.');
+          callbacksRef.current.onHydrationComplete();
           callbacksRef.current.onInitialLoadingChange(false);
         }
       });
@@ -56,8 +60,18 @@ export function useGameShellBridge({
   }, []);
 
   useEffect(() => subscribeBridgeEvent('statusChanged', async () => {
+    console.info('[STATUSCHANGED RECEIVED]', { timestamp: new Date().toISOString() });
     try {
-      callbacksRef.current.onStatus(await sendBridgeCommand<AppStatus>('getStatus'));
+      console.info('[GETSTATUS REQUEST FROM UI]', { timestamp: new Date().toISOString(), source: 'statusChanged' });
+      const nextStatus = await sendBridgeCommand<AppStatus>('getStatus');
+      console.info('[UI STATUS RECEIVED]', {
+        timestamp: new Date().toISOString(),
+        currentMode: nextStatus.currentMode,
+        sessionState: nextStatus.sessionState,
+        activeProfileName: nextStatus.activeProfileName,
+        activeLauncher: nextStatus.activeLauncher
+      });
+      callbacksRef.current.onStatus(nextStatus);
     } catch (reason: unknown) {
       callbacksRef.current.onError(reason instanceof Error ? reason.message : 'Nie udało się odświeżyć statusu aplikacji.');
     }

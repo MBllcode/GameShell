@@ -58,6 +58,40 @@ public sealed class ConsoleSessionManagerTests
     }
 
     [Fact]
+    public async Task SuccessfulWorkMode_CommitsIdleWithoutActiveProfile()
+    {
+        var monitor = new FakeGameSessionMonitor();
+        var orchestrator = new FakeModeOrchestrator();
+        using var manager = CreateManager(orchestrator, monitor);
+
+        await manager.EnterProfileAsync("PC");
+        monitor.RaiseGameDetected();
+        var result = await manager.EnterWorkModeAsync();
+
+        Assert.True(result.Success);
+        var snapshot = manager.GetSnapshot();
+        Assert.Equal(ConsoleSessionState.Idle, snapshot.State);
+        Assert.Null(snapshot.ProfileName);
+        Assert.True(snapshot.SessionGeneration > 0);
+    }
+
+    [Fact]
+    public async Task DelayedCallbacksFromClosedGamingSession_DoNotRestoreLauncherState()
+    {
+        var monitor = new FakeGameSessionMonitor();
+        using var manager = CreateManager(new FakeModeOrchestrator(), monitor);
+
+        await manager.EnterProfileAsync("PC");
+        await manager.EnterWorkModeAsync();
+        monitor.RaiseGameDetected();
+        monitor.RaiseGameExited();
+        await Task.Delay(30);
+
+        Assert.Equal(ConsoleSessionState.Idle, manager.GetSnapshot().State);
+        Assert.Null(manager.GetSnapshot().ProfileName);
+    }
+
+    [Fact]
     public async Task WorkModeFailure_LeavesSessionFaulted()
     {
         var monitor = new FakeGameSessionMonitor();
@@ -136,8 +170,9 @@ public sealed class ConsoleSessionManagerTests
     public async Task FailedLauncherRecovery_LeavesSessionFaulted()
     {
         var monitor = new FakeGameSessionMonitor();
+        var orchestrator = new FakeModeOrchestrator();
         using var manager = CreateManager(
-            new FakeModeOrchestrator(),
+            orchestrator,
             monitor,
             new FakeLauncherRecoveryStrategy { ShouldFail = true });
 
@@ -147,6 +182,7 @@ public sealed class ConsoleSessionManagerTests
         await WaitUntilAsync(() => manager.GetSnapshot().State == ConsoleSessionState.Faulted);
 
         Assert.Equal(ConsoleSessionState.Faulted, manager.GetSnapshot().State);
+        Assert.Equal(0, orchestrator.WorkActivations);
     }
 
     private static ConsoleSessionManager CreateManager(
@@ -198,6 +234,7 @@ public sealed class ConsoleSessionManagerTests
         public Task<LauncherRecoveryResult> RecoverAsync(
             AppSettings settings,
             string? profileName,
+            int? gameProcessId = null,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(ShouldFail

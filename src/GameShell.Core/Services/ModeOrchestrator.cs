@@ -331,7 +331,9 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 DisplayMode = "NativeDisplayConfig",
                 SelectedConsoleDisplay = GetConsoleDisplays(settings).FirstOrDefault()?.FriendlyName,
                 HasPcGamingLayout = ResolvePcGamingLayout(settings.Display, null) is not null,
-                ActiveLauncher = activeConfiguration?.Launcher.Type ?? settings.Launcher.Type,
+                ActiveLauncher = _currentMode == GameShellMode.Work
+                    ? null
+                    : activeConfiguration?.Launcher.Type ?? settings.Launcher.Type,
                 LastOperation = _lastOperation,
                 LastOperationDurationMs = _lastOperationDurationMs,
                 LastError = _lastError,

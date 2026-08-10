@@ -8,7 +8,7 @@ type Options = SaveOptions & Omit<NavigationOptions, 'saveAndReturnToDashboard'>
 
 export function useSetupNavigationFeature(options: Options) {
   const saveAndReturnToDashboard = useSetupSaveWorkflow({
-    isCreatingProfileFlow: options.isCreatingProfileFlow,
+    setupMode: options.setupMode,
     currentStepId: options.currentStepId,
     commitGamingDisplayDraft: options.commitGamingDisplayDraft,
     persistAndReturnToDashboard: options.persistAndReturnToDashboard

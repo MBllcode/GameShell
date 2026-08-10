@@ -17,7 +17,7 @@ type BehaviourState = {
 };
 
 type Options = {
-  selectedProfileName: string;
+  workingProfileName: string;
   pcGamingBehaviour: BehaviourState;
   profileBehaviours: PcGamingProfileBehaviourMap;
   profileLaunchers: PcGamingProfileLauncherMap;
@@ -42,7 +42,7 @@ type Options = {
 export function useProfileEditingFeature(options: Options) {
   const mutations = useProfileMutations(options);
   const controllerCapture = useControllerCapture({
-    selectedProfileName: options.selectedProfileName,
+    selectedProfileName: options.workingProfileName,
     profileShortcuts: options.profileControllerShortcuts,
     workModeShortcut: options.workModeControllerShortcut,
     onProfileShortcutCaptured: mutations.updateProfileControllerShortcut,
@@ -53,7 +53,7 @@ export function useProfileEditingFeature(options: Options) {
   useEffect(() => {
     options.setProfileHotkeyValidationError(null);
     options.setProfileControllerValidationError(null);
-  }, [options.selectedProfileName]);
+  }, [options.workingProfileName]);
 
   return { mutations, controllerCapture };
 }

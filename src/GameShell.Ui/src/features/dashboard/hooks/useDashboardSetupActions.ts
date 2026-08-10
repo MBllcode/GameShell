@@ -1,6 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { DisplayLayoutProfile, DisplayIdentity } from '../../../types/bridge';
 import { extractDisplayIdentities } from '../../../utils/displays';
+import type { SetupMode } from '../../setup/setupFlow';
+import { assertSetupStateInvariants, type BootstrapRoute } from '../../setup/setupRouting';
+import { defaultPcGamingBehaviour, type PcGamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
 
 type StepId =
   | 'welcome'
@@ -18,14 +21,16 @@ type Options = {
   profiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   setStepIndex: Dispatch<SetStateAction<number>>;
-  setIsEditingSection: Dispatch<SetStateAction<boolean>>;
-  setIsCreatingProfileFlow: Dispatch<SetStateAction<boolean>>;
+  setSetupMode: Dispatch<SetStateAction<SetupMode>>;
+  setBootstrapRoute: Dispatch<SetStateAction<BootstrapRoute>>;
+  setEditingProfileId: Dispatch<SetStateAction<string | null>>;
   setHasAdvancedInCreateProfileFlow: Dispatch<SetStateAction<boolean>>;
   setIsSetupComplete: Dispatch<SetStateAction<boolean>>;
   syncDisplayProfileDraft: (draft: { profileName: string; identities: DisplayIdentity[] }) => void;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
+  setPcGamingBehaviour: Dispatch<SetStateAction<PcGamingBehaviourState>>;
   setShowOverwriteProfileDialog: Dispatch<SetStateAction<boolean>>;
   setMessage: Dispatch<SetStateAction<string>>;
 };
@@ -33,10 +38,13 @@ type Options = {
 export function useDashboardSetupActions(options: Options) {
   const createProfile = () => {
     const targetIndex = options.steps.findIndex((step) => step.id === 'gaming-display');
-    options.setIsEditingSection(false);
-    options.setIsCreatingProfileFlow(true);
+    assertSetupStateInvariants('ProfileSetup', 'CreateProfile', null);
+    options.setSetupMode('CreateProfile');
+    options.setBootstrapRoute('ProfileSetup');
+    options.setEditingProfileId(null);
     options.setHasAdvancedInCreateProfileFlow(false);
     options.setIsSetupComplete(false);
+    options.setPcGamingBehaviour({ ...defaultPcGamingBehaviour });
     options.syncDisplayProfileDraft({ profileName: '', identities: [] });
     options.setProfileHotkeyValidationError(null);
     options.setProfileControllerValidationError(null);
@@ -48,18 +56,21 @@ export function useDashboardSetupActions(options: Options) {
 
   const editSettings = (stepId: StepId) => {
     const targetIndex = options.steps.findIndex((step) => step.id === stepId);
-    options.setIsEditingSection(true);
-    options.setIsCreatingProfileFlow(false);
+    const selectedProfile = options.profiles.find((profile) => profile.name === options.selectedProfileName) ?? null;
+    const nextMode = ['work-behaviour', 'work-shortcuts', 'app-behaviour'].includes(stepId) ? 'EditGlobal' : 'EditProfile';
+    assertSetupStateInvariants('ProfileSetup', nextMode, nextMode === 'EditProfile' ? selectedProfile?.name ?? null : null);
+    options.setSetupMode(nextMode);
+    options.setBootstrapRoute('ProfileSetup');
+    options.setEditingProfileId(nextMode === 'EditProfile' ? selectedProfile?.name ?? null : null);
     options.setHasAdvancedInCreateProfileFlow(false);
     options.setIsSetupComplete(false);
-    if (stepId === 'gaming-display') {
-      const selectedProfile = options.profiles.find((profile) => profile.name === options.selectedProfileName) ?? null;
-      if (selectedProfile) {
-        options.syncDisplayProfileDraft({
-          profileName: selectedProfile.name,
-          identities: extractDisplayIdentities(selectedProfile.layout)
-        });
-      }
+    if (selectedProfile) {
+      options.syncDisplayProfileDraft({
+        profileName: selectedProfile.name,
+        identities: extractDisplayIdentities(selectedProfile.layout)
+      });
+    } else {
+      options.syncDisplayProfileDraft({ profileName: '', identities: [] });
     }
     options.setStepIndex(targetIndex >= 0 ? targetIndex : 0);
     options.setMessage('Edytujesz wybraną sekcję.');

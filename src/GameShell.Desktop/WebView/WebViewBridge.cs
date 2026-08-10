@@ -103,15 +103,46 @@ public sealed class WebViewBridge
         coreWebView.WebMessageReceived += OnWebMessageReceived;
     }
 
-    public void NotifyStatusChanged()
+    public void NotifyStatusChanged(string? transitionId = null)
     {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            _logger.LogWarning("[STATUSCHANGED EMIT] Dispatcher unavailable. TransitionId={TransitionId}.", transitionId ?? "unknown");
+            return;
+        }
+
+        void PostStatusChanged()
+        {
+            try
+            {
+                _logger.LogInformation(
+                    "[STATUSCHANGED EMIT] Timestamp={Timestamp} TransitionId={TransitionId} ThreadId={ThreadId}.",
+                    DateTimeOffset.Now.ToString("O"),
+                    transitionId ?? "unknown",
+                    Environment.CurrentManagedThreadId);
+                _coreWebView?.PostWebMessageAsJson("""{"type":"statusChanged"}""");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to notify WebView about status change. TransitionId={TransitionId}.", transitionId ?? "unknown");
+            }
+        }
+
         try
         {
-            _coreWebView?.PostWebMessageAsJson("""{"type":"statusChanged"}""");
+            if (dispatcher.CheckAccess())
+            {
+                PostStatusChanged();
+            }
+            else
+            {
+                dispatcher.BeginInvoke((Action)PostStatusChanged);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to notify WebView about status change.");
+            _logger.LogWarning(ex, "Failed to dispatch status change notification. TransitionId={TransitionId}.", transitionId ?? "unknown");
         }
     }
 
@@ -187,6 +218,14 @@ public sealed class WebViewBridge
                 return;
             }
 
+            if (message.Type == "enterWorkMode")
+            {
+                _logger.LogInformation(
+                    "[WORKMODE REQUEST] Timestamp={Timestamp} TransitionId={TransitionId}.",
+                    DateTimeOffset.Now.ToString("O"),
+                    message.RequestId);
+            }
+
             object data = message.Type switch
             {
                 "getStatus" => await _modeCommandService.GetStatusAsync(),
@@ -222,7 +261,35 @@ public sealed class WebViewBridge
                 _ => throw new InvalidOperationException("Unsupported command.")
             };
 
+            if (message.Type == "getStatus" && data is AppStatus status)
+            {
+                _logger.LogInformation(
+                    "[GETSTATUS RESPONSE] Timestamp={Timestamp} CurrentMode={CurrentMode} SessionState={SessionState} ActiveProfileName={ActiveProfileName} ActiveLauncher={ActiveLauncher}.",
+                    DateTimeOffset.Now.ToString("O"),
+                    status.CurrentMode ?? "null",
+                    status.SessionState ?? "null",
+                    status.ActiveProfileName ?? "null",
+                    status.ActiveLauncher ?? "null");
+            }
+
+                    if (message.Type == "enterWorkMode" && data is ModeResult { Success: true })
+                    {
+                    var committedStatus = await _modeCommandService.GetStatusAsync();
+                    _logger.LogInformation(
+                        "[WORKMODE BACKEND COMMIT] Timestamp={Timestamp} TransitionId={TransitionId} CurrentMode={CurrentMode} SessionState={SessionState} ActiveProfileName={ActiveProfileName} ActiveLauncher={ActiveLauncher}.",
+                        DateTimeOffset.Now.ToString("O"),
+                        message.RequestId,
+                        committedStatus.CurrentMode ?? "null",
+                        committedStatus.SessionState ?? "null",
+                        committedStatus.ActiveProfileName ?? "null",
+                        committedStatus.ActiveLauncher ?? "null");
+                    }
+
             await PostResponseAsync(coreWebView, message.RequestId, true, data, null);
+            if (message.Type is "enterGameShell" or "enterGameShellWithProfile" or "enterWorkMode")
+            {
+                NotifyStatusChanged(message.RequestId);
+            }
         }
         catch (Exception ex)
         {
