@@ -9,6 +9,81 @@ namespace GameShell.Core.Tests;
 public sealed class ModeOrchestratorTests
 {
     [Fact]
+    public async Task CompletedFirstRun_InitializesWorkModeAndPersistsRuntimeState()
+    {
+        var settings = new AppSettings { Ui = { IsFirstRunCompleted = true } };
+        var runtime = new FakeRuntimeStateService(new RuntimeState());
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            new FakeDisplayTransitionService(),
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var status = await orchestrator.GetStatusAsync();
+
+        Assert.Equal(GameShellMode.Work.ToString(), status.CurrentMode);
+        Assert.Equal(ModeState.WorkMode, status.State);
+        Assert.Equal(GameShellMode.Work, runtime.State.CurrentMode);
+        Assert.Equal("Initialized", runtime.State.LastResult);
+    }
+
+    [Fact]
+    public async Task CompletedFirstRunOnStartup_DoesNotOverwriteActiveGamingMode()
+    {
+        var settings = new AppSettings { Ui = { IsFirstRunCompleted = true } };
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            new FakeDisplayTransitionService(),
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var status = await orchestrator.GetStatusAsync();
+
+        Assert.Equal(GameShellMode.PcGaming.ToString(), status.CurrentMode);
+        Assert.Equal(ModeState.GameShell, status.State);
+        Assert.Equal(GameShellMode.PcGaming, runtime.State.CurrentMode);
+    }
+
+    [Fact]
+    public async Task PersistedWorkModeOnFreshStartup_ReportsWorkState()
+    {
+        var settings = new AppSettings { Ui = { IsFirstRunCompleted = true } };
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            new FakeDisplayTransitionService(),
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.Work }),
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var status = await orchestrator.GetStatusAsync();
+
+        Assert.Equal(GameShellMode.Work.ToString(), status.CurrentMode);
+        Assert.Equal(ModeState.WorkMode, status.State);
+    }
+
+    [Fact]
+    public async Task CompletedFirstRun_DoesNotHidePersistedRuntimeFault()
+    {
+        var settings = new AppSettings { Ui = { IsFirstRunCompleted = true } };
+        var runtime = new FakeRuntimeStateService(new RuntimeState { LastResult = "Failed" });
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            new FakeDisplayTransitionService(),
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var status = await orchestrator.GetStatusAsync();
+
+        Assert.Null(status.CurrentMode);
+        Assert.Equal(ModeState.Unknown, status.State);
+        Assert.Equal("Failed", runtime.State.LastResult);
+    }
+
+    [Fact]
     public async Task EnterWorkMode_RunsCleanupBeforeDisplayRestoreAndPostWorkflow()
     {
         var order = new List<string>();
