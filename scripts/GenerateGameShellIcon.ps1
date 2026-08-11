@@ -8,6 +8,45 @@ $appPngPath = Join-Path $assetDir "GameShell.png"
 $appIcoPath = Join-Path $assetDir "GameShell.ico"
 $shortcutIcoPath = Join-Path $assetDir "GameShellShortcut.ico"
 
+function Recolor-PngToGreenV2([string]$pngPath) {
+    if (-not (Test-Path -LiteralPath $pngPath)) {
+        throw "Missing source PNG: $pngPath"
+    }
+
+    $source = [System.Drawing.Bitmap]::FromFile((Resolve-Path -LiteralPath $pngPath))
+    $recolored = New-Object System.Drawing.Bitmap $source.Width, $source.Height, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    try {
+        $background = [System.Drawing.Color]::FromArgb(13, 17, 16)
+        $surface = [System.Drawing.Color]::FromArgb(21, 26, 23)
+        $greenDark = [System.Drawing.Color]::FromArgb(30, 81, 40)
+        $greenPrimary = [System.Drawing.Color]::FromArgb(78, 159, 61)
+        $greenBright = [System.Drawing.Color]::FromArgb(122, 201, 67)
+
+        for ($y = 0; $y -lt $source.Height; $y++) {
+            for ($x = 0; $x -lt $source.Width; $x++) {
+                $pixel = $source.GetPixel($x, $y)
+                if ($pixel.A -le 10) {
+                    $recolored.SetPixel($x, $y, $pixel)
+                    continue
+                }
+
+                $luminance = (0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B) / 255
+                $target = if ($luminance -lt 0.08) { $background } elseif ($luminance -lt 0.18) { $surface } elseif ($luminance -lt 0.38) { $greenDark } elseif ($luminance -lt 0.55) { $greenPrimary } else { $greenBright }
+                $recolored.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($pixel.A, $target.R, $target.G, $target.B))
+            }
+        }
+
+        $temporaryPath = "$pngPath.green-v2.tmp.png"
+        $recolored.Save($temporaryPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        $source.Dispose()
+        Move-Item -LiteralPath $temporaryPath -Destination $pngPath -Force
+    }
+    finally {
+        $recolored.Dispose()
+        $source.Dispose()
+    }
+}
+
 function Convert-PngToIco([string]$pngPath, [string]$icoPath) {
     if (-not (Test-Path -LiteralPath $pngPath)) {
         throw "Missing source PNG: $pngPath"
@@ -156,6 +195,7 @@ function Convert-BitmapToIconDib([System.Drawing.Bitmap]$bitmap) {
     }
 }
 
+Recolor-PngToGreenV2 $appPngPath
 Convert-PngToIco $appPngPath $appIcoPath
 Copy-Item -LiteralPath $appIcoPath -Destination $shortcutIcoPath -Force
 

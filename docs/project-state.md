@@ -70,6 +70,12 @@ Aktualne, robocze podsumowanie stanu projektu.
 
 ## Stan UI
 
+- Theme UI to GameShell Green v2: ciemne neutralne tla i surfaces z zielonym akcentem, bez Steel Blue ani neonowego glow.
+- UI ma centralny motion system: 120/180/220 ms, standard/out easing, subtelne wejscie stron i dialogow oraz transitions dla sidebaru, profili, kart, inputow i statusow.
+- Motion nie zmienia layoutu ani wymiarow buttonow. Przy reduced motion ruch transformacji jest wylaczany.
+- Sidebar navigation wypelnia dostepna szerokosc kontenera. Tekst ma flexowe miejsce, a chevron pozostaje pionowo wycentrowany i przesuwa sie tylko poziomo.
+- Dashboardowe i ustawieniowe chevrony nie uzywaja `translateY` jako efektu hoveru.
+
 - Po pierwszej konfiguracji aplikacja otwiera dashboard z profilem.
 - Opcja minimalizowania pozostałych okien enumeruje wszystkie widoczne okna top-level przez Win32 `EnumWindows`, więc obejmuje aplikacje i okna na wszystkich ekranach. Minimalizacja jest wykonywana także po przełączeniu layoutu ekranów, bezpośrednio przed uruchomieniem launchera, aby Windows nie przywrócił okien podczas zmiany konfiguracji monitorów.
 - Dashboardowy sidebar pokazuje w module `STAN` realtime status kontrolera: `DualSense`, `Xbox Controller` albo `Kontroler` oraz `POLACZONY`/`Brak kontrolera`.
@@ -122,7 +128,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja: build solution przeszedl, testy .NET `76/76`, test runtime UI `1/1`, test setup routing `20/20`, build UI i pakowanie EXE zakonczone sukcesem. Reprodukcja manualna potwierdzila Work Mode z przycisku i z pada; wejscie z pada wymaga publikacji `statusChanged` przez WPF Dispatcher.
+- Ostatnia walidacja: `npm run build`, `npm run test:encoding` oraz `dotnet build .\GameShell.sln --no-restore` przeszly; pakowanie EXE zakonczone sukcesem. Ostatni przebieg testow .NET zapisany w repo obejmuje `76/76`, test runtime UI `1/1` i test setup routing `20/20`.
 
 ## Utrzymanie repo
 

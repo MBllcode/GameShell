@@ -59,12 +59,15 @@ If the destination EXE is locked (running process), script writes a timestamped 
 ## UI/UX status
 
 - Dashboard + profile flow is active after first-run wizard.
+- The UI uses the GameShell Green v2 theme with dark neutral surfaces and green accents.
+- Motion polish is limited to color, border, opacity, shadow, and small directional cues; it does not change layout or button geometry.
 - Work Mode is moved out of quick-switch cards into the sidebar profile module.
 - Step `Ekrany` validates profile name and display selection as separate local errors.
 - Profile display drafts are committed deterministically before save/navigation.
 - Profile hotkeys are per-profile, normalized to canonical keys, and must remain unique across profiles.
 - During hotkey capture (`NASLUCHIWANIE`), registered global hotkeys are temporarily disabled so the UI can validate duplicate combinations locally.
 - `Start with Windows` writes Windows autostart integration, and `Start minimized to tray` now applies on normal app startup.
+- Sidebar navigation rows fill their available container width; their chevrons remain vertically centered and move only horizontally on hover.
 
 ## Project layout
 

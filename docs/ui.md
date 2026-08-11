@@ -28,8 +28,15 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 ## Tokens i styl
 
 - Jeden zestaw tokenow kolorow i spacingu w `styles.css`.
+- Aktywny theme to GameShell Green v2: `#0D1110` dla tla, `#151A17` dla surfaces, `#1B211D` dla surfaces elevated, `#1E5128` dla aktywnych stanow, `#4E9F3D` jako glowny akcent i `#7AC943` jako bright accent.
+- Tekst Green v2: `#F2F5F2`, `#B7C2B9`, `#7E8A80`; obramowania: `#303A32` i `#465248`.
+- Zielony akcent dotyczy stanow aktywnych, zaznaczen, CTA, focusu, chevronow oraz brandingu GameShell. Tla, sidebar, panele i karty pozostaja neutralne.
+- Kolory Playnite (`#FF8A00`), Steam (`#66C0F4`) i Xbox (`#107C10`) pozostaja brandingiem launcherow i nie sa recolorowane.
 - Karty i kontrolki z mala geometria (techniczne rogi, bez duzych zaokraglen).
 - Ostrzezenie (zolty) tylko semantycznie, nie jako glowny akcent.
+- Motion korzysta z tokenow `--motion-fast: 120ms`, `--motion-normal: 180ms`, `--motion-slow: 220ms` oraz easingow `--ease-standard` i `--ease-out`.
+- Motion animuje tylko kolory, tlo, obramowania, opacity, box-shadow i ograniczone transformacje wejscia; nie zmienia geometrii, spacingu ani zawartosci JSX.
+- `prefers-reduced-motion: reduce` skraca transitions i usuwa ruch directional/page entrance.
 
 ## Komponenty bazowe
 
@@ -46,6 +53,9 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Przy aktywnej sesji konsolowej sidebar pokazuje osobny, zwiezly status lifecycle sesji obok informacji o trybie; status nie wymaga osobnego pollingu UI. Jest to status nadzoru GameShell, a nie zastapienie lifecycle launchera.
 - Dashboard ma byc zwarty i czytelny; unikamy pustych, wysokich kart bez informacji.
 - Przy pustej liscie profili boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne. Profilowe akcje i ustawienia sa wtedy wyszarzone oraz nieaktywne; `+ Dodaj profil` i ustawienia globalne pozostaja aktywne.
+- Globalne linki sidebaru (`Zachowanie Work Mode`, `Skróty Work Mode`, `Uruchamianie aplikacji`) wypelniaja cala dostepna szerokosc wewnetrznego kontenera, maja stabilny padding i nie przesuwaja tekstu podczas hoveru.
+- Hover sidebaru animuje pelne tlo rowa, separator, tekst, dekoracyjny left accent i chevron. Chevron pozostaje pionowo wycentrowany i moze przesunac sie tylko poziomo o 2 px.
+- Chevrony kart skrotow zachowuja stale centrowanie pionowe; ich hover cue jest wylacznie poziomy, maksymalnie 3 px.
 
 ## Krok Ekrany
 
