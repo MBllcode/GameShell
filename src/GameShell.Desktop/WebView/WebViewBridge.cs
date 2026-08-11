@@ -288,7 +288,7 @@ public sealed class WebViewBridge
                     }
 
             await PostResponseAsync(coreWebView, message.RequestId, true, data, null);
-            if (message.Type is "enterGameShell" or "enterGameShellWithProfile" or "enterWorkMode")
+            if (message.Type is "enterGameShell" or "enterGameShellWithProfile" or "enterWorkMode" or "saveSettings")
             {
                 NotifyStatusChanged(message.RequestId);
             }
@@ -326,6 +326,10 @@ public sealed class WebViewBridge
 
         LogGamingProfileTopologies(settings);
         await SaveAndApplySettingsAsync(settings);
+        if (settings.Ui.IsFirstRunCompleted)
+        {
+            await _modeCommandService.GetStatusAsync();
+        }
         return settings;
     }
 

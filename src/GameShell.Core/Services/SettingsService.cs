@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GameShell.Core.Interfaces;
@@ -17,6 +18,8 @@ public sealed class SettingsService : ISettingsService
 
     private readonly ILogger<SettingsService> _logger;
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
+    private readonly string _backupPath;
+    private readonly string _tempPath;
     private AppSettings? _cachedSettings;
     private DateTime _cachedLastWriteTimeUtc;
 
@@ -27,6 +30,8 @@ public sealed class SettingsService : ISettingsService
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GameShell",
             "settings.json");
+        _backupPath = $"{SettingsPath}.bak";
+        _tempPath = $"{SettingsPath}.tmp";
     }
 
     public string SettingsPath { get; }
@@ -38,47 +43,85 @@ public sealed class SettingsService : ISettingsService
 
         try
         {
-            if (!File.Exists(SettingsPath))
+            if (File.Exists(SettingsPath))
             {
-                var defaults = CreateDefaultSettings();
-                await WriteSettingsAsync(defaults, cancellationToken);
-                _logger.LogDebug(
-                    "FIRST RUN COMPLETION LOADED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
-                    defaults.Ui.IsFirstRunCompleted,
-                    SettingsPath);
-                return defaults;
+                var lastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
+                if (_cachedSettings is not null && _cachedLastWriteTimeUtc == lastWriteTimeUtc)
+                {
+                    return _cachedSettings;
+                }
+
+                var primary = await TryLoadValidSettingsAsync(SettingsPath, cancellationToken);
+                if (primary.IsValid)
+                {
+                    _cachedSettings = primary.Settings;
+                    _cachedLastWriteTimeUtc = lastWriteTimeUtc;
+                    LogRefreshPolicyHydration(primary.Settings, primary.Settings);
+                    _logger.LogDebug(
+                        "[SETTINGS LOAD] Path={Path} Result=Success",
+                        SettingsPath);
+                    return primary.Settings;
+                }
+
+                var corruptPath = $"{SettingsPath}.corrupt-{DateTimeOffset.Now:yyyyMMddHHmmss}";
+                try
+                {
+                    File.Copy(SettingsPath, corruptPath, overwrite: true);
+                    _logger.LogWarning(
+                        "[SETTINGS RECOVERY] Primary=Invalid Backup={BackupExists} Action=PreservedCorruptPrimary",
+                        File.Exists(_backupPath));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "[SETTINGS RECOVERY] Primary=Invalid Backup={BackupExists} Action=CorruptCopyFailed",
+                        File.Exists(_backupPath));
+                }
+
+                if (File.Exists(_backupPath))
+                {
+                    var backup = await TryLoadValidSettingsAsync(_backupPath, cancellationToken);
+                    if (backup.IsValid)
+                    {
+                        var restored = backup.Settings;
+                        await WriteAtomicAsync(SettingsPath, SerializeSettings(restored), cancellationToken);
+                        _cachedSettings = restored;
+                        _cachedLastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
+                        _logger.LogWarning(
+                            "[SETTINGS RECOVERY] Primary=Invalid Backup=Valid Action=RestoredBackup");
+                        return restored;
+                    }
+                }
+
+                var invalidDefaults = CreateDefaultSettings();
+                await WriteSettingsAsync(invalidDefaults, cancellationToken);
+                _logger.LogWarning(
+                    "[SETTINGS RECOVERY] Primary=Invalid Backup=Invalid Action=Defaults");
+                return invalidDefaults;
             }
 
-            var lastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
-            if (_cachedSettings is not null && _cachedLastWriteTimeUtc == lastWriteTimeUtc)
+            if (File.Exists(_backupPath))
             {
-                return _cachedSettings;
+                var backup = await TryLoadValidSettingsAsync(_backupPath, cancellationToken);
+                if (backup.IsValid)
+                {
+                    var restored = backup.Settings;
+                    await WriteAtomicAsync(SettingsPath, SerializeSettings(restored), cancellationToken);
+                    _cachedSettings = restored;
+                    _cachedLastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
+                    _logger.LogWarning(
+                        "[SETTINGS RECOVERY] Primary=Missing Backup=Valid Action=RestoredBackup");
+                    return restored;
+                }
             }
 
-            try
-            {
-                await using var stream = File.OpenRead(SettingsPath);
-                var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken);
-                var validated = AppSettingsValidator.Validate(settings ?? CreateDefaultSettings());
-                _cachedSettings = validated;
-                _cachedLastWriteTimeUtc = lastWriteTimeUtc;
-                LogRefreshPolicyHydration(settings, validated);
-                _logger.LogDebug(
-                    "FIRST RUN COMPLETION LOADED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
-                    validated.Ui.IsFirstRunCompleted,
-                    SettingsPath);
-                return validated;
-            }
-            catch (JsonException ex)
-            {
-                var backupPath = $"{SettingsPath}.corrupt-{DateTimeOffset.Now:yyyyMMddHHmmss}";
-                File.Copy(SettingsPath, backupPath, overwrite: true);
-                _logger.LogError(ex, "Settings JSON is invalid. Backed up to {BackupPath}", backupPath);
-
-                var defaults = CreateDefaultSettings();
-                await WriteSettingsAsync(defaults, cancellationToken);
-                return defaults;
-            }
+            var missingDefaults = CreateDefaultSettings();
+            await WriteSettingsAsync(missingDefaults, cancellationToken);
+            _logger.LogDebug(
+                "[SETTINGS LOAD] Primary=Missing Backup=Missing Action=Defaults Path={Path}",
+                SettingsPath);
+            return missingDefaults;
         }
         finally
         {
@@ -90,9 +133,15 @@ public sealed class SettingsService : ISettingsService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await _settingsGate.WaitAsync(cancellationToken);
+
         try
         {
             await WriteSettingsAsync(settings, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SETTINGS SAVE] Path={Path} Result=Failed", SettingsPath);
+            throw;
         }
         finally
         {
@@ -103,15 +152,100 @@ public sealed class SettingsService : ISettingsService
     private async Task WriteSettingsAsync(AppSettings settings, CancellationToken cancellationToken)
     {
         var validated = AppSettingsValidator.Validate(settings);
-        await using var stream = File.Create(SettingsPath);
-        await JsonSerializer.SerializeAsync(stream, validated, JsonOptions, cancellationToken);
+        var payload = SerializeSettings(validated);
+
+        if (File.Exists(SettingsPath))
+        {
+            var current = await TryLoadValidSettingsAsync(SettingsPath, cancellationToken);
+            if (current.IsValid)
+            {
+                await BackupCurrentPrimaryAsync(cancellationToken);
+            }
+        }
+
+        await WriteAtomicAsync(SettingsPath, payload, cancellationToken);
         _cachedSettings = validated;
         _cachedLastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
         LogRefreshPolicyHydration(validated, validated);
         _logger.LogInformation(
-            "FIRST RUN COMPLETION SAVED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
-            validated.Ui.IsFirstRunCompleted,
-            SettingsPath);
+            "[SETTINGS SAVE] Path={Path} Bytes={Bytes} Result=Success",
+            SettingsPath,
+            payload.Length);
+    }
+
+    private async Task BackupCurrentPrimaryAsync(CancellationToken cancellationToken)
+    {
+        if (!File.Exists(SettingsPath))
+        {
+            return;
+        }
+
+        var bytes = await File.ReadAllBytesAsync(SettingsPath, cancellationToken);
+        await WriteAtomicAsync(_backupPath, bytes, cancellationToken);
+    }
+
+    private async Task WriteAtomicAsync(string destinationPath, string payload, CancellationToken cancellationToken)
+    {
+        await WriteAtomicAsync(destinationPath, Encoding.UTF8.GetBytes(payload), cancellationToken);
+    }
+
+    private async Task WriteAtomicAsync(string destinationPath, byte[] payload, CancellationToken cancellationToken)
+    {
+        var tempPath = $"{destinationPath}.tmp";
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+        if (File.Exists(tempPath))
+        {
+            File.Delete(tempPath);
+        }
+
+        await using (var stream = new FileStream(
+                         tempPath,
+                         FileMode.CreateNew,
+                         FileAccess.Write,
+                         FileShare.None,
+                         4096,
+                         FileOptions.Asynchronous | FileOptions.SequentialScan))
+        {
+            await stream.WriteAsync(payload.AsMemory(0, payload.Length), cancellationToken);
+            await stream.FlushAsync(cancellationToken);
+            stream.Flush(flushToDisk: true);
+        }
+
+        File.Move(tempPath, destinationPath, overwrite: true);
+    }
+
+    private static string SerializeSettings(AppSettings settings)
+    {
+        var json = JsonSerializer.Serialize(settings, JsonOptions);
+        using var document = JsonDocument.Parse(json);
+        _ = document.RootElement;
+        var roundTrip = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Serialized settings payload is invalid.");
+        AppSettingsValidator.Validate(roundTrip);
+        return json;
+    }
+
+    private async Task<(bool IsValid, AppSettings Settings)> TryLoadValidSettingsAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return (false, new AppSettings());
+        }
+
+        try
+        {
+            await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
+                ?? new AppSettings();
+            var validated = AppSettingsValidator.Validate(settings);
+            return (true, validated);
+        }
+        catch (Exception)
+        {
+            return (false, new AppSettings());
+        }
     }
 
     private static AppSettings CreateDefaultSettings() => new();

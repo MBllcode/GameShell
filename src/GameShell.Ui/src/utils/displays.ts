@@ -79,6 +79,19 @@ export function profileTargetFromDisplay(display: DisplayDeviceInfo, fallbackMod
   };
 }
 
+export function profileTargetForAddition(display: DisplayDeviceInfo, fallbackModes: DisplayModeInfo[] = [], isFirstDisplay: boolean): ProfileDisplayTarget {
+  return { ...profileTargetFromDisplay(display, fallbackModes), enabled: true, isPrimary: isFirstDisplay };
+}
+
+export function getTopologyEditorErrors(topology: GamingProfileDisplayTopology): string[] {
+  return topology.displays.length === 0 ? [] : validateTopology(topology);
+}
+
+export function normalizeTopologyPrimary(topology: GamingProfileDisplayTopology): GamingProfileDisplayTopology {
+  const enabled = topology.displays.find((display) => display.enabled && display.isPrimary) ?? topology.displays.find((display) => display.enabled);
+  return { displays: topology.displays.map((display) => ({ ...display, isPrimary: Boolean(enabled && sameIdentity(display.identity, enabled.identity) && display.enabled) })) };
+}
+
 export function getProfileTopology(profile: DisplayLayoutProfile): GamingProfileDisplayTopology {
   return profile.displayTopology ?? topologyFromLegacy(profile.layout);
 }

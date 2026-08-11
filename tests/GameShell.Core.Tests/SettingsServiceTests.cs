@@ -542,6 +542,114 @@ public sealed class SettingsServiceTests
         Assert.True(reloaded.Ui.IsFirstRunCompleted);
     }
 
+    [Fact]
+    public async Task LoadAsync_RecoversFromCorruptedPrimaryUsingBackup()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        await File.WriteAllTextAsync(settingsPath + ".bak", """
+            {
+              "ui": {
+                "closeToTray": true,
+                "isFirstRunCompleted": true
+              },
+              "display": {
+                "pcGamingProfiles": [
+                  {
+                    "name": "ALPHA",
+                    "layout": { "displays": [] }
+                  }
+                ]
+              }
+            }
+            """);
+
+        await File.WriteAllTextAsync(settingsPath, "{\"ui\":{\"closeToTray\":true,\"windowWidth\":1516.8000000000002");
+
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var loaded = await service.LoadAsync();
+
+        Assert.True(loaded.Ui.IsFirstRunCompleted);
+        Assert.Equal("ALPHA", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RecoversFromMissingPrimaryUsingBackup()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        await File.WriteAllTextAsync(settingsPath + ".bak", """
+            {
+              "ui": {
+                "closeToTray": true,
+                "isFirstRunCompleted": true
+              },
+              "display": {
+                "pcGamingProfiles": [
+                  {
+                    "name": "BETA",
+                    "layout": { "displays": [] }
+                  }
+                ]
+              }
+            }
+            """);
+
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var loaded = await service.LoadAsync();
+
+        Assert.True(loaded.Ui.IsFirstRunCompleted);
+        Assert.Equal("BETA", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+    }
+
+    [Fact]
+    public async Task SaveAsync_DoesNotCorruptPrimaryUnderConcurrentAccess()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var first = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "FIRST", Layout = new DisplayLayoutSnapshot() }] } };
+        var second = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "SECOND", Layout = new DisplayLayoutSnapshot() }] } };
+
+        await Task.WhenAll(service.SaveAsync(first), service.SaveAsync(second));
+
+        var loaded = await service.LoadAsync();
+        Assert.True(loaded.Ui.IsFirstRunCompleted);
+        Assert.Contains(loaded.Display.PcGamingProfiles, profile => string.Equals(profile.Name, "SECOND", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profile.Name, "FIRST", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SaveAsync_GetsLatestStateWhenWritesQueue()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var first = new AppSettings { Ui = new UiSettings { CloseToTray = true } };
+        var second = new AppSettings { Ui = new UiSettings { CloseToTray = false, IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "LATEST", Layout = new DisplayLayoutSnapshot() }] } };
+
+        await service.SaveAsync(first);
+        await service.SaveAsync(second);
+
+        var loaded = await service.LoadAsync();
+        Assert.False(loaded.Ui.CloseToTray);
+        Assert.True(loaded.Ui.IsFirstRunCompleted);
+        Assert.Equal("LATEST", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+    }
+
+    [Fact]
+    public async Task LoadAsync_IgnoresStaleTempFileWhenPrimaryIsValid()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var tempPath = settingsPath + ".tmp";
+        var primary = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "PRIMARY", Layout = new DisplayLayoutSnapshot() }] } };
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        await service.SaveAsync(primary);
+        await File.WriteAllTextAsync(tempPath, "{\"ui\":{\"isFirstRunCompleted\":false}}"
+            );
+
+        var loaded = await service.LoadAsync();
+
+        Assert.Equal("PRIMARY", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+        Assert.True(loaded.Ui.IsFirstRunCompleted);
+    }
+
     private static string CreateTempSettingsPath()
     {
         var directory = Path.Combine(Path.GetTempPath(), "GameShell.Tests", Guid.NewGuid().ToString("N"));

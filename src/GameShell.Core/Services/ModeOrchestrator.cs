@@ -69,6 +69,24 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         if (_currentMode is null && runtimeState.CurrentMode is not null)
         {
             _currentMode = runtimeState.CurrentMode;
+            _state = runtimeState.CurrentMode == GameShellMode.Work
+                ? ModeState.WorkMode
+                : ModeState.GameShell;
+        }
+        else if (_currentMode is null
+            && runtimeState.CurrentMode is null
+            && _state == ModeState.Unknown
+            && settings.Ui.IsFirstRunCompleted
+            && string.Equals(runtimeState.LastResult, "Unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            _currentMode = GameShellMode.Work;
+            _state = ModeState.WorkMode;
+            runtimeState.CurrentMode = GameShellMode.Work;
+            runtimeState.LastRequestedMode = GameShellMode.Work.ToString();
+            runtimeState.LastCompletedAt = DateTimeOffset.Now;
+            runtimeState.LastResult = "Initialized";
+            await _runtimeStateService.SaveAsync(runtimeState, cancellationToken);
+            _logger.LogInformation("Runtime mode initialized to Work after completed first run.");
         }
 
         return CreateStatus(settings);

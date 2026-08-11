@@ -119,6 +119,10 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Modal nadpisania pojawia sie tylko przy rzeczywistym konflikcie nazwy z innym profilem.
 - Launcher i ustawienia profilu nie sa nadpisywane starym snapshotem po edycji ekranow.
 - Jawne `null` dla pustego `pcGamingLayout` i `activePcGamingProfileName` jest zachowywane podczas zapisu, aby walidator nie odtwarzal profilu `Domyslny`.
+- `SettingsService` zapisuje ustawienia atomowo: serializacja i walidacja odbywaja sie przed otwarciem pliku docelowego, nastepnie tworzony jest plik `.tmp`, flush do dysku i `File.Move` na miejsce `settings.json`.
+- Backup `.bak` jest aktualizowany w bezpiecznej sekwencji; przy niepoprawnym albo uszkodzonym `settings.json` loader preferuje poprawny backup zamiast resetu do pierwszego uruchomienia.
+- Pliki z uszkodzeniem sa zachowywane jako kopie `.corrupt-<timestamp>` z zachowaniem diagnostyki, a w przypadku braku poprawnego glownego pliku i backupu system tworzy domyslne ustawienia dopiero po potwierdzeniu, ze brak bezpiecznego odzyskania.
+- Weryfikacja: `SettingsServiceTests` 25/25, `dotnet test GameShell.sln` 118/118, 0 failed.
 
 ## Desktop host i runtime
 
@@ -139,7 +143,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja tego etapu: UI topology/geometria `21/21`, testy .NET `104/104`, `npm run build`, `dotnet build .\GameShell.sln --no-restore` oraz pakowanie EXE zakonczone sukcesem.
+- Ostatnia walidacja tego etapu: `dotnet test GameShell.sln` -> `118/118` passed, `SettingsServiceTests` -> `25/25` passed, `npm run build` oraz build .NET wykonane bez bledow; pakowanie EXE ostatnio odpalane po finalnej poprawce stanu repo.
 
 ## Utrzymanie repo
 

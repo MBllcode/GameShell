@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { applyEdgeSnap, canvasToTopology, computeTopologyBounds, createCanvasTransform, rectFromPosition, rectsOverlap, resolveCollision, topologyToCanvas } from '../src/utils/displayTopologyGeometry.ts';
-import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, profileTargetFromDisplay, topologyFromLegacy, topologyToLegacy, validateTopology } from '../src/utils/displays.ts';
+import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, normalizeTopologyPrimary, profileTargetForAddition, profileTargetFromDisplay, topologyFromLegacy, topologyToLegacy, validateTopology } from '../src/utils/displays.ts';
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../src/types/bridge.ts';
 
 function identity(name: string): DisplayIdentity {
@@ -17,6 +17,12 @@ test('supports topologies with more than five displays', () => {
   assert.equal(validateTopology(topology(2)).length, 0);
   assert.equal(validateTopology(topology(5)).length, 0);
   assert.equal(validateTopology(topology(8)).length, 0);
+});
+
+test('empty editor validation stays quiet while domain validation remains defensive', () => {
+  assert.deepEqual(getTopologyEditorErrors({ displays: [] }), []);
+  assert.ok(validateTopology({ displays: [] }).includes('Włącz co najmniej jeden ekran.'));
+  assert.ok(validateTopology({ displays: [] }).includes('Wybierz dokładnie jeden główny ekran.'));
 });
 
 test('disabled display remains a profile target and cannot be primary', () => {
@@ -54,6 +60,31 @@ test('active detected display addition defaults to AutoHighest instead of curren
   const target = profileTargetFromDisplay(display);
   assert.equal(target.refreshPolicy, 'AutoHighest');
   assert.equal(target.refreshRateNumerator, 0);
+});
+
+test('added displays are enabled and only the first display is primary', () => {
+  const display = { identity: identity('S90F'), name: 'S90F', isPrimary: false, isEnabled: true, isAvailable: true, sourceDeviceName: '\\\\.\\DISPLAY1', sourceId: 0, targetId: 1, adapterLuid: 1, connectionTechnology: 'HDMI', positionX: 0, positionY: 0, width: 1920, height: 1080, orientation: 'Identity', refreshRateNumerator: 0, refreshRateDenominator: 0, refreshRateHz: 0, currentModeAvailable: true, preferredWidth: 1920, preferredHeight: 1080 } satisfies DisplayDeviceInfo;
+  const first = profileTargetForAddition(display, [], true);
+  const additional = profileTargetForAddition(display, [], false);
+  assert.equal(first.enabled, true);
+  assert.equal(first.isPrimary, true);
+  assert.equal(additional.enabled, true);
+  assert.equal(additional.isPrimary, false);
+});
+
+test('selecting another display as primary enables it and clears the previous primary', () => {
+  const value = topology(2);
+  value.displays[1].identity = { ...value.displays[1].identity, adapterLuid: 2, targetId: 2, monitorDevicePath: '\\\\?\\DISPLAY#SECOND' };
+  value.displays[1].enabled = false;
+  value.displays[1].isPrimary = true;
+  const normalized = normalizeTopologyPrimary(value);
+  assert.equal(normalized.displays[0].isPrimary, true);
+  assert.equal(normalized.displays[1].isPrimary, false);
+
+  value.displays[1].enabled = true;
+  const selected = normalizeTopologyPrimary({ displays: value.displays.map((display, index) => ({ ...display, isPrimary: index === 1 })) });
+  assert.equal(selected.displays[0].isPrimary, false);
+  assert.equal(selected.displays[1].isPrimary, true);
 });
 
 test('AutoHighest display with unknown refresh can be saved', () => {
