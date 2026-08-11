@@ -5,7 +5,9 @@ namespace GameShell.Desktop.Logging;
 
 public sealed class FileLoggerProvider : ILoggerProvider
 {
-    private readonly string _logFilePath;
+    internal const long MaxFileBytes = 10 * 1024 * 1024;
+    internal const int RetainedFileCount = 7;
+    private readonly string? _logsDirectory;
 
     public FileLoggerProvider()
     {
@@ -14,11 +16,18 @@ public sealed class FileLoggerProvider : ILoggerProvider
             "GameShell",
             "Logs");
 
-        Directory.CreateDirectory(logsDirectory);
-        _logFilePath = Path.Combine(logsDirectory, $"gameshell-{DateTime.Now:yyyy-MM-dd}.log");
+        try
+        {
+            Directory.CreateDirectory(logsDirectory);
+            _logsDirectory = logsDirectory;
+        }
+        catch
+        {
+            _logsDirectory = null;
+        }
     }
 
-    public ILogger CreateLogger(string categoryName) => new FileLogger(_logFilePath, categoryName);
+    public ILogger CreateLogger(string categoryName) => new FileLogger(_logsDirectory, categoryName);
 
     public void Dispose()
     {
@@ -28,11 +37,11 @@ public sealed class FileLoggerProvider : ILoggerProvider
     {
         private static readonly Lock Gate = new();
         private readonly string _categoryName;
-        private readonly string _logFilePath;
+        private readonly string? _logsDirectory;
 
-        public FileLogger(string logFilePath, string categoryName)
+        public FileLogger(string? logsDirectory, string categoryName)
         {
-            _logFilePath = logFilePath;
+            _logsDirectory = logsDirectory;
             _categoryName = categoryName;
         }
 
@@ -47,20 +56,61 @@ public sealed class FileLoggerProvider : ILoggerProvider
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            if (!IsEnabled(logLevel))
+            if (!IsEnabled(logLevel) || _logsDirectory is null)
             {
                 return;
             }
 
-            var line = $"{DateTimeOffset.Now:O} [{logLevel}] {_categoryName}: {formatter(state, exception)}";
-            if (exception is not null)
+            try
             {
-                line += Environment.NewLine + exception;
+                var line = $"{DateTimeOffset.Now:O} [{logLevel}] {_categoryName}: {formatter(state, exception)}";
+                if (exception is not null)
+                {
+                    line += Environment.NewLine + exception;
+                }
+
+                lock (Gate)
+                {
+                    var path = GetWritablePath(_logsDirectory, DateTime.Now);
+                    using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                    using var writer = new StreamWriter(stream);
+                    writer.WriteLine(line);
+                    CleanupOldFiles(_logsDirectory);
+                }
+            }
+            catch
+            {
+                // Logging must never interrupt polling or application work.
+            }
+        }
+
+        private static string GetWritablePath(string directory, DateTime now)
+        {
+            var prefix = $"gameshell-{now:yyyy-MM-dd}";
+            var path = Path.Combine(directory, $"{prefix}.log");
+            if (!File.Exists(path) || new FileInfo(path).Length < MaxFileBytes)
+            {
+                return path;
             }
 
-            lock (Gate)
+            for (var index = 1; ; index++)
             {
-                File.AppendAllText(_logFilePath, line + Environment.NewLine);
+                var rolledPath = Path.Combine(directory, $"{prefix}.{index}.log");
+                if (!File.Exists(rolledPath) || new FileInfo(rolledPath).Length < MaxFileBytes)
+                {
+                    return rolledPath;
+                }
+            }
+        }
+
+        private static void CleanupOldFiles(string directory)
+        {
+            var files = Directory.GetFiles(directory, "gameshell-*.log")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ToArray();
+            foreach (var file in files.Skip(RetainedFileCount))
+            {
+                try { File.Delete(file); } catch { }
             }
         }
     }

@@ -1,8 +1,5 @@
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget, RefreshPolicy } from '../types/bridge';
 
-export const MAX_PROFILE_DISPLAYS = 5;
-export const PROFILE_DISPLAY_LIMIT_MESSAGE = 'Profil może zawierać maksymalnie 5 ekranów.';
-
 export function hasValidProfileRefresh(target: Pick<ProfileDisplayTarget, 'refreshRateNumerator' | 'refreshRateDenominator'>) {
   return target.refreshRateNumerator > 0
     && target.refreshRateDenominator > 0
@@ -125,7 +122,6 @@ export function areTopologiesEqual(left: GamingProfileDisplayTopology, right: Ga
 export function validateTopology(topology: GamingProfileDisplayTopology): string[] {
   const errors: string[] = [];
   if (topology.displays.length === 0) errors.push('Dodaj co najmniej jeden ekran.');
-  if (topology.displays.length > MAX_PROFILE_DISPLAYS) errors.push(PROFILE_DISPLAY_LIMIT_MESSAGE);
   const enabled = topology.displays.filter((display) => display.enabled);
   if (enabled.length === 0) errors.push('Włącz co najmniej jeden ekran.');
   if (enabled.filter((display) => display.isPrimary).length !== 1) errors.push('Wybierz dokładnie jeden główny ekran.');

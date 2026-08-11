@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import { normalizePcGamingProfileName } from '../utils';
-import { areTopologiesEqual, getProfileTopology, MAX_PROFILE_DISPLAYS, PROFILE_DISPLAY_LIMIT_MESSAGE, topologyToLegacy, validateTopology } from '../../../utils/displays';
+import { areTopologiesEqual, getProfileTopology, topologyToLegacy, validateTopology } from '../../../utils/displays';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../utils';

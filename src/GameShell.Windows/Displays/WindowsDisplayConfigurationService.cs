@@ -22,10 +22,15 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         var topology = QueryAvailableTopology(cancellationToken);
         var mapper = new DisplayConfigMapper(_logger);
         var devices = mapper.MapDevices(topology);
-        _logger.LogInformation("Detected {DisplayCount} available display(s).", devices.Count);
+        _logger.LogInformation(
+            "[DISPLAY INVENTORY] AvailablePaths={AvailablePaths} PhysicalDisplays={PhysicalDisplays} ActiveDisplays={ActiveDisplays} Displays=[{Displays}]",
+            topology.Paths.Count,
+            devices.Count,
+            devices.Count(device => device.IsEnabled),
+            string.Join(", ", devices.Select(device => $"{device.Name ?? device.Identity.FriendlyName ?? "(unnamed)"}({(device.IsEnabled ? "active" : "inactive")})")));
         foreach (var device in devices)
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "[DISPLAY MODE ENUM SOURCE] FriendlyName={FriendlyName} AdapterLuid={AdapterLuid} TargetId={TargetId} SourceId={SourceId} SourceDeviceName={SourceDeviceName} Active={Active} Available={Available} EnumDisplaySettingsDeviceName={EnumDisplaySettingsDeviceName} CurrentMode={CurrentMode}",
                 device.Name,
                 device.AdapterLuid,
@@ -74,7 +79,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         var sourceDeviceName = activeMatch is not null
             ? activeMatch.SourceDeviceName
             : string.Empty;
-        _logger.LogInformation(
+        _logger.LogDebug(
             "[DISPLAY MODE ENUM SOURCE] FriendlyName={FriendlyName} AdapterLuid={AdapterLuid} TargetId={TargetId} SourceId={SourceId} SourceDeviceName={SourceDeviceName} Active={Active} Available={Available} EnumDisplaySettingsDeviceName={EnumDisplaySettingsDeviceName} CurrentMode={CurrentMode}",
             selectedDevice.Name,
             selectedDevice.AdapterLuid,
@@ -120,10 +125,22 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             .GroupBy(mode => $"{mode.Width}:{mode.Height}:{mode.RefreshRateNumerator}:{mode.RefreshRateDenominator}")
             .Select(group => group.First())
             .ToList();
+        var requestedResolutionRates = modes
+            .Where(mode => currentMode is not null && mode.Width == currentMode.Width && mode.Height == currentMode.Height)
+            .Select(mode => mode.RefreshRateHz)
+            .Distinct()
+            .OrderBy(rate => rate)
+            .Select(rate => $"{rate:0.##}Hz")
+            .ToArray();
         _logger.LogInformation(
-            "[DISPLAY MODE INVENTORY] Display={Display} CurrentMode={CurrentMode} AvailableModes={AvailableModes}",
+            "[DISPLAY MODE INVENTORY] Display={Display} CurrentMode={CurrentMode} ModeCount={ModeCount} RequestedResolutionRefreshRates=[{RefreshRates}]",
             currentMode?.Name ?? display.FriendlyName,
             FormatMode(currentMode?.Width ?? 0, currentMode?.Height ?? 0, currentMode?.RefreshRateHz ?? 0),
+            modes.Count,
+            string.Join(", ", requestedResolutionRates));
+        _logger.LogDebug(
+            "[DISPLAY MODE INVENTORY DETAILS] Display={Display} AvailableModes={AvailableModes}",
+            currentMode?.Name ?? display.FriendlyName,
             FormatModes(modes));
         return Task.FromResult(new DisplayModeQueryResult { Success = modes.Count > 0, Modes = modes });
     }
@@ -954,7 +971,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
                 targetName.ConnectorInstance);
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "DisplayConfig path mapped. Active: {IsActive}, Available: {IsAvailable}, Source: {SourceDeviceName}, FriendlyName: {FriendlyName}, Connection: {ConnectionTechnology}.",
             isActive,
             path.TargetInfo.TargetAvailable,

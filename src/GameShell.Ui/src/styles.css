@@ -2186,6 +2186,7 @@ h1 {
 
 .display-topology-editor { display: grid; gap: 10px; padding: 13px; background: var(--bg-root); border: 1px solid var(--border-default); }
 .display-topology-toolbar, .display-properties-title, .display-inventory .display-module-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.display-topology-toolbar .display-diagnostics-actions { margin-left: auto; }
 .display-topology-toolbar p, .display-inventory p { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
 .display-topology-count, .display-properties-title span { display: block; margin-top: 4px; color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.68rem; }
 .display-topology-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(250px, 0.8fr); gap: 12px; }
@@ -2227,7 +2228,7 @@ h1 {
 .display-inventory-item:disabled { cursor: not-allowed; opacity: 0.5; }
 .display-inventory-item strong { font-size: 0.74rem; }
 .display-inventory-item span { color: var(--text-muted); font-size: 0.66rem; }
-@media (max-width: 820px) { .display-topology-layout { grid-template-columns: 1fr; } .display-topology-toolbar { flex-direction: column; } }
+@media (max-width: 820px) { .display-topology-layout { grid-template-columns: 1fr; } .display-topology-toolbar { flex-direction: column; } .display-topology-toolbar .display-diagnostics-actions { align-self: flex-end; } }
 
 @keyframes display-limit-hit {
   0% {

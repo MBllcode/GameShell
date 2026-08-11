@@ -99,7 +99,7 @@ Aktualne, robocze podsumowanie stanu projektu.
   - wymaga nazwy profilu,
   - wymaga wyboru co najmniej jednego ekranu,
   - pokazuje te bledy lokalnie i niezaleznie (osobne komunikaty),
-  - ogranicza profil do maksymalnie 5 ekranow (inline warning LIMIT).
+  - nie ma sztucznego limitu liczby ekranow w profilu; walidowane sa tylko wymagania topology i poprawnosc danych.
 - Draft konfiguracji ekranow jest commitowany deterministycznie przed zapisem i przy kluczowej nawigacji.
 - Przy tworzeniu nowego profilu hotkey profilu startuje zawsze jako pusty.
 - Cofanie `Wroc` w flow tworzenia profilu nie pokazuje modala o niezapisanych zmianach.
@@ -150,6 +150,21 @@ Aktualne, robocze podsumowanie stanu projektu.
 ## Controller stack
 
 The controller stack is physical controller -> SDL3 -> GameShell shortcuts and realtime status. GameShell does not intercept controller input for games and does not display an overlay over the game.
+
+## Controller logging i retention
+
+- `SdlControllerShortcutService` nie loguje pustego wyniku `SDL_GetGamepads` w normalnym polling hot-path.
+- Status kontrolera jest porownywany jako snapshot `Connected`, `ControllerId`, `Name` i `Family`; marker `[CONTROLLER STATUS CHANGED]` pojawia sie tylko przy realnej zmianie. Licznik sekwencji nie jest zmiana sam w sobie.
+- Diagnostyka pollingu capture jest na poziomie `Debug`, a realne bledy SDL sa logowane jako `Warning` z deduplikacja tego samego klucza przez 60 sekund oraz raportem liczby suppressed errors.
+- File logger uzywa wspoldzielonego dostepu `FileShare.ReadWrite`, rotacji dziennej i po rozmiarze 10 MB oraz retencji 7 plikow, czyli okolo 70 MB lacznie. Wyjatki sinka nie propagują sie do pollingu ani logiki aplikacji.
+- Ostateczna akceptacja wymaga recznego uruchomienia GameShell bez pada przez 10-15 minut, a potem sprawdzenia logu pod katem braku powtarzajacych sie wpisow.
+
+## Logging audit
+
+- Pojedyncze mapowania `DisplayConfig path mapped` oraz pelne listy trybow sa na poziomie `Debug`; Information pokazuje tylko zwarte `[DISPLAY INVENTORY]` i `[DISPLAY MODE INVENTORY]` z licznikami oraz refresh rates dla aktualnej rozdzielczosci.
+- Rutynowe `[REFRESH POLICY HYDRATION]` i `FIRST RUN COMPLETION LOADED` sa na poziomie `Debug`; Information zachowuje zapisy ustawien, przejscia, apply topology, recovery oraz realne ostrzezenia i bledy.
+- `SettingsService` przechowuje snapshot w pamieci. Kolejne `LoadAsync` nie otwieraja ani nie deserializuja `settings.json`, dopoki nie nastapi `SaveAsync` albo zmiana `LastWriteTimeUtc` pliku, co obsluguje takze reczna zewnetrzna edycje.
+- Test cache pokrywa ponowne uzycie snapshotu i reload po zmianie pliku. Pelna akceptacja 10-minutowego idle runtime pozostaje testem manualnym na docelowym komputerze.
 
 ## Repository map
 

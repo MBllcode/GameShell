@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\GameShell.Core\GameShell.Core.csproj" />
     <ProjectReference Include="..\..\src\GameShell.Windows\GameShell.Windows.csproj" />
+    <ProjectReference Include="..\..\src\GameShell.Desktop\GameShell.Desktop.csproj" />
   </ItemGroup>
 
 </Project>

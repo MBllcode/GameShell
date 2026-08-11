@@ -17,6 +17,8 @@ public sealed class SdlControllerShortcutService : IDisposable
     private readonly Dictionary<string, DateTimeOffset> _pressedSince = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _triggeredProfiles = new(StringComparer.OrdinalIgnoreCase);
     private readonly ControllerCaptureStateMachine _captureMachine = new();
+    private readonly ControllerStatusChangeTracker _statusChangeTracker = new();
+    private readonly LogRateLimiter _errorLogLimiter = new();
 
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
@@ -197,7 +199,9 @@ public sealed class SdlControllerShortcutService : IDisposable
         {
             if (!SdlNative.SDL_InitSubSystem(SdlNative.InitFlags.Gamepad))
             {
-                SetDisconnected($"SDL3 initialization failed: {SdlNative.Utf8(SdlNative.SDL_GetError())}");
+                var error = SdlNative.Utf8(SdlNative.SDL_GetError()) ?? "(unknown)";
+                LogControllerError("init:" + error, null, "SDL3 gamepad initialization failed. Error={Error}.", error);
+                SetDisconnected($"SDL3 initialization failed: {error}");
                 return;
             }
 
@@ -218,7 +222,7 @@ public sealed class SdlControllerShortcutService : IDisposable
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "SDL3 controller polling failed.");
+            LogControllerError("polling", ex, "SDL3 controller polling failed.");
             SetDisconnected($"SDL3 polling failed: {ex.Message}");
         }
         finally { CloseSdl(); }
@@ -228,7 +232,6 @@ public sealed class SdlControllerShortcutService : IDisposable
     {
         SdlNative.SDL_PumpEvents();
         var ids = SdlNative.SDL_GetGamepads(out var count);
-        _logger.LogInformation("SDL_GetGamepads returned {Count} device(s).", count);
         var selectedId = 0u;
         for (var index = 0; index < count; index++)
         {
@@ -247,13 +250,19 @@ public sealed class SdlControllerShortcutService : IDisposable
         _gamepadId = selectedId;
         if (selectedId == 0)
         {
-            SetDisconnected("Brak zgodnego kontrolera SDL3");
+            SetDisconnected("Brak zgodnego kontrolera SDL3", notify: false);
             return;
         }
 
         _gamepad = SdlNative.SDL_OpenGamepad(selectedId);
         if (_gamepad == IntPtr.Zero)
         {
+            LogControllerError(
+                $"open:{selectedId}:{SdlNative.Utf8(SdlNative.SDL_GetError())}",
+                null,
+                "SDL_OpenGamepad failed. Id={Id}, Error={Error}.",
+                selectedId,
+                SdlNative.Utf8(SdlNative.SDL_GetError()) ?? "(unknown)");
             SetDisconnected($"Nie można otworzyć kontrolera SDL3: {SdlNative.Utf8(SdlNative.SDL_GetError())}");
             return;
         }
@@ -401,7 +410,7 @@ public sealed class SdlControllerShortcutService : IDisposable
     {
         if (!_isCaptureActive || DateTimeOffset.UtcNow - _lastDiagnosticLogAt < TimeSpan.FromSeconds(1)) return;
         _lastDiagnosticLogAt = DateTimeOffset.UtcNow;
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Poll seq={Sequence}, Phase={Phase}, Handle valid: {HandleValid}, Connected: {Connected}, South: {South}, East: {East}, West: {West}, North: {North}, Back: {Back}, Start: {Start}, Left axis X: {LeftX}, Left axis Y: {LeftY}, Pressed: [{Pressed}].",
             sequenceNumber,
             capturePhase,
@@ -558,7 +567,7 @@ public sealed class SdlControllerShortcutService : IDisposable
         finally { lock (_syncRoot) { _isExecutingCommand = false; } }
     }
 
-    private void SetDisconnected(string reason)
+    private void SetDisconnected(string reason, bool notify = true)
     {
         lock (_syncRoot)
         {
@@ -588,28 +597,68 @@ public sealed class SdlControllerShortcutService : IDisposable
                 ++_snapshotSequence,
                 DateTimeOffset.UtcNow);
         }
-        NotifyControllerStatusChanged();
+        NotifyControllerStatusChanged(notify);
     }
 
-    private void NotifyControllerStatusChanged()
+    private void NotifyControllerStatusChanged(bool forceNotification = true)
     {
         long sequenceNumber;
         bool isConnected;
         string? deviceName;
+        string? controllerId;
+        string family;
         lock (_syncRoot)
         {
-            sequenceNumber = ++_controllerStatusChangeSequence;
             isConnected = _gamepad != IntPtr.Zero;
             deviceName = _lastDeviceName;
+            controllerId = _lastControllerId;
+            family = GetControllerFamilyForDiagnostics(deviceName);
+            var changed = _statusChangeTracker.TryRecord(
+                new ControllerStatusSnapshot(isConnected, controllerId, deviceName, family),
+                out sequenceNumber);
+            if (changed)
+            {
+                _controllerStatusChangeSequence = sequenceNumber;
+            }
+            else if (!forceNotification)
+            {
+                return;
+            }
+
+            if (changed)
+            {
+                _logger.LogInformation(
+                    "[CONTROLLER STATUS CHANGED] Sequence={SequenceNumber}. Connected={Connected}, ControllerId={ControllerId}, Name={Name}, Family={Family}.",
+                    sequenceNumber,
+                    isConnected,
+                    controllerId ?? "(none)",
+                    deviceName ?? "(none)",
+                    family);
+            }
+        }
+        _webViewBridge.NotifyControllerStatusChanged(sequenceNumber, isConnected, deviceName);
+    }
+
+    private void LogControllerError(string key, Exception? exception, string message, params object?[] args)
+    {
+        if (!_errorLogLimiter.TryAcquire(key, DateTimeOffset.UtcNow, TimeSpan.FromSeconds(60), out var suppressedCount))
+        {
+            return;
         }
 
-        _logger.LogInformation(
-            "Controller status changed #{SequenceNumber}. Connected={Connected}, Name={Name}, Family={Family}.",
-            sequenceNumber,
-            isConnected,
-            deviceName ?? "(none)",
-            GetControllerFamilyForDiagnostics(deviceName));
-        _webViewBridge.NotifyControllerStatusChanged(sequenceNumber, isConnected, deviceName);
+        if (suppressedCount > 0)
+        {
+            _logger.LogWarning("Suppressed {Count} repeated controller error(s) for key={Key}.", suppressedCount, key);
+        }
+
+        if (exception is null)
+        {
+            _logger.LogWarning(message, args);
+        }
+        else
+        {
+            _logger.LogWarning(exception, message, args);
+        }
     }
 
     private static string GetControllerFamilyForDiagnostics(string? deviceName)

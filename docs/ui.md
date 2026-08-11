@@ -65,7 +65,8 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
   - `Wybierz co najmniej jeden ekran.` przy liscie ekranow.
 - Komunikaty walidacyjne sa czerwone, dyskretne i nie udaja helpera.
 - Komunikaty pokazuja sie po probie zapisu/nawigacji lub blur, i znikaja od razu po korekcie.
-- Ograniczenie do 5 ekranow pozostaje osobnym inline warningiem `LIMIT`.
+- Profil nie ma sztucznego limitu liczby ekranow; lista wykrytych ekranow pozostaje dostepna do dalszego dodawania.
+- Akcje `Użyj bieżącego układu` i `Odśwież listę` sa wyrównane do prawej strony toolbara, także w responsywnym widoku mobilnym.
 - Canvas jest technicznym obszarem roboczym z uniform scalingiem, paddingiem i obsluga ujemnych wspolrzednych. Skala, offset viewportu i padding nie sa zapisywane do topology.
 - Drag przelicza ruch z pikseli ekranu na wspolrzedne topology przy uzyciu skali z poczatku gestu. Pozycje sa zapisywane jako rzeczywiste `PositionX`/`PositionY`.
 - Przy przeciaganiu dziala snap krawedziowy oraz ograniczony alignment snap. Resolver kolizji nie pozwala zakonczyc drag z dodatnim overlapem; dotykajace krawedzie i narożniki sa poprawne.

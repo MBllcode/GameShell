@@ -12,10 +12,11 @@ function topology(count: number): GamingProfileDisplayTopology {
   return { displays: Array.from({ length: count }, (_, index) => ({ identity: identity(`DISPLAY-${index}`), enabled: true, isPrimary: index === 0, positionX: index === 0 ? 0 : -index * 1920, positionY: index * 100, width: 1920, height: 1080, refreshRateNumerator: 60, refreshRateDenominator: 1, orientation: 'Identity' })) };
 }
 
-test('supports one, two and five display topologies', () => {
+test('supports topologies with more than five displays', () => {
   assert.equal(validateTopology(topology(1)).length, 0);
   assert.equal(validateTopology(topology(2)).length, 0);
   assert.equal(validateTopology(topology(5)).length, 0);
+  assert.equal(validateTopology(topology(8)).length, 0);
 });
 
 test('disabled display remains a profile target and cannot be primary', () => {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, DisplayModeQueryResult, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../types/bridge';
 import { normalizePcGamingProfileName } from '../features/profiles/utils';
 import { computeTopologyBounds, createCanvasTransform, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
-import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, hasValidFixedRefresh, MAX_PROFILE_DISPLAYS, profileTargetFromDisplay, PROFILE_DISPLAY_LIMIT_MESSAGE, sameIdentity, topologyFromLegacy, validateTopology } from '../utils/displays';
+import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, hasValidFixedRefresh, profileTargetFromDisplay, sameIdentity, topologyFromLegacy, validateTopology } from '../utils/displays';
 import { sendBridgeCommand } from '../services/webViewBridge';
 
 type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
@@ -94,10 +94,6 @@ export function DisplaysStep({
   }
 
   async function addDisplay(display: DisplayDeviceInfo) {
-    if (topology.displays.length >= MAX_PROFILE_DISPLAYS) {
-      setActionError(PROFILE_DISPLAY_LIMIT_MESSAGE);
-      return;
-    }
     const enabled = topology.displays.length === 0;
     let modes: DisplayModeInfo[] = [];
     try {
@@ -130,10 +126,6 @@ export function DisplaysStep({
       <h2>Ekrany</h2>
       <section className="settings-section display-topology-editor">
         <div className="display-topology-toolbar">
-          <div>
-            <p>Zdefiniuj układ, który ma należeć do tego profilu.</p>
-            <span className="display-topology-count">{topology.displays.length}/{MAX_PROFILE_DISPLAYS} ekranów w profilu</span>
-          </div>
           <div className="display-diagnostics-actions">
             <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}>Użyj bieżącego układu</button>
             <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}>{isRefreshingDisplays ? 'Odświeżanie...' : 'Odśwież listę'}</button>
@@ -152,7 +144,7 @@ export function DisplaysStep({
         <section className="display-inventory" aria-label="Wykryte ekrany dostępne do dodania">
           <div className="display-module-header"><div><strong>Wykryte ekrany</strong><p>Nie są częścią profilu, dopóki ich nie dodasz.</p></div></div>
           <div className="display-inventory-list">
-            {displays.filter((display) => !savedIdentityKeys.has(identityKey(display.identity))).map((display) => <button className="display-inventory-item" type="button" key={identityKey(display.identity)} onClick={() => void addDisplay(display)} disabled={topology.displays.length >= MAX_PROFILE_DISPLAYS}><strong>{display.name || 'Nieznany ekran'}</strong><span>{display.width || display.preferredWidth} × {display.height || display.preferredHeight} · {display.isEnabled ? 'aktywny' : 'nieaktywny'}</span></button>)}
+            {displays.filter((display) => !savedIdentityKeys.has(identityKey(display.identity))).map((display) => <button className="display-inventory-item" type="button" key={identityKey(display.identity)} onClick={() => void addDisplay(display)}><strong>{display.name || 'Nieznany ekran'}</strong><span>{display.width || display.preferredWidth} × {display.height || display.preferredHeight} · {display.isEnabled ? 'aktywny' : 'nieaktywny'}</span></button>)}
             {displays.every((display) => savedIdentityKeys.has(identityKey(display.identity))) ? <p className="hint-line">Brak dodatkowych wykrytych ekranów.</p> : null}
           </div>
         </section>

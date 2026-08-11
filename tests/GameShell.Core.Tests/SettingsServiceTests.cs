@@ -523,6 +523,25 @@ public sealed class SettingsServiceTests
         Assert.Null(validated.Display.PcGamingProfileConfigurations[0].ControllerShortcut);
     }
 
+    [Fact]
+    public async Task LoadAsync_ReusesSnapshotUntilSettingsFileChanges()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        await service.SaveAsync(new AppSettings());
+
+        var first = await service.LoadAsync();
+        var second = await service.LoadAsync();
+        Assert.Same(first, second);
+
+        await File.WriteAllTextAsync(settingsPath, "{\"ui\":{\"isFirstRunCompleted\":true}}");
+        File.SetLastWriteTimeUtc(settingsPath, DateTime.UtcNow.AddSeconds(2));
+
+        var reloaded = await service.LoadAsync();
+        Assert.NotSame(first, reloaded);
+        Assert.True(reloaded.Ui.IsFirstRunCompleted);
+    }
+
     private static string CreateTempSettingsPath()
     {
         var directory = Path.Combine(Path.GetTempPath(), "GameShell.Tests", Guid.NewGuid().ToString("N"));
