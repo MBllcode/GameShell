@@ -7,7 +7,7 @@ import { FinishStep } from '../components/FinishStep';
 import { LauncherStep } from '../components/LauncherStep';
 import { WelcomeStep } from '../components/WelcomeStep';
 import { WorkBehaviourStep } from '../components/WorkBehaviourStep';
-import type { AppSettings, ControllerShortcutSettings, ControllerStatusInfo, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../types/bridge';
+import type { AppSettings, ControllerShortcutSettings, ControllerStatusInfo, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../types/bridge';
 import type { LauncherType } from '../utils/modes';
 
 type StepId = 'welcome' | 'gaming-display' | 'launcher' | 'console-behaviour' | 'work-behaviour' | 'work-shortcuts' | 'controller' | 'app-behaviour' | 'finish';
@@ -45,7 +45,7 @@ export type ProfileSetupPageProps = {
   profiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   displayValidationState: DisplayValidationState;
-  displayDraftChange: (profileName: string, identities: DisplayIdentity[]) => void;
+  displayDraftChange: (profileName: string, topology: GamingProfileDisplayTopology) => void;
   setDisplayValidationState: (state: DisplayValidationState) => void;
   isRefreshingDisplays: boolean;
   displayListError: string | null;

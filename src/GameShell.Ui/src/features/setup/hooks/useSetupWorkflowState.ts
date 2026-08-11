@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { DisplayIdentity } from '../../../types/bridge';
+import type { GamingProfileDisplayTopology } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { DisplayProfileDraft, DisplayValidationState, OverwriteProfileAction } from '../../profiles/hooks/useDisplayProfileWorkflow';
 import type { PendingNavigationAction } from './useSetupNavigation';
@@ -23,9 +23,9 @@ export function useSetupWorkflowState() {
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showOverwriteProfileDialog, setShowOverwriteProfileDialog] = useState(false);
   const [pendingOverwriteProfileAction, setPendingOverwriteProfileAction] = useState<OverwriteProfileAction | null>(null);
-  const [displayProfileDraft, setDisplayProfileDraft] = useState<DisplayProfileDraft>({ profileName: '', identities: [] });
+  const [displayProfileDraft, setDisplayProfileDraft] = useState<DisplayProfileDraft>({ profileName: '', topology: { displays: [] } });
   const [displayValidationState, setDisplayValidationState] = useState<DisplayValidationState>({ showNameError: false, showSelectionError: false });
-  const displayProfileDraftRef = useRef<DisplayProfileDraft>({ profileName: '', identities: [] });
+  const displayProfileDraftRef = useRef<DisplayProfileDraft>({ profileName: '', topology: { displays: [] } });
   const pendingSettingsOverrideRef = useRef<SettingsPayloadOverrides | null>(null);
 
   const syncDisplayProfileDraft = useCallback((nextDraft: DisplayProfileDraft) => {
@@ -33,8 +33,8 @@ export function useSetupWorkflowState() {
     setDisplayProfileDraft(nextDraft);
   }, []);
   const markUnsavedChanges = useCallback(() => setHasUnsavedChanges(true), []);
-  const handleDisplayDraftChange = useCallback((profileName: string, identities: DisplayIdentity[]) => {
-    syncDisplayProfileDraft({ profileName, identities });
+  const handleDisplayDraftChange = useCallback((profileName: string, topology: GamingProfileDisplayTopology) => {
+    syncDisplayProfileDraft({ profileName, topology });
   }, [syncDisplayProfileDraft]);
   const handleDisplayValidationStateChange = useCallback((state: DisplayValidationState) => setDisplayValidationState(state), []);
 

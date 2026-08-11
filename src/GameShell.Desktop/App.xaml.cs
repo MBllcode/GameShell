@@ -858,10 +858,12 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IModeWorkflowService, NativeModeWorkflowService>();
         services.AddSingleton<IRuntimeStateService, RuntimeStateService>();
         services.AddSingleton<ConsoleDisplayLayoutBuilder>();
+        services.AddSingleton<GamingProfileTopologyReadinessEvaluator>();
         services.AddSingleton<WindowsDisplayConfigurationService>();
         services.AddSingleton<IDisplayQueryService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayConfigurationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayLayoutApplicationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
+        services.AddSingleton<IDisplayRecoveryService, WindowsDisplayRecoveryService>();
         services.AddSingleton<IDisplayTransitionService, DisplayTransitionService>();
         services.AddSingleton<IModeOrchestrator, ModeOrchestrator>();
         services.AddSingleton<IGameSessionMonitor, WindowsGameSessionMonitor>();

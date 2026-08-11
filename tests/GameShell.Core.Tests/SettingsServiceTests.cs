@@ -225,6 +225,160 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public async Task SaveAndReload_PreservesExplicitFixedProfileRationalRefresh()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "KONSOLA",
+                        Layout = new DisplayLayoutSnapshot(),
+                        DisplayTopology = new GamingProfileDisplayTopology
+                        {
+                            Displays =
+                            [
+                                new ProfileDisplayTarget
+                                {
+                                    Enabled = true,
+                                    Width = 3840,
+                                    Height = 2160,
+                                    RefreshPolicy = RefreshPolicy.Fixed,
+                                    FixedRefreshRateNumerator = 14398,
+                                    FixedRefreshRateDenominator = 100
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        };
+
+        await service.SaveAsync(settings);
+        var loaded = await service.LoadAsync();
+        var target = Assert.Single(Assert.Single(loaded.Display.PcGamingProfiles).DisplayTopology!.Displays);
+
+                Assert.Equal(RefreshPolicy.Fixed, target.RefreshPolicy);
+                Assert.Equal(14398u, target.FixedRefreshRateNumerator);
+                Assert.Equal(100u, target.FixedRefreshRateDenominator);
+    }
+
+        [Fact]
+        public async Task LoadAsync_ResolvesLegacyExactRefreshToAutoHighest()
+        {
+                var settingsPath = CreateTempSettingsPath();
+                await File.WriteAllTextAsync(settingsPath, """
+                        {
+                            "display": {
+                                "pcGamingProfiles": [{
+                                    "name": "KONSOLA",
+                                    "layout": { "displays": [] },
+                                    "displayTopology": { "displays": [{
+                                        "identity": { "friendlyName": "S90F" },
+                                        "enabled": true,
+                                        "width": 3840,
+                                        "height": 2160,
+                                        "refreshRateNumerator": 60,
+                                        "refreshRateDenominator": 1
+                                    }] }
+                                }]
+                            }
+                        }
+                        """);
+
+                var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+                var settings = await service.LoadAsync();
+                var target = Assert.Single(Assert.Single(settings.Display.PcGamingProfiles).DisplayTopology!.Displays);
+
+                Assert.Equal(RefreshPolicy.AutoHighest, target.RefreshPolicy);
+                Assert.Equal(0u, target.RefreshRateNumerator);
+                Assert.Equal(0u, target.RefreshRateDenominator);
+                Assert.Equal(0u, target.FixedRefreshRateNumerator);
+                Assert.Equal(0u, target.FixedRefreshRateDenominator);
+
+                await service.SaveAsync(settings);
+                var reloaded = await service.LoadAsync();
+                var savedTarget = Assert.Single(Assert.Single(reloaded.Display.PcGamingProfiles).DisplayTopology!.Displays);
+
+                Assert.Equal(RefreshPolicy.AutoHighest, savedTarget.RefreshPolicy);
+                Assert.Equal(0u, savedTarget.RefreshRateNumerator);
+                Assert.Equal(0u, savedTarget.RefreshRateDenominator);
+                Assert.Equal(0u, savedTarget.FixedRefreshRateNumerator);
+                Assert.Equal(0u, savedTarget.FixedRefreshRateDenominator);
+        }
+
+        [Fact]
+        public void Validate_RepairsPreviouslyAutoMigratedFixedTarget()
+        {
+                var target = new ProfileDisplayTarget
+                {
+                        RefreshPolicy = RefreshPolicy.Fixed,
+                        FixedRefreshRateNumerator = 60,
+                        FixedRefreshRateDenominator = 1,
+                        RefreshRateNumerator = 60,
+                        RefreshRateDenominator = 1
+                };
+
+                AppSettingsValidator.Validate(new AppSettings
+                {
+                        Display = new DisplaySettings
+                        {
+                                PcGamingProfiles = [new DisplayLayoutProfile { Name = "KONSOLA", DisplayTopology = new GamingProfileDisplayTopology { Displays = [target] } }]
+                        }
+                });
+
+                Assert.Equal(RefreshPolicy.AutoHighest, target.RefreshPolicy);
+                Assert.Equal(0u, target.FixedRefreshRateNumerator);
+        }
+
+    [Fact]
+    public async Task SaveAndReload_PreservesAutoHighestPolicyWithoutExactRefresh()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "KONSOLA",
+                        Layout = new DisplayLayoutSnapshot(),
+                        DisplayTopology = new GamingProfileDisplayTopology
+                        {
+                            Displays =
+                            [
+                                new ProfileDisplayTarget
+                                {
+                                    Enabled = true,
+                                    Width = 3840,
+                                    Height = 2160,
+                                    RefreshPolicy = RefreshPolicy.AutoHighest
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        };
+
+        await service.SaveAsync(settings);
+        var loaded = await service.LoadAsync();
+        var target = Assert.Single(Assert.Single(loaded.Display.PcGamingProfiles).DisplayTopology!.Displays);
+
+        Assert.Equal(RefreshPolicy.AutoHighest, target.RefreshPolicy);
+        Assert.Equal(0u, target.FixedRefreshRateNumerator);
+        Assert.Equal(0u, target.FixedRefreshRateDenominator);
+    }
+
+    [Fact]
     public void Validate_DoesNotCopyGlobalControllerShortcutToProfileConfiguration()
     {
         var settings = new AppSettings

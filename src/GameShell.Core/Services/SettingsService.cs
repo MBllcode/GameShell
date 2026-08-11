@@ -48,6 +48,7 @@ public sealed class SettingsService : ISettingsService
             await using var stream = File.OpenRead(SettingsPath);
             var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken);
             var validated = AppSettingsValidator.Validate(settings ?? CreateDefaultSettings());
+            LogRefreshPolicyHydration(settings, validated);
             _logger.LogInformation(
                 "FIRST RUN COMPLETION LOADED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
                 validated.Ui.IsFirstRunCompleted,
@@ -72,6 +73,7 @@ public sealed class SettingsService : ISettingsService
         var validated = AppSettingsValidator.Validate(settings);
         await using var stream = File.Create(SettingsPath);
         await JsonSerializer.SerializeAsync(stream, validated, JsonOptions, cancellationToken);
+        LogRefreshPolicyHydration(validated, validated);
         _logger.LogInformation(
             "FIRST RUN COMPLETION SAVED isFirstRunCompleted={IsFirstRunCompleted} settingsPath={SettingsPath}",
             validated.Ui.IsFirstRunCompleted,
@@ -79,4 +81,34 @@ public sealed class SettingsService : ISettingsService
     }
 
     private static AppSettings CreateDefaultSettings() => new();
+
+    private void LogRefreshPolicyHydration(AppSettings? persisted, AppSettings resolved)
+    {
+        foreach (var profile in resolved.Display.PcGamingProfiles)
+        {
+            var persistedProfile = persisted?.Display.PcGamingProfiles
+                .FirstOrDefault(candidate => string.Equals(candidate.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
+            foreach (var target in profile.DisplayTopology?.Displays ?? [])
+            {
+                var persistedTarget = persistedProfile?.DisplayTopology?.Displays
+                    .FirstOrDefault(candidate => string.Equals(candidate.Identity.MonitorDevicePath, target.Identity.MonitorDevicePath, StringComparison.OrdinalIgnoreCase));
+                var persistedPolicy = persistedTarget?.RefreshPolicy?.ToString() ?? "<missing>";
+                var persistedRefresh = persistedTarget is null
+                    ? "<missing>"
+                    : $"legacy={persistedTarget.RefreshRateNumerator}/{persistedTarget.RefreshRateDenominator};fixed={persistedTarget.FixedRefreshRateNumerator}/{persistedTarget.FixedRefreshRateDenominator}";
+                var resolvedPolicy = target.EffectiveRefreshPolicy.ToString();
+                var resolvedUiValue = resolvedPolicy == nameof(RefreshPolicy.AutoHighest)
+                    ? "Najwyższe dostępne"
+                    : $"{target.EffectiveFixedRefreshRateNumerator / (double)target.EffectiveFixedRefreshRateDenominator:0.##} Hz";
+                _logger.LogInformation(
+                    "[REFRESH POLICY HYDRATION] Profile={Profile} Display={Display} PersistedPolicy={PersistedPolicy} PersistedRefresh={PersistedRefresh} ResolvedDraftPolicy={ResolvedDraftPolicy} ResolvedUiValue={ResolvedUiValue}",
+                    profile.Name,
+                    target.Identity.FriendlyName,
+                    persistedPolicy,
+                    persistedRefresh,
+                    resolvedPolicy,
+                    resolvedUiValue);
+            }
+        }
+    }
 }

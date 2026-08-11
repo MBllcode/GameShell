@@ -153,6 +153,20 @@ public sealed class DisplayConfigMapperTests
     }
 
     [Fact]
+    public void MapSnapshot_PrefersActiveSourceForDuplicatePhysicalTarget()
+    {
+        var snapshot = Map(
+            CreatePath("S90F", @"\\?\DISPLAY#SAM222", @"\\.\DISPLAY9", 0, 0, 3840, 2160, isActive: false, targetWidth: 3840, targetHeight: 2160),
+            CreatePath("S90F", @"\\?\DISPLAY#SAM222", @"\\.\DISPLAY1", 0, 0, 3840, 2160, isActive: true));
+
+        var display = Assert.Single(snapshot.Displays);
+        Assert.True(display.IsActive);
+        Assert.Equal(@"\\.\DISPLAY1", display.SourceDeviceName);
+        Assert.Equal(3840, display.Width);
+        Assert.Equal(2160, display.Height);
+    }
+
+    [Fact]
     public void IdentityMatcher_PrioritizesMonitorDevicePath()
     {
         var saved = Identity(path: "PATH-A", name: "Old Name", manufacturer: 1, product: 2, connector: 3);

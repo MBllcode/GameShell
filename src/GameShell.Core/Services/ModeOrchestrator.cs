@@ -11,6 +11,8 @@ public sealed class ModeOrchestrator : IModeOrchestrator
     private readonly IModeWorkflowService _modeWorkflowService;
     private readonly IDisplayTransitionService _displayTransitionService;
     private readonly IRuntimeStateService _runtimeStateService;
+    private readonly GamingProfileTopologyReadinessEvaluator? _topologyReadinessEvaluator;
+    private readonly IDisplayRecoveryService? _displayRecoveryService;
     private readonly ILogger<ModeOrchestrator> _logger;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _statusGate = new();
@@ -26,13 +28,38 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         IModeWorkflowService modeWorkflowService,
         IDisplayTransitionService displayTransitionService,
         IRuntimeStateService runtimeStateService,
+        GamingProfileTopologyReadinessEvaluator? topologyReadinessEvaluator,
+        IDisplayRecoveryService? displayRecoveryService,
         ILogger<ModeOrchestrator> logger)
     {
         _settingsService = settingsService;
         _modeWorkflowService = modeWorkflowService;
         _displayTransitionService = displayTransitionService;
         _runtimeStateService = runtimeStateService;
+        _topologyReadinessEvaluator = topologyReadinessEvaluator;
+        _displayRecoveryService = displayRecoveryService;
         _logger = logger;
+    }
+
+    public ModeOrchestrator(
+        ISettingsService settingsService,
+        IModeWorkflowService modeWorkflowService,
+        IDisplayTransitionService displayTransitionService,
+        IRuntimeStateService runtimeStateService,
+        ILogger<ModeOrchestrator> logger)
+        : this(settingsService, modeWorkflowService, displayTransitionService, runtimeStateService, null, null, logger)
+    {
+    }
+
+    public ModeOrchestrator(
+        ISettingsService settingsService,
+        IModeWorkflowService modeWorkflowService,
+        IDisplayTransitionService displayTransitionService,
+        IRuntimeStateService runtimeStateService,
+        GamingProfileTopologyReadinessEvaluator topologyReadinessEvaluator,
+        ILogger<ModeOrchestrator> logger)
+        : this(settingsService, modeWorkflowService, displayTransitionService, runtimeStateService, topologyReadinessEvaluator, null, logger)
+    {
     }
 
     public async Task<AppStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -91,7 +118,9 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 cancellationToken),
             completionDelay: settings => TimeSpan.FromSeconds(ResolvePcGamingBehaviour(settings.Display, settings.PcGaming, profileName).CompletionDelaySeconds),
             runtimeMode: GameShellMode.PcGaming,
-            cancellationToken);
+            cancellationToken,
+            preTransitionGate: settings => CheckPcGamingTopologyReadinessAsync(settings, profileName, cancellationToken),
+            postTransitionGate: settings => CheckPcGamingTopologyAfterTransitionAsync(settings, profileName, cancellationToken));
     }
 
     public Task<ModeResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
@@ -119,7 +148,9 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         Func<AppSettings, TimeSpan> completionDelay,
         GameShellMode runtimeMode,
         CancellationToken cancellationToken,
-        bool scriptFailureIsWarning = false)
+        bool scriptFailureIsWarning = false,
+        Func<AppSettings, Task<ModeResult?>>? preTransitionGate = null,
+        Func<AppSettings, Task<ModeResult?>>? postTransitionGate = null)
     {
         if (!await _operationLock.WaitAsync(0, cancellationToken))
         {
@@ -141,6 +172,24 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             var settings = await _settingsService.LoadAsync(cancellationToken);
             SetStatus(switchingState, operationName, null, null);
             _logger.LogInformation("{OperationName} [{TransitionId}] started with native DisplayConfig workflow. CurrentState={CurrentState}.", operationName, transitionId, GetState());
+
+            if (preTransitionGate is not null)
+            {
+                var gateResult = await preTransitionGate(settings);
+                if (gateResult is not null)
+                {
+                    stopwatch.Stop();
+                    SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, gateResult.Message);
+                    await SaveRuntimeResultAsync(runtimeMode, "ReadinessBlocked", cancellationToken);
+                    return new ModeResult
+                    {
+                        Status = gateResult.Status,
+                        CurrentState = gateResult.CurrentState,
+                        Message = gateResult.Message,
+                        DurationMs = stopwatch.ElapsedMilliseconds
+                    };
+                }
+            }
 
             if (preWorkflow is not null)
             {
@@ -183,6 +232,29 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                     Message = message,
                     DurationMs = stopwatch.ElapsedMilliseconds
                 };
+            }
+
+            if (postTransitionGate is not null)
+            {
+                var postTransitionResult = await postTransitionGate(settings);
+                if (postTransitionResult is not null)
+                {
+                    var rollback = await _displayTransitionService.RestorePreviousLayoutAsync(cancellationToken);
+                    _logger.LogWarning(
+                        "WORK MODE TRANSITION [{TransitionId}] postcheck failed. RollbackSuccess={RollbackSuccess}.",
+                        transitionId,
+                        rollback.Success);
+                    stopwatch.Stop();
+                    SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, postTransitionResult.Message);
+                    await SaveRuntimeResultAsync(runtimeMode, "PostcheckBlocked", cancellationToken);
+                    return new ModeResult
+                    {
+                        Status = postTransitionResult.Status,
+                        CurrentState = postTransitionResult.CurrentState,
+                        Message = postTransitionResult.Message,
+                        DurationMs = stopwatch.ElapsedMilliseconds
+                    };
+                }
             }
 
             displayTransitionSucceeded = true;
@@ -354,6 +426,185 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             : [settings.Display.ConsoleDisplay];
     }
 
+    private async Task<ModeResult?> CheckPcGamingTopologyReadinessAsync(AppSettings settings, string? profileName, CancellationToken cancellationToken)
+    {
+        if (_topologyReadinessEvaluator is null)
+        {
+            return null;
+        }
+
+        var profile = ResolvePcGamingProfile(settings.Display, profileName);
+        if (profile?.DisplayTopology is null)
+        {
+            return null;
+        }
+
+        var readiness = await _topologyReadinessEvaluator.EvaluateAsync(profile.Name, profile.Name, profile.DisplayTopology, cancellationToken, deferInactiveModeValidation: true);
+        _logger.LogInformation("[PROFILE TOPOLOGY PRECHECK] Profile={Profile} Result={Result}", profile.Name, readiness.ProfileResult);
+
+        if (readiness.IsReady)
+        {
+            return null;
+        }
+
+        var blockedTarget = readiness.Targets.FirstOrDefault(target => target.Result is not (ProfileDisplayReadiness.Ready or ProfileDisplayReadiness.ResolvableInactive or ProfileDisplayReadiness.Disabled));
+        var message = blockedTarget?.Reason is ProfileDisplayReadinessReason.ModeInventoryInvalid
+            ? "Nie można uruchomić profilu, ponieważ lista trybów ekranu jest niespójna."
+            : blockedTarget?.Reason is ProfileDisplayReadinessReason.InvalidExpectedMode
+            ? "Nie można uruchomić profilu, ponieważ zapisana częstotliwość odświeżania ekranu jest nieprawidłowa."
+            : blockedTarget?.Reason is ProfileDisplayReadinessReason.ExpectedModeUnavailable
+            ? $"Ekran został wykryty, ale zapisany tryb profilu nie jest obecnie dostępny. ({blockedTarget.SavedTarget.Width} × {blockedTarget.SavedTarget.Height} @ {FormatRefreshRate(blockedTarget.SavedTarget)} Hz)"
+            : "Nie można uruchomić profilu, ponieważ wymagany ekran nie jest obecnie gotowy.";
+        return new ModeResult
+        {
+            Status = ModeResultStatus.InvalidConfiguration,
+            CurrentState = ModeState.Error,
+            Message = message
+        };
+    }
+
+    private async Task<ModeResult?> CheckPcGamingTopologyAfterTransitionAsync(AppSettings settings, string? profileName, CancellationToken cancellationToken)
+    {
+        if (_topologyReadinessEvaluator is null)
+        {
+            return null;
+        }
+
+        var profile = ResolvePcGamingProfile(settings.Display, profileName);
+        if (profile?.DisplayTopology is null)
+        {
+            return null;
+        }
+
+        var readiness = await _topologyReadinessEvaluator.EvaluateAsync(profile.Name, profile.Name, profile.DisplayTopology, cancellationToken);
+        if (!readiness.IsReady && _displayRecoveryService is not null)
+        {
+            readiness = await AttemptDisplayRecoveryAsync(profile, readiness, cancellationToken);
+        }
+
+        if (readiness.IsReady)
+        {
+            return null;
+        }
+
+        var blockedTarget = readiness.Targets.FirstOrDefault(target => target.Result is not (ProfileDisplayReadiness.Ready or ProfileDisplayReadiness.ResolvableInactive or ProfileDisplayReadiness.Disabled));
+        return new ModeResult
+        {
+            Status = ModeResultStatus.InvalidConfiguration,
+            CurrentState = ModeState.Error,
+            Message = blockedTarget?.Reason is ProfileDisplayReadinessReason.ExpectedModeUnavailable
+                ? $"Ekran został aktywowany, ale zapisany tryb profilu nie jest obecnie dostępny. ({blockedTarget.SavedTarget.Width} × {blockedTarget.SavedTarget.Height} @ {FormatRefreshRate(blockedTarget.SavedTarget)} Hz)"
+                : "Ekran został aktywowany, ale nie udało się potwierdzić wymaganego trybu."
+        };
+    }
+
+    private async Task<GamingProfileTopologyReadiness> AttemptDisplayRecoveryAsync(
+        DisplayLayoutProfile profile,
+        GamingProfileTopologyReadiness readiness,
+        CancellationToken cancellationToken)
+    {
+        foreach (var targetReadiness in readiness.Targets
+                     .Where(target => target.SavedTarget.Enabled
+                         && target.Result == ProfileDisplayReadiness.Degraded
+                         && target.Reason == ProfileDisplayReadinessReason.ExpectedModeUnavailable
+                         && target.ResolvedTarget is { IsEnabled: true }))
+        {
+            var resolvedTarget = targetReadiness.ResolvedTarget!;
+            var recovery = await _displayRecoveryService!.RecoverAsync(
+                profile.Name,
+                targetReadiness.SavedTarget,
+                resolvedTarget,
+                targetReadiness.AvailableModes,
+                cancellationToken);
+
+            var refreshedReadiness = await _topologyReadinessEvaluator!.EvaluateAsync(
+                profile.Name,
+                profile.Name,
+                profile.DisplayTopology!,
+                cancellationToken);
+            var refreshedTarget = FindMatchingReadiness(refreshedReadiness, targetReadiness.SavedTarget);
+            _logger.LogInformation(
+                "[DISPLAY RECOVERY RUNTIME]\nProfile={Profile}\nSavedDisplay={SavedDisplay}\nResolvedDisplay={ResolvedDisplay}\nMonitorDevicePath={MonitorDevicePath}\nDevNodeInstanceId={DevNodeInstanceId}\nRequestedMode={RequestedMode}\nBeforeModesForRequestedResolution={BeforeModes}\nCM_Locate_DevNode_Result={LocateResult}\nCM_Reenumerate_DevNode_Result={ReenumerateResult}\nWaitMs={WaitMs}\nAfterResolvedDisplay={AfterResolvedDisplay}\nAfterModesForRequestedResolution={AfterModes}\nReadinessBefore={ReadinessBefore}\nReadinessAfter={ReadinessAfter}\nRecoveryResult={RecoveryResult}",
+                profile.Name,
+                targetReadiness.SavedTarget.Identity.FriendlyName,
+                resolvedTarget.Name,
+                resolvedTarget.Identity.MonitorDevicePath,
+                string.IsNullOrWhiteSpace(recovery.DevNodeInstanceId) ? "-" : recovery.DevNodeInstanceId,
+                FormatMode(targetReadiness.SavedTarget),
+                FormatModes(targetReadiness.AvailableModes),
+                FormatNativeResult(recovery.LocateDevNodeResultCode),
+                FormatNativeResult(recovery.ReenumerateDevNodeResultCode),
+                recovery.WaitMs,
+                refreshedTarget?.ResolvedTarget?.Name ?? "-",
+                FormatModes(refreshedTarget?.AvailableModes ?? []),
+                FormatReadiness(targetReadiness),
+                FormatReadiness(refreshedTarget),
+                recovery.Result);
+
+            readiness = refreshedReadiness;
+            if (readiness.IsReady)
+            {
+                _logger.LogInformation("[DISPLAY RECOVERY] Profile={Profile} Recovery restored all requested display modes.", profile.Name);
+                return readiness;
+            }
+        }
+
+        return readiness;
+    }
+
+    private static ProfileDisplayTargetReadiness? FindMatchingReadiness(
+        GamingProfileTopologyReadiness readiness,
+        ProfileDisplayTarget savedTarget)
+    {
+        return readiness.Targets.FirstOrDefault(target => ReferenceEquals(target.SavedTarget, savedTarget))
+            ?? readiness.Targets.FirstOrDefault(target => string.Equals(
+                target.SavedTarget.Identity.MonitorDevicePath,
+                savedTarget.Identity.MonitorDevicePath,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FormatModes(IReadOnlyList<DisplayModeInfo> modes)
+    {
+        return $"[{string.Join(", ", modes.Select(mode => $"{mode.Width}x{mode.Height}@{mode.RefreshRateHz:0.##}"))}]";
+    }
+
+    private static string FormatMode(ProfileDisplayTarget target)
+    {
+        return $"{target.Width}x{target.Height}@{FormatRefreshRate(target)}";
+    }
+
+    private static string FormatReadiness(ProfileDisplayTargetReadiness? target)
+    {
+        return target is null ? "Unknown" : $"{target.Result}/{target.Reason}";
+    }
+
+    private static string FormatNativeResult(int? resultCode)
+    {
+        return resultCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "NotAttempted";
+    }
+
+    private static DisplayLayoutProfile? ResolvePcGamingProfile(DisplaySettings display, string? profileName)
+    {
+        if (!string.IsNullOrWhiteSpace(profileName) && !string.Equals(profileName, "PcGaming", StringComparison.OrdinalIgnoreCase))
+        {
+            return display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName))
+        {
+            return display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return display.PcGamingProfiles.FirstOrDefault();
+    }
+
+    private static string FormatRefreshRate(ProfileDisplayTarget target)
+    {
+        return target.RefreshRateDenominator == 0
+            ? "?"
+            : ((double)target.RefreshRateNumerator / target.RefreshRateDenominator).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private static DisplayLayoutSnapshot? ResolvePcGamingLayout(DisplaySettings display, string? profileName)
     {
         if (!string.IsNullOrWhiteSpace(profileName)
@@ -362,7 +613,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             var namedProfile = display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
             if (namedProfile is not null)
             {
-                return namedProfile.Layout;
+                return ResolveProfileLayout(namedProfile);
             }
         }
 
@@ -371,11 +622,18 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             var activeProfile = display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
             if (activeProfile is not null)
             {
-                return activeProfile.Layout;
+                return ResolveProfileLayout(activeProfile);
             }
         }
 
         return display.PcGamingLayout;
+    }
+
+    private static DisplayLayoutSnapshot ResolveProfileLayout(DisplayLayoutProfile profile)
+    {
+        return profile.DisplayTopology is not null
+            ? GamingProfileDisplayTopologyAdapter.ToLegacy(profile.DisplayTopology)
+            : profile.Layout;
     }
 
     private static AppSettings BuildEffectivePcGamingSettings(AppSettings settings, string? profileName)

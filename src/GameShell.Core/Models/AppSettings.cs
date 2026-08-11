@@ -2,6 +2,7 @@ namespace GameShell.Core.Models;
 
 public sealed class AppSettings
 {
+    public int? SettingsSchemaVersion { get; set; }
     public DisplaySettings Display { get; set; } = new();
     public LauncherSettings Launcher { get; set; } = new();
     public GameShellSettings GameShell { get; set; } = new();
@@ -29,6 +30,44 @@ public sealed class DisplayLayoutProfile
 {
     public string Name { get; set; } = string.Empty;
     public DisplayLayoutSnapshot Layout { get; set; } = new();
+    public GamingProfileDisplayTopology? DisplayTopology { get; set; }
+}
+
+public sealed class GamingProfileDisplayTopology
+{
+    public List<ProfileDisplayTarget> Displays { get; set; } = [];
+}
+
+public enum RefreshPolicy
+{
+    AutoHighest,
+    Fixed
+}
+
+public sealed class ProfileDisplayTarget
+{
+    public DisplayIdentity Identity { get; set; } = new();
+    public bool Enabled { get; set; }
+    public bool IsPrimary { get; set; }
+    public int PositionX { get; set; }
+    public int PositionY { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public RefreshPolicy? RefreshPolicy { get; set; }
+    public uint FixedRefreshRateNumerator { get; set; }
+    public uint FixedRefreshRateDenominator { get; set; }
+
+    // Retained so older settings files can be read without data loss during migration.
+    public uint RefreshRateNumerator { get; set; }
+    public uint RefreshRateDenominator { get; set; }
+    public DisplayOrientation Orientation { get; set; } = DisplayOrientation.Identity;
+
+    public RefreshPolicy EffectiveRefreshPolicy => RefreshPolicy
+        ?? (RefreshRateNumerator > 0 && RefreshRateDenominator > 0 ? Models.RefreshPolicy.Fixed : Models.RefreshPolicy.AutoHighest);
+
+    public uint EffectiveFixedRefreshRateNumerator => FixedRefreshRateNumerator > 0 ? FixedRefreshRateNumerator : RefreshRateNumerator;
+
+    public uint EffectiveFixedRefreshRateDenominator => FixedRefreshRateDenominator > 0 ? FixedRefreshRateDenominator : RefreshRateDenominator;
 }
 
 public sealed class PcGamingProfileBehaviour

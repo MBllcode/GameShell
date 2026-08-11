@@ -50,4 +50,47 @@ public static class DisplayIdentityMatcher
     {
         return GetMatchConfidence(saved, detected) >= DisplayIdentityMatchConfidence.EdidProduct;
     }
+
+    public static int GetStableIdentityScore(DisplayIdentity saved, DisplayIdentity detected)
+    {
+        var score = 0;
+        if (saved.AdapterLuid != 0 && saved.AdapterLuid == detected.AdapterLuid)
+        {
+            score += 40;
+        }
+
+        if (saved.TargetId != 0 && saved.TargetId == detected.TargetId)
+        {
+            score += saved.AdapterLuid != 0 && saved.AdapterLuid == detected.AdapterLuid ? 45 : 10;
+        }
+
+        if (saved.ConnectorInstance != 0 && saved.ConnectorInstance == detected.ConnectorInstance)
+        {
+            score += 25;
+        }
+
+        if (!string.IsNullOrWhiteSpace(saved.OutputTechnology)
+            && !string.IsNullOrWhiteSpace(detected.OutputTechnology)
+            && string.Equals(saved.OutputTechnology, detected.OutputTechnology, StringComparison.OrdinalIgnoreCase))
+        {
+            score += 15;
+        }
+
+        if (saved.EdidManufacturerId != 0
+            && saved.EdidProductCodeId != 0
+            && saved.EdidManufacturerId == detected.EdidManufacturerId
+            && saved.EdidProductCodeId == detected.EdidProductCodeId)
+        {
+            score += 35;
+        }
+
+        if (!string.IsNullOrWhiteSpace(saved.MonitorDevicePath)
+            && !string.IsNullOrWhiteSpace(detected.MonitorDevicePath)
+            && string.Equals(saved.MonitorDevicePath, detected.MonitorDevicePath, StringComparison.OrdinalIgnoreCase))
+        {
+            score += 20;
+        }
+
+        return score;
+    }
 }

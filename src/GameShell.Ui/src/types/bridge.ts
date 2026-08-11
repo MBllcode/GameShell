@@ -5,6 +5,7 @@ export type BridgeCommand =
   | 'getDependencies'
   | 'getAudioDevices'
   | 'getDisplays'
+  | 'getDisplayModes'
   | 'captureDisplayLayout'
   | 'saveConsoleDisplay'
   | 'saveConsoleDisplays'
@@ -86,6 +87,19 @@ export interface DisplayDeviceInfo {
   preferredHeight: number;
 }
 
+export interface DisplayModeInfo {
+  width: number;
+  height: number;
+  refreshRateNumerator: number;
+  refreshRateDenominator: number;
+  refreshRateHz: number;
+}
+
+export interface DisplayModeQueryResult {
+  success: boolean;
+  modes: DisplayModeInfo[];
+}
+
 export interface DisplayPathSnapshot {
   identity: DisplayIdentity;
   isActive: boolean;
@@ -118,6 +132,30 @@ export interface DisplayLayoutSnapshot {
 export interface DisplayLayoutProfile {
   name: string;
   layout: DisplayLayoutSnapshot;
+  displayTopology?: GamingProfileDisplayTopology | null;
+}
+
+export interface GamingProfileDisplayTopology {
+  displays: ProfileDisplayTarget[];
+}
+
+export type RefreshPolicy = 'AutoHighest' | 'Fixed';
+
+export interface ProfileDisplayTarget {
+  identity: DisplayIdentity;
+  enabled: boolean;
+  isPrimary: boolean;
+  positionX: number;
+  positionY: number;
+  width: number;
+  height: number;
+  refreshPolicy?: RefreshPolicy;
+  fixedRefreshRateNumerator?: number;
+  fixedRefreshRateDenominator?: number;
+  /** Legacy exact-refresh fields; ignored for new AutoHighest drafts. */
+  refreshRateNumerator: number;
+  refreshRateDenominator: number;
+  orientation: string;
 }
 
 export interface PcGamingProfileBehaviour {

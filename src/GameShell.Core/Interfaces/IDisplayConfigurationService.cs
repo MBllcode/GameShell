@@ -9,6 +9,13 @@ public interface IDisplayQueryService
 
     Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(
         CancellationToken cancellationToken = default);
+
+    Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(
+        DisplayIdentity display,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new DisplayModeQueryResult());
+    }
 }
 
 public interface IDisplayConfigurationService : IDisplayQueryService, IDisplayLayoutApplicationService

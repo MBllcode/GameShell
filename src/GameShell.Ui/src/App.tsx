@@ -254,7 +254,7 @@ export function App() {
     commitGamingDisplayDraft: displayWorkflow.commitGamingDisplayDraft,
     resolveStepIndex: (stepId) => steps.findIndex((step) => step.id === stepId),
     applySettingsToState,
-    resetDisplayProfileDraft: () => syncDisplayProfileDraft({ profileName: '', identities: [] }),
+    resetDisplayProfileDraft: () => syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } }),
     setPendingNavigationAction,
     setPendingOverwriteProfileAction,
     setShowOverwriteProfileDialog,

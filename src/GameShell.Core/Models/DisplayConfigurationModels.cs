@@ -16,8 +16,28 @@ public sealed record DisplayIdentity
     public uint EdidManufacturerId { get; init; }
     public uint EdidProductCodeId { get; init; }
     public uint ConnectorInstance { get; init; }
+    public string OutputTechnology { get; init; } = string.Empty;
     public long AdapterLuid { get; init; }
     public uint TargetId { get; init; }
+}
+
+public sealed class DisplayModeInfo
+{
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public uint RefreshRateNumerator { get; init; }
+    public uint RefreshRateDenominator { get; init; }
+
+    public double RefreshRateHz => RefreshRateDenominator == 0
+        ? 0
+        : (double)RefreshRateNumerator / RefreshRateDenominator;
+}
+
+public sealed class DisplayModeQueryResult
+{
+    public bool Success { get; init; }
+    public bool InventoryValid { get; init; } = true;
+    public IReadOnlyList<DisplayModeInfo> Modes { get; init; } = [];
 }
 
 public sealed class DisplayDeviceInfo
@@ -26,6 +46,7 @@ public sealed class DisplayDeviceInfo
     public string Name { get; init; } = string.Empty;
     public bool IsPrimary { get; init; }
     public bool IsEnabled { get; init; }
+    public bool IsAvailable { get; init; }
     public DisplayIdentity Identity { get; init; } = new();
     public string SourceDeviceName { get; init; } = string.Empty;
     public uint SourceId { get; init; }

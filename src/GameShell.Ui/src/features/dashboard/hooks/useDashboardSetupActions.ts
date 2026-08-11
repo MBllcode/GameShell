@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { DisplayLayoutProfile, DisplayIdentity } from '../../../types/bridge';
-import { extractDisplayIdentities } from '../../../utils/displays';
+import type { DisplayLayoutProfile, GamingProfileDisplayTopology } from '../../../types/bridge';
+import { getProfileTopology } from '../../../utils/displays';
 import type { SetupMode } from '../../setup/setupFlow';
 import { assertSetupStateInvariants, type BootstrapRoute } from '../../setup/setupRouting';
 import { defaultPcGamingBehaviour, type PcGamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
@@ -26,7 +26,7 @@ type Options = {
   setEditingProfileId: Dispatch<SetStateAction<string | null>>;
   setHasAdvancedInCreateProfileFlow: Dispatch<SetStateAction<boolean>>;
   setIsSetupComplete: Dispatch<SetStateAction<boolean>>;
-  syncDisplayProfileDraft: (draft: { profileName: string; identities: DisplayIdentity[] }) => void;
+  syncDisplayProfileDraft: (draft: { profileName: string; topology: GamingProfileDisplayTopology }) => void;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
@@ -45,7 +45,7 @@ export function useDashboardSetupActions(options: Options) {
     options.setHasAdvancedInCreateProfileFlow(false);
     options.setIsSetupComplete(false);
     options.setPcGamingBehaviour({ ...defaultPcGamingBehaviour });
-    options.syncDisplayProfileDraft({ profileName: '', identities: [] });
+    options.syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } });
     options.setProfileHotkeyValidationError(null);
     options.setProfileControllerValidationError(null);
     options.setHotkeys((current) => ({ ...current, pcGamingMode: '' }));
@@ -67,10 +67,10 @@ export function useDashboardSetupActions(options: Options) {
     if (selectedProfile) {
       options.syncDisplayProfileDraft({
         profileName: selectedProfile.name,
-        identities: extractDisplayIdentities(selectedProfile.layout)
+        topology: getProfileTopology(selectedProfile)
       });
     } else {
-      options.syncDisplayProfileDraft({ profileName: '', identities: [] });
+      options.syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } });
     }
     options.setStepIndex(targetIndex >= 0 ? targetIndex : 0);
     options.setMessage('Edytujesz wybraną sekcję.');

@@ -1,13 +1,13 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import { normalizePcGamingProfileName } from '../utils';
-import { areIdentitySetsEqual, extractDisplayIdentities, MAX_PROFILE_DISPLAYS, PROFILE_DISPLAY_LIMIT_MESSAGE, sameIdentity } from '../../../utils/displays';
-import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
+import { areTopologiesEqual, getProfileTopology, MAX_PROFILE_DISPLAYS, PROFILE_DISPLAY_LIMIT_MESSAGE, topologyToLegacy, validateTopology } from '../../../utils/displays';
+import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../utils';
 import { canContinueWorkingProfile } from '../../setup/setupRouting';
 
-export type DisplayProfileDraft = { profileName: string; identities: DisplayIdentity[] };
+export type DisplayProfileDraft = { profileName: string; topology: GamingProfileDisplayTopology };
 export type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
 export type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
 
@@ -67,14 +67,10 @@ export function useDisplayProfileWorkflow(options: Options) {
     finally { setIsRefreshingDisplays(false); }
   }
 
-  async function saveSelectedPcGamingLayout(profileName: string, identities: DisplayIdentity[]) {
+  async function saveSelectedPcGamingLayout(profileName: string, topology: GamingProfileDisplayTopology) {
     const trimmedName = normalizePcGamingProfileName(profileName);
-    if (!trimmedName || identities.length === 0) { setError(messages.invalid); return; }
-    if (identities.length > MAX_PROFILE_DISPLAYS) { setError(PROFILE_DISPLAY_LIMIT_MESSAGE); return; }
-    const selectedDevices = identities.map((identity) => displays.find((display) => sameIdentity(display.identity, identity)) ?? null).filter((display): display is DisplayDeviceInfo => display !== null);
-    if (selectedDevices.length !== identities.length || selectedDevices.length === 0) { setError(messages.unavailable); return; }
-    const primary = selectedDevices.find((display) => display.isPrimary) ?? selectedDevices[0];
-    const layout: DisplayLayoutSnapshot = { id: `${Date.now()}`, capturedAt: new Date().toISOString(), displays: selectedDevices.map((display) => ({ identity: display.identity, isActive: true, isAvailable: display.isAvailable, isPrimary: sameIdentity(primary.identity, display.identity), positionX: display.positionX - primary.positionX, positionY: display.positionY - primary.positionY, width: display.width, height: display.height, orientation: display.orientation, refreshRateNumerator: display.refreshRateNumerator, refreshRateDenominator: display.refreshRateDenominator, refreshRateHz: display.refreshRateHz, currentModeAvailable: display.currentModeAvailable, preferredWidth: display.preferredWidth, preferredHeight: display.preferredHeight, sourceId: display.sourceId, targetId: display.targetId, adapterLuid: display.adapterLuid, sourceDeviceName: display.sourceDeviceName, connectionTechnology: display.connectionTechnology })) };
+    const topologyErrors = validateTopology(topology);
+    if (!trimmedName || topologyErrors.length > 0) { setError(topologyErrors[0] ?? messages.invalid); return; }
     const existingProfile = profiles.find((profile) => profile.name.toLowerCase() === trimmedName.toLowerCase()) ?? null;
     const selectedProfile = isEditingSection
       ? profiles.find((profile) => profile.name.toLowerCase() === selectedProfileName.toLowerCase()) ?? null
@@ -83,8 +79,8 @@ export function useDisplayProfileWorkflow(options: Options) {
     const profileBeingUpdated = isRenamingSelectedProfile ? selectedProfile : existingProfile;
     const resolvedProfileName = profileBeingUpdated?.name === trimmedName ? profileBeingUpdated.name : trimmedName;
     const nextProfiles = profileBeingUpdated
-      ? profiles.map((profile) => profile.name.toLowerCase() === profileBeingUpdated.name.toLowerCase() ? { ...profile, name: resolvedProfileName, layout } : profile)
-      : [...profiles, { name: trimmedName, layout }];
+      ? profiles.map((profile) => profile.name.toLowerCase() === profileBeingUpdated.name.toLowerCase() ? { ...profile, name: resolvedProfileName, displayTopology: topology, layout: topologyToLegacy(topology, displays) } : profile)
+      : [...profiles, { name: trimmedName, displayTopology: topology, layout: topologyToLegacy(topology, displays) }];
     const sourceProfileName = profileBeingUpdated?.name;
     const nextProfileBehaviours = { ...profileBehaviours };
     const nextProfileLaunchers = { ...profileLaunchers };
@@ -105,23 +101,25 @@ export function useDisplayProfileWorkflow(options: Options) {
       nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[resolvedProfileName] ?? (profileBeingUpdated ? { enterProfile: hotkeys.pcGamingMode } : { enterProfile: '' });
       nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[resolvedProfileName] ?? (profileBeingUpdated ? null : null);
     }
+    const layout = topologyToLegacy(topology, displays);
     setProfiles(nextProfiles); setActiveProfileName(resolvedProfileName); setLayout(layout); setSelectedProfileName(resolvedProfileName); setProfileBehaviours(nextProfileBehaviours); setProfileLaunchers(nextProfileLaunchers); setProfileHotkeys(nextProfileHotkeys); setProfileControllerShortcuts(nextProfileControllerShortcuts);
     pendingSettingsOverrideRef.current = { pcGamingProfiles: nextProfiles, activePcGamingProfileName: resolvedProfileName, pcGamingLayout: layout, pcGamingProfileBehaviours: nextProfileBehaviours, pcGamingProfileLaunchers: nextProfileLaunchers, pcGamingProfileHotkeys: nextProfileHotkeys, pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts };
     markUnsavedChanges(); setError(null); setMessage(isEditingSection ? messages.prepared(resolvedProfileName) : messages.ready(resolvedProfileName));
   }
 
   async function commitGamingDisplayDraft(allowOverwrite: boolean, overwriteAction: OverwriteProfileAction) {
-    const draft = displayProfileDraftRef.current; const profileName = draft.profileName.trim(); const identities = draft.identities;
-    setDisplayValidationState({ showNameError: profileName.length === 0, showSelectionError: identities.length === 0 });
-    const hasDraft = profileName.length > 0 && identities.length > 0;
-    if ((profileName.length > 0 || identities.length > 0) && !hasDraft || !canContinueWorkingProfile(isFirstRun ? 'FirstRun' : isCreatingProfileFlow ? 'CreateProfile' : isEditingSection ? 'EditProfile' : 'None', profileName, identities.length)) { setError(messages.invalid); return false; }
-    if (identities.length > MAX_PROFILE_DISPLAYS) { setError(PROFILE_DISPLAY_LIMIT_MESSAGE); return false; }
+    const draft = displayProfileDraftRef.current; const profileName = draft.profileName.trim(); const topology = draft.topology;
+    const topologyErrors = validateTopology(topology);
+    setDisplayValidationState({ showNameError: profileName.length === 0, showSelectionError: topology.displays.length === 0 });
+    const hasDraft = profileName.length > 0 && topology.displays.length > 0;
+    if ((profileName.length > 0 || topology.displays.length > 0) && !hasDraft || !canContinueWorkingProfile(isFirstRun ? 'FirstRun' : isCreatingProfileFlow ? 'CreateProfile' : isEditingSection ? 'EditProfile' : 'None', profileName, topology.displays.length)) { setError(messages.invalid); return false; }
+    if (topologyErrors.length > 0) { setError(topologyErrors[0]); return false; }
     if (hasDraft) {
       const existingProfile = profiles.find((profile) => profile.name.toLowerCase() === profileName.toLowerCase()) ?? null;
       const isEditingSelectedProfile = selectedProfileName.length > 0 && selectedProfileName.toLowerCase() === profileName.toLowerCase();
-      const isLayoutUnchanged = existingProfile ? areIdentitySetsEqual(identities, extractDisplayIdentities(existingProfile.layout)) : false;
+      const isLayoutUnchanged = existingProfile ? areTopologiesEqual(topology, getProfileTopology(existingProfile)) : false;
       if (existingProfile && !isEditingSelectedProfile && !isLayoutUnchanged && !allowOverwrite) { setPendingOverwriteProfileAction(overwriteAction); setShowOverwriteProfileDialog(true); return false; }
-      if (!existingProfile || !isLayoutUnchanged) await saveSelectedPcGamingLayout(profileName, identities);
+      if (!existingProfile || !isLayoutUnchanged) await saveSelectedPcGamingLayout(profileName, topology);
     }
     setDisplayValidationState({ showNameError: false, showSelectionError: false }); return true;
   }

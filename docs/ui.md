@@ -65,7 +65,13 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
   - `Wybierz co najmniej jeden ekran.` przy liscie ekranow.
 - Komunikaty walidacyjne sa czerwone, dyskretne i nie udaja helpera.
 - Komunikaty pokazuja sie po probie zapisu/nawigacji lub blur, i znikaja od razu po korekcie.
-- Ograniczenie do 2 ekranow pozostaje osobnym inline warningiem `LIMIT`.
+- Ograniczenie do 5 ekranow pozostaje osobnym inline warningiem `LIMIT`.
+- Canvas jest technicznym obszarem roboczym z uniform scalingiem, paddingiem i obsluga ujemnych wspolrzednych. Skala, offset viewportu i padding nie sa zapisywane do topology.
+- Drag przelicza ruch z pikseli ekranu na wspolrzedne topology przy uzyciu skali z poczatku gestu. Pozycje sa zapisywane jako rzeczywiste `PositionX`/`PositionY`.
+- Przy przeciaganiu dziala snap krawedziowy oraz ograniczony alignment snap. Resolver kolizji nie pozwala zakonczyc drag z dodatnim overlapem; dotykajace krawedzie i narożniki sa poprawne.
+- Primary moze byc wizualnie ustawiony w dowolnym miejscu. Dopiero snapshot runtime jest normalizowany do primary `0,0`, bez przesuwania draftu w edytorze.
+- Przed wywolaniem DisplayConfig topology runtime sprawdza jeden primary, rozmiary, overlap i unikalnosc fizycznych targetow. Bledna geometria zatrzymuje apply z opisem wewnetrznego bledu.
+- Diagnostyke apply czytamy z logu `[DISPLAY TOPOLOGY APPLY]`; wspolrzedne w tym logu sa wspolrzednymi przekazanymi do Windows, nie pikselami canvasa.
 
 ## Krok Skroty profilu
 

@@ -6,8 +6,11 @@ namespace GameShell.Core.Services;
 
 public static class AppSettingsValidator
 {
+    public const int CurrentSettingsSchemaVersion = 2;
+
     public static AppSettings Validate(AppSettings settings)
     {
+        settings.SettingsSchemaVersion = CurrentSettingsSchemaVersion;
         settings.Display ??= new DisplaySettings();
         settings.Display.PcGamingProfiles ??= [];
         settings.Display.PcGamingProfileConfigurations ??= [];
@@ -113,6 +116,7 @@ public static class AppSettingsValidator
 
         foreach (var candidate in display.PcGamingProfiles.Where(profile => profile.Layout is not null))
         {
+            NormalizeRefreshPolicies(candidate.DisplayTopology);
             var baseName = string.IsNullOrWhiteSpace(candidate.Name) ? "PROFIL" : candidate.Name.Trim().ToUpperInvariant();
             var uniqueName = baseName;
             var suffix = 2;
@@ -125,7 +129,8 @@ public static class AppSettingsValidator
             normalizedProfiles.Add(new DisplayLayoutProfile
             {
                 Name = uniqueName,
-                Layout = candidate.Layout
+                Layout = candidate.Layout,
+                DisplayTopology = candidate.DisplayTopology
             });
         }
 
@@ -154,6 +159,43 @@ public static class AppSettingsValidator
         activeProfile ??= display.PcGamingProfiles[0];
         display.ActivePcGamingProfileName = activeProfile.Name;
         display.PcGamingLayout = activeProfile.Layout;
+    }
+
+    private static void NormalizeRefreshPolicies(GamingProfileDisplayTopology? topology)
+    {
+        if (topology is null)
+        {
+            return;
+        }
+
+        foreach (var target in topology.Displays)
+        {
+            if (!target.RefreshPolicy.HasValue)
+            {
+                target.RefreshPolicy = RefreshPolicy.AutoHighest;
+            }
+
+            if (target.RefreshPolicy == RefreshPolicy.Fixed
+                && HasValidRefresh(target.FixedRefreshRateNumerator, target.FixedRefreshRateDenominator)
+                && target.FixedRefreshRateNumerator == target.RefreshRateNumerator
+                && target.FixedRefreshRateDenominator == target.RefreshRateDenominator)
+            {
+                target.RefreshPolicy = RefreshPolicy.AutoHighest;
+            }
+
+            if (target.RefreshPolicy == RefreshPolicy.AutoHighest)
+            {
+                target.FixedRefreshRateNumerator = 0;
+                target.FixedRefreshRateDenominator = 0;
+                target.RefreshRateNumerator = 0;
+                target.RefreshRateDenominator = 0;
+            }
+        }
+    }
+
+    private static bool HasValidRefresh(uint numerator, uint denominator)
+    {
+        return numerator > 0 && denominator > 0;
     }
 
     private static void NormalizePcGamingProfileConfigurations(

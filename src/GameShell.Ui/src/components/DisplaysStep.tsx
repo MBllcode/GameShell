@@ -1,18 +1,25 @@
-import { useEffect, useState } from 'react';
-import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile } from '../types/bridge';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, DisplayModeQueryResult, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../types/bridge';
 import { normalizePcGamingProfileName } from '../features/profiles/utils';
-import {
-  extractDisplayIdentities,
-  formatDisplayRefresh,
-  formatDisplayResolution,
-  MAX_PROFILE_DISPLAYS,
-  PROFILE_DISPLAY_LIMIT_MESSAGE,
-  sameIdentity
-} from '../utils/displays';
+import { computeTopologyBounds, createCanvasTransform, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
+import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, hasValidFixedRefresh, MAX_PROFILE_DISPLAYS, profileTargetFromDisplay, PROFILE_DISPLAY_LIMIT_MESSAGE, sameIdentity, topologyFromLegacy, validateTopology } from '../utils/displays';
+import { sendBridgeCommand } from '../services/webViewBridge';
 
-type DisplayValidationState = {
-  showNameError: boolean;
-  showSelectionError: boolean;
+type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
+type DragState = { identityKey: string; startX: number; startY: number; startRect: GeometryRect; transform: CanvasTransform; topologyRects: GeometryRect[] };
+
+type DisplaysStepProps = {
+  stepNumber: number;
+  displays: DisplayDeviceInfo[];
+  pcGamingProfiles: DisplayLayoutProfile[];
+  selectedProfileName: string;
+  prefillFromSelectedProfile: boolean;
+  onDraftChange: (profileName: string, topology: GamingProfileDisplayTopology) => void;
+  validationState: DisplayValidationState;
+  onValidationStateChange: (state: DisplayValidationState) => void;
+  isRefreshingDisplays: boolean;
+  displayListError: string | null;
+  refreshDisplays: () => Promise<void>;
 };
 
 export function DisplaysStep({
@@ -27,222 +34,251 @@ export function DisplaysStep({
   isRefreshingDisplays,
   displayListError,
   refreshDisplays
-}: {
-  stepNumber: number;
-  displays: DisplayDeviceInfo[];
-  pcGamingProfiles: DisplayLayoutProfile[];
-  selectedProfileName: string;
-  prefillFromSelectedProfile: boolean;
-  onDraftChange: (profileName: string, identities: DisplayIdentity[]) => void;
-  validationState: DisplayValidationState;
-  onValidationStateChange: (state: DisplayValidationState) => void;
-  isRefreshingDisplays: boolean;
-  displayListError: string | null;
-  refreshDisplays: () => Promise<void>;
-}) {
-  const [newProfileName, setNewProfileName] = useState('');
-  const [selectedDisplays, setSelectedDisplays] = useState<DisplayIdentity[]>([]);
-  const [displayLimitMessage, setDisplayLimitMessage] = useState<string | null>(null);
+}: DisplaysStepProps) {
+  const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
+  const [profileName, setProfileName] = useState('');
+  const [topology, setTopology] = useState<GamingProfileDisplayTopology>({ displays: [] });
+  const [selectedIdentityKey, setSelectedIdentityKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedDisplayModes, setSelectedDisplayModes] = useState<DisplayModeInfo[]>([]);
 
   useEffect(() => {
-    if (!prefillFromSelectedProfile || !selectedProfileName) {
-      return;
-    }
-
-    const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
-    if (!selectedProfile) {
-      return;
-    }
-
-    const profileIdentities = extractDisplayIdentities(selectedProfile.layout);
-    setNewProfileName(selectedProfile.name);
-    setSelectedDisplays(profileIdentities);
-    setDisplayLimitMessage(null);
+    if (!prefillFromSelectedProfile || !selectedProfile) return;
+    const nextTopology = getProfileTopology(selectedProfile);
+    setProfileName(selectedProfile.name);
+    setTopology(nextTopology);
+    setSelectedIdentityKey(identityKey(nextTopology.displays[0]?.identity));
+    onDraftChange(selectedProfile.name, nextTopology);
     onValidationStateChange({ showNameError: false, showSelectionError: false });
-    onDraftChange(selectedProfile.name, profileIdentities);
-  }, [onValidationStateChange, onDraftChange, pcGamingProfiles, prefillFromSelectedProfile, selectedProfileName]);
+  }, [onDraftChange, onValidationStateChange, prefillFromSelectedProfile, selectedProfile]);
 
-  const canEditSelection = Boolean(newProfileName.trim()) && selectedDisplays.length > 0;
+  const selectedTarget = topology.displays.find((display) => identityKey(display.identity) === selectedIdentityKey) ?? topology.displays[0] ?? null;
+  const topologyErrors = validateTopology(topology);
+  const savedIdentityKeys = useMemo(() => new Set(topology.displays.map((display) => identityKey(display.identity))), [topology.displays]);
 
-  function toggleSelectedDisplay(identity: DisplayIdentity) {
-    setSelectedDisplays((current) => {
-      const alreadySelected = current.some((selected) => sameIdentity(selected, identity));
-      if (!alreadySelected && current.length >= MAX_PROFILE_DISPLAYS) {
-        setDisplayLimitMessage(PROFILE_DISPLAY_LIMIT_MESSAGE);
-        return current;
-      }
-
-      const next = alreadySelected
-        ? current.filter((selected) => !sameIdentity(selected, identity))
-        : [...current, identity];
-
-      if (next.length <= MAX_PROFILE_DISPLAYS) {
-        setDisplayLimitMessage(null);
-      }
-      if (next.length > 0 && validationState.showSelectionError) {
-        onValidationStateChange({ ...validationState, showSelectionError: false });
-      }
-
-      onDraftChange(newProfileName, next);
-      return next;
+  useEffect(() => {
+    let cancelled = false;
+    const observed = selectedTarget ? displays.find((display) => sameIdentity(display.identity, selectedTarget.identity)) : null;
+    if (!selectedTarget || !observed || !observed.isEnabled) {
+      setSelectedDisplayModes([]);
+      return () => { cancelled = true; };
+    }
+    void sendBridgeCommand<DisplayModeQueryResult>('getDisplayModes', { identity: selectedTarget.identity }).then((result) => {
+      if (!cancelled) setSelectedDisplayModes(result.modes.filter((mode) => mode.width === selectedTarget.width && mode.height === selectedTarget.height));
+    }).catch(() => {
+      if (!cancelled) setSelectedDisplayModes([]);
     });
+    return () => { cancelled = true; };
+  }, [displays, selectedTarget?.identity, selectedTarget?.width, selectedTarget?.height]);
+
+  function commitTopology(nextTopology: GamingProfileDisplayTopology) {
+    setTopology(nextTopology);
+    onDraftChange(profileName, nextTopology);
+    setActionError(null);
+  }
+
+  function updateProfileName(value: string) {
+    const normalized = normalizePcGamingProfileName(value);
+    setProfileName(normalized);
+    onDraftChange(normalized, topology);
+    if (normalized && validationState.showNameError) onValidationStateChange({ ...validationState, showNameError: false });
+  }
+
+  function updateTarget(identity: ProfileDisplayTarget['identity'], patch: Partial<ProfileDisplayTarget>) {
+    const nextDisplays = topology.displays.map((display) => ({
+      ...display,
+      ...(patch.isPrimary && !sameIdentity(display.identity, identity) ? { isPrimary: false } : {}),
+      ...(sameIdentity(display.identity, identity) ? patch : {})
+    }));
+    commitTopology(normalizePrimary({ displays: nextDisplays }));
+  }
+
+  async function addDisplay(display: DisplayDeviceInfo) {
+    if (topology.displays.length >= MAX_PROFILE_DISPLAYS) {
+      setActionError(PROFILE_DISPLAY_LIMIT_MESSAGE);
+      return;
+    }
+    const enabled = topology.displays.length === 0;
+    let modes: DisplayModeInfo[] = [];
+    try {
+      const result = await sendBridgeCommand<DisplayModeQueryResult>('getDisplayModes', { identity: display.identity });
+      modes = result.modes;
+    } catch {
+      modes = [];
+    }
+    const target: ProfileDisplayTarget = { ...profileTargetFromDisplay(display, modes), enabled, isPrimary: enabled };
+    const nextTopology = normalizePrimary({ displays: [...topology.displays, target] });
+    setSelectedIdentityKey(identityKey(display.identity));
+    commitTopology(nextTopology);
+  }
+
+  async function useCurrentLayout() {
+    try {
+      setActionError(null);
+      const current = await sendBridgeCommand<DisplayLayoutSnapshot>('captureDisplayLayout');
+      const nextTopology = topologyFromLegacy(current);
+      setSelectedIdentityKey(identityKey(nextTopology.displays[0]?.identity));
+      commitTopology(nextTopology);
+    } catch (reason: unknown) {
+      setActionError(reason instanceof Error ? reason.message : 'Nie udało się pobrać bieżącego układu ekranów.');
+    }
   }
 
   return (
     <div className="wizard-copy displays-step">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Ekrany</h2>
-      <section className="settings-section">
-        <p>Wybierz ekrany używane przez profil.</p>
-        <DisplayDiagnosticsPanel
-          displays={displays}
-          selectedDisplays={selectedDisplays}
-          onToggleDisplay={toggleSelectedDisplay}
-          isRefreshing={isRefreshingDisplays}
-          error={displayListError}
-          refreshDisplays={refreshDisplays}
-          profileName={newProfileName}
-          setProfileName={(nextName) => {
-            const normalizedName = normalizePcGamingProfileName(nextName);
-            setNewProfileName(normalizedName);
-            if (normalizedName.length > 0 && validationState.showNameError) {
-              onValidationStateChange({ ...validationState, showNameError: false });
-            }
-            onDraftChange(normalizedName, selectedDisplays);
-          }}
-          validationState={validationState}
-          onValidationStateChange={onValidationStateChange}
-          canEditSelection={canEditSelection}
-          displayLimitMessage={displayLimitMessage}
-        />
+      <section className="settings-section display-topology-editor">
+        <div className="display-topology-toolbar">
+          <div>
+            <p>Zdefiniuj układ, który ma należeć do tego profilu.</p>
+            <span className="display-topology-count">{topology.displays.length}/{MAX_PROFILE_DISPLAYS} ekranów w profilu</span>
+          </div>
+          <div className="display-diagnostics-actions">
+            <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}>Użyj bieżącego układu</button>
+            <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}>{isRefreshingDisplays ? 'Odświeżanie...' : 'Odśwież listę'}</button>
+          </div>
+        </div>
+        <label className="profile-name-label" htmlFor="profile-name-input">Nazwa profilu</label>
+        <input id="profile-name-input" className="text-input profile-name-input" type="text" value={profileName} onChange={(event) => updateProfileName(event.target.value)} onBlur={() => onValidationStateChange({ ...validationState, showNameError: !profileName.trim() })} aria-invalid={validationState.showNameError && !profileName.trim()} placeholder="np. Salon TV + biurko" />
+        {validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">Wpisz nazwę profilu.</div> : null}
+        {displayListError ? <p className="error-line display-error">{displayListError}</p> : null}
+        {actionError ? <p className="error-line display-error">{actionError}</p> : null}
+        <div className="display-topology-layout">
+          <DisplayTopologyCanvas topology={topology} selectedIdentityKey={selectedIdentityKey} onSelect={setSelectedIdentityKey} onMove={(identity, positionX, positionY) => updateTarget(identity, { positionX, positionY })} />
+          <DisplayPropertiesPanel target={selectedTarget} observed={selectedTarget ? displays.find((display) => sameIdentity(display.identity, selectedTarget.identity)) ?? null : null} modes={selectedDisplayModes} onChange={(patch) => selectedTarget && updateTarget(selectedTarget.identity, patch)} onRemove={() => selectedTarget && commitTopology({ displays: topology.displays.filter((display) => !sameIdentity(display.identity, selectedTarget.identity)) })} />
+        </div>
+        <DisplayTopologyValidation errors={topologyErrors} showSelectionError={validationState.showSelectionError} />
+        <section className="display-inventory" aria-label="Wykryte ekrany dostępne do dodania">
+          <div className="display-module-header"><div><strong>Wykryte ekrany</strong><p>Nie są częścią profilu, dopóki ich nie dodasz.</p></div></div>
+          <div className="display-inventory-list">
+            {displays.filter((display) => !savedIdentityKeys.has(identityKey(display.identity))).map((display) => <button className="display-inventory-item" type="button" key={identityKey(display.identity)} onClick={() => void addDisplay(display)} disabled={topology.displays.length >= MAX_PROFILE_DISPLAYS}><strong>{display.name || 'Nieznany ekran'}</strong><span>{display.width || display.preferredWidth} × {display.height || display.preferredHeight} · {display.isEnabled ? 'aktywny' : 'nieaktywny'}</span></button>)}
+            {displays.every((display) => savedIdentityKeys.has(identityKey(display.identity))) ? <p className="hint-line">Brak dodatkowych wykrytych ekranów.</p> : null}
+          </div>
+        </section>
       </section>
     </div>
   );
 }
 
-function DisplayDiagnosticsPanel({
-  displays,
-  selectedDisplays,
-  onToggleDisplay,
-  isRefreshing,
-  error,
-  refreshDisplays,
-  profileName,
-  setProfileName,
-  validationState,
-  onValidationStateChange,
-  canEditSelection,
-  displayLimitMessage
-}: {
-  displays: DisplayDeviceInfo[];
-  selectedDisplays: DisplayIdentity[];
-  onToggleDisplay: (identity: DisplayIdentity) => void;
-  isRefreshing: boolean;
-  error: string | null;
-  refreshDisplays: () => Promise<void>;
-  profileName: string;
-  setProfileName: (value: string) => void;
-  validationState: DisplayValidationState;
-  onValidationStateChange: (state: DisplayValidationState) => void;
-  canEditSelection: boolean;
-  displayLimitMessage: string | null;
-}) {
-  const [limitFeedbackKey, setLimitFeedbackKey] = useState<string | null>(null);
-  const showNameError = validationState.showNameError && profileName.trim().length === 0;
-  const showSelectionError = validationState.showSelectionError && selectedDisplays.length === 0;
+function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove }: { topology: GamingProfileDisplayTopology; selectedIdentityKey: string | null; onSelect: (key: string) => void; onMove: (identity: ProfileDisplayTarget['identity'], positionX: number, positionY: number) => void }) {
+  const dragRef = useRef<DragState | null>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [viewport, setViewport] = useState({ width: 760, height: 320 });
+  const [dragPreview, setDragPreview] = useState<{ identityKey: string; rect: GeometryRect } | null>(null);
+  const rects = topology.displays.map(display => rectFromPosition(display.positionX, display.positionY, display.width, display.height));
+  const bounds = getBounds(topology.displays);
+  const largestDisplayDimension = rects.reduce((largest, rect) => Math.max(largest, rect.width, rect.height), 0);
+  const transform = createCanvasTransform(bounds, viewport.width, viewport.height, 24, largestDisplayDimension);
 
-  function triggerLimitFeedback(display: DisplayDeviceInfo) {
-    const feedbackKey = display.id || `${display.adapterLuid}:${display.targetId}`;
-    setLimitFeedbackKey(feedbackKey);
-    window.setTimeout(() => {
-      setLimitFeedbackKey((current) => (current === feedbackKey ? null : current));
-    }, 320);
-  }
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const updateViewport = () => setViewport({ width: canvas.clientWidth, height: canvas.clientHeight });
+    updateViewport();
+    const observer = new ResizeObserver(updateViewport);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
-  function handleDisplayToggle(display: DisplayDeviceInfo) {
-    const isSelected = selectedDisplays.some((selectedDisplay) => sameIdentity(selectedDisplay, display.identity));
-    if (!isSelected && selectedDisplays.length >= MAX_PROFILE_DISPLAYS) {
-      triggerLimitFeedback(display);
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const target = topology.displays.find((display) => identityKey(display.identity) === drag.identityKey);
+      if (!target) return;
+      const desired = rectFromPosition(drag.startRect.left + (event.clientX - drag.startX) / drag.transform.scale, drag.startRect.top + (event.clientY - drag.startY) / drag.transform.scale, drag.startRect.width, drag.startRect.height);
+      const otherRects = drag.topologyRects.filter((_, index) => topology.displays[index] && identityKey(topology.displays[index].identity) !== drag.identityKey);
+      const resolved = snapAndResolve(desired, otherRects);
+      setDragPreview({ identityKey: drag.identityKey, rect: resolved });
+      onMove(target.identity, Math.round(resolved.left), Math.round(resolved.top));
     }
-    onToggleDisplay(display.identity);
+    function handlePointerUp() { dragRef.current = null; setDragPreview(null); }
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => { window.removeEventListener('pointermove', handlePointerMove); window.removeEventListener('pointerup', handlePointerUp); };
+  }, [onMove, topology.displays]);
+
+  function beginDrag(event: React.PointerEvent, identity: ProfileDisplayTarget['identity'], index: number) {
+    if (event.button !== 0) return;
+    dragRef.current = { identityKey: identityKey(identity), startX: event.clientX, startY: event.clientY, startRect: rects[index], transform, topologyRects: rects };
   }
 
-  return (
-    <section className="display-diagnostics display-module" aria-label="Dostępne ekrany">
-      <div className="display-diagnostics-head display-module-header">
-        <div><p>Wybierz dostępne ekrany i nadaj profilowi nazwę.</p></div>
-        <div className="display-diagnostics-actions">
-          <button className="secondary-button compact" type="button" disabled={isRefreshing} onClick={refreshDisplays}>
-            {isRefreshing ? 'Odświeżanie...' : 'Odśwież'}
-          </button>
-        </div>
-      </div>
-      <div className="display-module-body">
-        <div className="profile-name-section">
-          <div className="profile-name-header">
-            <label className="profile-name-label" htmlFor="profile-name-input">Nazwa profilu</label>
-            <span className="selection-count" aria-live="polite">Ekrany <strong>{selectedDisplays.length}/{MAX_PROFILE_DISPLAYS}</strong></span>
-          </div>
-          <input
-            id="profile-name-input"
-            className="text-input profile-name-input"
-            type="text"
-            value={profileName}
-            onChange={(event) => setProfileName(event.target.value)}
-            onBlur={() => onValidationStateChange({ ...validationState, showNameError: profileName.trim().length === 0 })}
-            aria-invalid={showNameError}
-            aria-describedby={showNameError ? 'profile-name-validation-error' : undefined}
-            placeholder="np. Salon TV + biurko"
-          />
-        </div>
-        {showNameError ? <div id="profile-name-validation-error" className="field-validation-error" role="alert">Wpisz nazwę profilu.</div> : null}
-        {displayLimitMessage ? (
-          <div className="inline-notice inline-notice-warning" role="alert" aria-live="assertive">
-            <span className="inline-notice-label">LIMIT</span>
-            <div className="inline-notice-copy"><strong>{displayLimitMessage}</strong><span>Profil może obejmować najwyżej dwa ekrany.</span></div>
-          </div>
-        ) : null}
-        {showSelectionError ? <div className="selection-validation-error" role="alert">Wybierz przynajmniej jeden ekran.</div> : null}
-        {error ? <p className="error-line display-error">{error}</p> : null}
-        {!error && displays.length === 0 ? <p className="hint-line">Nie znaleziono ekranów. Podłącz ekran i odśwież listę.</p> : null}
-        {displays.length > 0 ? (
-          <div className="display-grid">
-            {displays.map((display) => {
-              const isSelected = selectedDisplays.some((selectedDisplay) => sameIdentity(selectedDisplay, display.identity));
-              const feedbackKey = display.id || `${display.adapterLuid}:${display.targetId}`;
-              const displayClasses = ['display-card', display.isEnabled ? 'is-available' : 'is-inactive', isSelected ? 'is-selected' : '', limitFeedbackKey === feedbackKey ? 'limit-hit' : ''].filter(Boolean).join(' ');
+  return <div ref={canvasRef} className="display-topology-canvas" aria-label="Podgląd układu ekranów">
+    {topology.displays.map((display, index) => {
+      const key = identityKey(display.identity);
+      const topologyRect = dragPreview?.identityKey === key ? dragPreview.rect : rects[index];
+      const visualRect = rectToCanvas(topologyRect, transform);
+      return <button className={`display-topology-node ${display.enabled ? '' : 'is-disabled'} ${display.isPrimary ? 'is-primary' : ''} ${selectedIdentityKey === key ? 'is-selected' : ''} ${dragPreview?.identityKey === key ? 'is-dragging' : ''}`} style={{ left: `${visualRect.left}px`, top: `${visualRect.top}px`, width: `${visualRect.width}px`, height: `${visualRect.height}px` }} type="button" key={key} onClick={() => onSelect(key)} onPointerDown={(event) => beginDrag(event, display.identity, index)}>
+        <span className="display-topology-node-number">{index + 1}</span><strong>{display.identity.friendlyName || 'Ekran'}</strong><small>{display.width > 0 ? `${display.width} × ${display.height}` : 'Tryb nieznany'}</small>{display.isPrimary ? <em>GŁÓWNY</em> : null}
+      </button>;
+    })}
+    {dragPreview ? <div className="display-topology-preview" aria-hidden="true" style={(() => { const rect = rectToCanvas(dragPreview.rect, transform); return { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` }; })()} /> : null}
+    {topology.displays.length === 0 ? <p className="display-topology-empty">Dodaj ekran poniżej albo użyj bieżącego układu.</p> : null}
+  </div>;
+}
 
-              return (
-                <article
-                  className={displayClasses}
-                  key={feedbackKey}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isSelected}
-                  aria-label={`Ekran ${display.name || 'Nieznany ekran'}`}
-                  onClick={() => handleDisplayToggle(display)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return;
-                    event.preventDefault();
-                    handleDisplayToggle(display);
-                  }}
-                >
-                  <div className="display-card-title-line">
-                    <strong>{display.name || 'Nieznany ekran'}</strong>
-                    <div className="display-card-badges">
-                      {display.isEnabled && display.isPrimary ? <span className="display-state-badge">GŁÓWNY</span> : null}
-                      {!display.isEnabled ? <span className="display-state-badge inactive">NIEAKTYWNY</span> : null}
-                    </div>
-                  </div>
-                  <span className="display-tech-line">{formatDisplayResolution(display)} · {formatDisplayRefresh(display)}</span>
-                  {display.connectionTechnology ? <small>{display.connectionTechnology}</small> : null}
-                  <small>Pozycja: {display.positionX}, {display.positionY}</small>
-                </article>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
+function DisplayPropertiesPanel({ target, observed, modes, onChange, onRemove }: { target: ProfileDisplayTarget | null; observed: DisplayDeviceInfo | null; modes: DisplayModeInfo[]; onChange: (patch: Partial<ProfileDisplayTarget>) => void; onRemove: () => void }) {
+  if (!target) return <aside className="display-properties-panel is-empty"><strong>Wybierz ekran</strong><span>Jego ustawienia pojawią się tutaj.</span></aside>;
+  const refreshState = getRefreshSelectionState(target, observed, modes);
+  const refreshOptions = refreshState.modes;
+  const isAutoHighest = getRefreshPolicy(target) === 'AutoHighest';
+  const refreshPlaceholder = !observed
+    ? 'Brak danych bieżącego ekranu'
+    : refreshState.unavailable
+      ? 'Brak danych — włącz ekran, aby wykryć częstotliwości'
+        : refreshOptions.length === 0
+          ? 'Wybierz częstotliwość'
+          : undefined;
+  return <aside className="display-properties-panel" aria-label="Właściwości wybranego ekranu">
+    <div className="display-properties-title"><div><strong>{target.identity.friendlyName || 'Ekran'}</strong><span>{observed?.connectionTechnology || 'Brak bieżących danych połączenia'}</span></div><button className="text-action" type="button" onClick={onRemove}>Usuń</button></div>
+    <label className="toggle-row"><span>Włączony w profilu</span><input type="checkbox" checked={target.enabled} onChange={(event) => onChange({ enabled: event.target.checked, isPrimary: event.target.checked ? target.isPrimary : false })} /></label>
+    <label className="toggle-row"><span>Główny ekran</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label>
+    <div className="display-properties-grid"><label>Pozycja X<input className="text-input" type="number" value={target.positionX} onChange={(event) => onChange({ positionX: Number(event.target.value) })} /></label><label>Pozycja Y<input className="text-input" type="number" value={target.positionY} onChange={(event) => onChange({ positionY: Number(event.target.value) })} /></label><label>Szerokość<input className="text-input" type="number" min="1" value={target.width} onChange={(event) => onChange({ width: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>Wysokość<input className="text-input" type="number" min="1" value={target.height} onChange={(event) => onChange({ height: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>Odświeżanie<select className="text-input" value={resolveRefreshSelectionKey(target, refreshOptions)} disabled={!isAutoHighest && refreshState.disabled} onChange={(event) => { if (event.target.value === 'auto') { onChange({ refreshPolicy: 'AutoHighest', fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 }); return; } const mode = refreshOptions.find((candidate) => modeKey(candidate) === event.target.value); if (mode) onChange({ refreshPolicy: 'Fixed', fixedRefreshRateNumerator: mode.refreshRateNumerator, fixedRefreshRateDenominator: mode.refreshRateDenominator, refreshRateNumerator: 0, refreshRateDenominator: 0 }); }}><option value="auto">Najwyższe dostępne</option>{refreshOptions.map((mode) => <option key={modeKey(mode)} value={modeKey(mode)}>{formatRefresh(mode.refreshRateHz)}</option>)}{!isAutoHighest && refreshOptions.length === 0 && hasValidFixedRefresh(target) ? <option value={fixedModeKey(target)}>{formatRefresh((target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator ?? 1))}</option> : null}{refreshOptions.length === 0 && !hasValidFixedRefresh(target) && !isAutoHighest ? <option value="" disabled>{refreshPlaceholder}</option> : null}</select></label></div>
+    {observed && !observed.isEnabled && getRefreshPolicy(target) === 'Fixed' && hasValidFixedRefresh(target) ? <p className="hint-line">Pokazano zapisaną stałą częstotliwość profilu. Pełną listę trybów można zweryfikować po włączeniu ekranu.</p> : null}
+    {!observed ? <p className="hint-line">Ekran nie jest obecnie wykryty. Zapisana konfiguracja pozostaje bez zmian.</p> : null}
+  </aside>;
+}
+
+function modeKey(mode: Pick<ProfileDisplayTarget, 'refreshRateNumerator' | 'refreshRateDenominator'>) {
+  return `${mode.refreshRateNumerator}/${mode.refreshRateDenominator}`;
+}
+
+function fixedModeKey(target: Pick<ProfileDisplayTarget, 'fixedRefreshRateNumerator' | 'fixedRefreshRateDenominator'>) {
+  return `${target.fixedRefreshRateNumerator ?? 0}/${target.fixedRefreshRateDenominator ?? 0}`;
+}
+
+function resolveRefreshSelectionKey(target: ProfileDisplayTarget, modes: DisplayModeInfo[]) {
+  if (getRefreshPolicy(target) === 'AutoHighest') return 'auto';
+  const fixedMode = modes.find((candidate) => Math.abs(candidate.refreshRateHz - (target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator || 1)) <= 0.25);
+  return fixedMode ? modeKey(fixedMode) : fixedModeKey(target);
+}
+
+function resolveModeKey(target: ProfileDisplayTarget, modes: DisplayModeInfo[]) {
+  const targetRefresh = target.refreshRateDenominator > 0 ? target.refreshRateNumerator / target.refreshRateDenominator : 0;
+  const mode = modes.find((candidate) => Math.abs(candidate.refreshRateHz - targetRefresh) <= 0.25);
+  return mode ? modeKey(mode) : '';
+}
+
+function formatRefresh(refreshRate: number) {
+  return Number.isInteger(refreshRate) ? `${refreshRate} Hz` : `${refreshRate.toFixed(2)} Hz`;
+}
+
+function DisplayTopologyValidation({ errors, showSelectionError }: { errors: string[]; showSelectionError: boolean }) {
+  if (!showSelectionError && errors.length === 0) return <p className="display-topology-ready">Topology gotowa do zapisania.</p>;
+  return <div className="display-topology-validation" role="alert">{(showSelectionError ? ['Dodaj co najmniej jeden ekran.', ...errors] : errors).filter((error, index, all) => all.indexOf(error) === index).map((error) => <span key={error}>{error}</span>)}</div>;
+}
+
+function normalizePrimary(topology: GamingProfileDisplayTopology): GamingProfileDisplayTopology {
+  const enabled = topology.displays.find((display) => display.enabled && display.isPrimary) ?? topology.displays.find((display) => display.enabled);
+  return { displays: topology.displays.map((display) => ({ ...display, isPrimary: Boolean(enabled && sameIdentity(display.identity, enabled.identity) && display.enabled) })) };
+}
+
+function identityKey(identity: ProfileDisplayTarget['identity'] | undefined): string {
+  if (!identity) return '';
+  return identity.monitorDevicePath || `${identity.adapterLuid}:${identity.targetId}:${identity.connectorInstance}`;
+}
+
+function getBounds(displays: ProfileDisplayTarget[]) {
+  return computeTopologyBounds(displays.map(display => rectFromPosition(display.positionX, display.positionY, display.width, display.height)));
 }

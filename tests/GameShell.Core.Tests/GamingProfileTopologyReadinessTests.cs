@@ -1,0 +1,289 @@
+using GameShell.Core.Interfaces;
+using GameShell.Core.Models;
+using GameShell.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace GameShell.Core.Tests;
+
+public sealed class GamingProfileTopologyReadinessTests
+{
+    [Fact]
+    public async Task Saved144_Current144_IsReady()
+    {
+        var result = await EvaluateAsync(144, 1, Mode(3840, 2160, 144, 1));
+
+        AssertTarget(result, ProfileDisplayReadiness.Ready, ProfileDisplayReadinessReason.None);
+    }
+
+    [Fact]
+    public async Task Saved60_Current60_IsReady()
+    {
+        var result = await EvaluateAsync(60, 1, Mode(3840, 2160, 60, 1));
+
+        AssertTarget(result, ProfileDisplayReadiness.Ready, ProfileDisplayReadinessReason.None);
+    }
+
+    [Fact]
+    public async Task InvalidInventory_IsNotClassifiedAsExpectedModeUnavailable()
+    {
+        var query = new FakeDisplayQuery([Device("S90F", 7)], _ => [Mode(3440, 1440, 165, 1)], inventoryValid: false);
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", new GamingProfileDisplayTopology { Displays = [Target(refreshNumerator: 60, refreshDenominator: 1)] });
+
+        AssertTarget(result, ProfileDisplayReadiness.InvalidConfiguration, ProfileDisplayReadinessReason.ModeInventoryInvalid);
+    }
+
+    [Fact]
+    public async Task Saved144_Current60_IsDegraded()
+    {
+        var result = await EvaluateAsync(144, 1, Mode(3840, 2160, 60, 1));
+
+        AssertTarget(result, ProfileDisplayReadiness.Degraded, ProfileDisplayReadinessReason.ExpectedModeUnavailable);
+    }
+
+    [Fact]
+    public async Task UnknownSavedRefresh_IsInvalidConfiguration_NotDegraded()
+    {
+        var target = AutoTarget();
+        target.RefreshPolicy = RefreshPolicy.Fixed;
+        var query = new FakeDisplayQuery([Device("S90F", 7)], _ => [Mode(3840, 2160, 144, 1)]);
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", new GamingProfileDisplayTopology { Displays = [target] });
+
+        AssertTarget(result, ProfileDisplayReadiness.InvalidConfiguration, ProfileDisplayReadinessReason.InvalidExpectedMode);
+    }
+
+    [Fact]
+    public async Task Saved120_Current119Point88_IsReady()
+    {
+        var result = await EvaluateAsync(120, 1, Mode(3840, 2160, 11988, 100));
+
+        AssertTarget(result, ProfileDisplayReadiness.Ready, ProfileDisplayReadinessReason.None);
+    }
+
+    [Fact]
+    public async Task AutoHighest_WithModes60_120_144_IsReady()
+    {
+        var topology = new GamingProfileDisplayTopology { Displays = [AutoTarget()] };
+        var query = new FakeDisplayQuery([Device("S90F", 7)], _ => [Mode(3840, 2160, 60, 1), Mode(3840, 2160, 120, 1), Mode(3840, 2160, 144, 1)]);
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology);
+
+        AssertTarget(result, ProfileDisplayReadiness.Ready, ProfileDisplayReadinessReason.None);
+        Assert.Equal(3, result.Targets[0].AvailableModesForRequestedResolution);
+    }
+
+    [Fact]
+    public async Task AutoHighest_WithOnly60_IsReady()
+    {
+        var topology = new GamingProfileDisplayTopology { Displays = [AutoTarget()] };
+        var query = new FakeDisplayQuery([Device("S90F", 7)], _ => [Mode(3840, 2160, 60, 1)]);
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology);
+
+        AssertTarget(result, ProfileDisplayReadiness.Ready, ProfileDisplayReadinessReason.None);
+    }
+
+    [Fact]
+    public async Task AutoHighest_InactiveTarget_DoesNotRequireModeInventoryDuringPrecheck()
+    {
+        var query = new FakeDisplayQuery([Device("S90F", 7, isEnabled: false)], _ => throw new InvalidOperationException("inactive target must not query modes"));
+        var topology = new GamingProfileDisplayTopology { Displays = [AutoTarget()] };
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology, deferInactiveModeValidation: true);
+
+        AssertTarget(result, ProfileDisplayReadiness.ResolvableInactive, ProfileDisplayReadinessReason.TargetInactive);
+    }
+
+    [Fact]
+    public async Task Fixed144_WithOnly60_IsUnavailable()
+    {
+        var target = AutoTarget();
+        target.RefreshPolicy = RefreshPolicy.Fixed;
+        target.FixedRefreshRateNumerator = 144;
+        target.FixedRefreshRateDenominator = 1;
+        var query = new FakeDisplayQuery([Device("S90F", 7)], _ => [Mode(3840, 2160, 60, 1)]);
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", new GamingProfileDisplayTopology { Displays = [target] });
+
+        AssertTarget(result, ProfileDisplayReadiness.Degraded, ProfileDisplayReadinessReason.ExpectedModeUnavailable);
+    }
+
+    [Fact]
+    public async Task MissingTarget_IsMissing()
+    {
+        var result = await EvaluateAsync(144, 1);
+
+        AssertTarget(result, ProfileDisplayReadiness.Missing, ProfileDisplayReadinessReason.PhysicalTargetMissing);
+    }
+
+    [Fact]
+    public async Task DisabledTarget_IsDisabledAndDoesNotBlock()
+    {
+        var query = new FakeDisplayQuery([], _ => throw new InvalidOperationException("disabled target must not query modes"));
+        var topology = new GamingProfileDisplayTopology { Displays = [Target(enabled: false)] };
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology);
+
+        AssertTarget(result, ProfileDisplayReadiness.Disabled, ProfileDisplayReadinessReason.None);
+        Assert.True(result.IsReady);
+    }
+
+    [Fact]
+    public async Task OneReadyAndOneDegraded_BlocksProfile()
+    {
+        var first = Device("S90F", 7);
+        var second = Device("LG", 8);
+        var query = new FakeDisplayQuery([first, second], device => device.TargetId == 7
+            ? [Mode(3840, 2160, 144, 1)]
+            : [Mode(2560, 1440, 60, 1)]);
+        var topology = new GamingProfileDisplayTopology
+        {
+            Displays = [Target("S90F", 7), Target("LG", 8, width: 3840, height: 2160)]
+        };
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology);
+
+        Assert.False(result.IsReady);
+        Assert.Equal(ProfileDisplayReadiness.Degraded, result.Targets[1].Result);
+    }
+
+    [Fact]
+    public async Task FriendlyNameUnchangedButCapabilityDegraded_IsDegraded()
+    {
+        var result = await EvaluateAsync(144, 1, [Mode(3840, 2160, 60, 1)], savedName: "S90F", currentName: "S90F");
+
+        AssertTarget(result, ProfileDisplayReadiness.Degraded, ProfileDisplayReadinessReason.ExpectedModeUnavailable);
+    }
+
+    [Fact]
+    public async Task FriendlyNameChangedWithStrongIdentity_IsResolved()
+    {
+        var result = await EvaluateAsync(144, 1, [Mode(3840, 2160, 60, 1)], savedName: "S90F", currentName: "SAMSUNG");
+
+        Assert.Equal("SAMSUNG", result.Targets[0].ResolvedTarget!.Name);
+        Assert.Equal(ProfileDisplayReadiness.Degraded, result.Targets[0].Result);
+    }
+
+    [Fact]
+    public async Task EqualStableCandidates_AreAmbiguous()
+    {
+        var query = new FakeDisplayQuery([Device("A", 7), Device("B", 7)], _ => [Mode(3840, 2160, 144, 1)]);
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", new GamingProfileDisplayTopology { Displays = [Target("Saved", 7)] });
+
+        AssertTarget(result, ProfileDisplayReadiness.Ambiguous, ProfileDisplayReadinessReason.AmbiguousIdentity);
+    }
+
+    private static async Task<GamingProfileTopologyReadiness> EvaluateAsync(
+        uint refreshNumerator,
+        uint refreshDenominator,
+        params DisplayModeInfo[] modes)
+    {
+        return await EvaluateAsync(refreshNumerator, refreshDenominator, modes, "S90F", "S90F");
+    }
+
+    private static async Task<GamingProfileTopologyReadiness> EvaluateAsync(
+        uint refreshNumerator,
+        uint refreshDenominator,
+        DisplayModeInfo[] modes,
+        string savedName,
+        string currentName)
+    {
+        var query = new FakeDisplayQuery(modes.Length == 0 ? [] : [Device(currentName, 7)], _ => modes);
+        var topology = new GamingProfileDisplayTopology { Displays = [Target(savedName, 7, refreshNumerator, refreshDenominator)] };
+        return await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology);
+    }
+
+    private static ProfileDisplayTarget Target(string name = "S90F", uint targetId = 7, uint refreshNumerator = 144, uint refreshDenominator = 1, bool enabled = true, int width = 3840, int height = 2160)
+    {
+        return new ProfileDisplayTarget
+        {
+            Identity = Identity(name, targetId),
+            Enabled = enabled,
+            IsPrimary = true,
+            Width = width,
+            Height = height,
+            RefreshRateNumerator = refreshNumerator,
+            RefreshRateDenominator = refreshDenominator
+        };
+    }
+
+    private static ProfileDisplayTarget AutoTarget()
+    {
+        return new ProfileDisplayTarget
+        {
+            Identity = Identity("S90F", 7),
+            Enabled = true,
+            IsPrimary = true,
+            Width = 3840,
+            Height = 2160,
+            RefreshPolicy = RefreshPolicy.AutoHighest
+        };
+    }
+
+    private static DisplayDeviceInfo Device(string name, uint targetId, bool isEnabled = true)
+    {
+        return new DisplayDeviceInfo
+        {
+            Id = name,
+            Name = name,
+            Identity = Identity(name, targetId),
+            SourceDeviceName = $"\\\\.\\DISPLAY{targetId}",
+            TargetId = targetId,
+            AdapterLuid = 1,
+            IsEnabled = isEnabled,
+            IsAvailable = true
+        };
+    }
+
+    private static DisplayIdentity Identity(string name, uint targetId)
+    {
+        return new DisplayIdentity
+        {
+            FriendlyName = name,
+            MonitorDevicePath = $"PATH-{name}",
+            AdapterLuid = 1,
+            TargetId = targetId,
+            EdidManufacturerId = 123,
+            EdidProductCodeId = 456,
+            ConnectorInstance = targetId
+        };
+    }
+
+    private static DisplayModeInfo Mode(int width, int height, uint numerator, uint denominator)
+    {
+        return new DisplayModeInfo { Width = width, Height = height, RefreshRateNumerator = numerator, RefreshRateDenominator = denominator };
+    }
+
+    private static void AssertTarget(GamingProfileTopologyReadiness result, ProfileDisplayReadiness readiness, ProfileDisplayReadinessReason reason)
+    {
+        Assert.Equal(readiness, Assert.Single(result.Targets).Result);
+        Assert.Equal(reason, result.Targets[0].Reason);
+    }
+
+    private sealed class FakeDisplayQuery : IDisplayQueryService
+    {
+        private readonly IReadOnlyList<DisplayDeviceInfo> _devices;
+        private readonly Func<DisplayIdentity, IReadOnlyList<DisplayModeInfo>> _modes;
+        private readonly bool _inventoryValid;
+
+        public FakeDisplayQuery(IReadOnlyList<DisplayDeviceInfo> devices, Func<DisplayIdentity, IReadOnlyList<DisplayModeInfo>> modes, bool inventoryValid = true)
+        {
+            _devices = devices;
+            _modes = modes;
+            _inventoryValid = inventoryValid;
+        }
+
+        public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default) => Task.FromResult(_devices);
+        public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default) => Task.FromResult(new DisplayLayoutSnapshot());
+        public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default) => Task.FromResult(new DisplayModeQueryResult { Success = true, InventoryValid = _inventoryValid, Modes = _modes(display) });
+    }
+}

@@ -96,7 +96,7 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         }
 
         var activeDisplays = pcGamingLayout.Displays.Where(display => display.IsActive).ToList();
-        if (activeDisplays.Count == 1)
+        if (activeDisplays.Count == 1 && activeDisplays[0].RefreshRateDenominator == 0)
         {
             return await EnterSingleDisplayGamingModeAsync(activeDisplays[0].Identity, cancellationToken);
         }

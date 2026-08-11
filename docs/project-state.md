@@ -18,6 +18,16 @@ Aktualne, robocze podsumowanie stanu projektu.
 - ABI native struktur DisplayConfig jest chronione testem rozmiarow: source `20`, target `48`, path `72` bajty.
 - Problem identyfikacji Samsung S90F pozostaje odroczony i nie jest czescia stabilizacji display switching.
 
+## Profile ekranow i topology
+
+- Profile topology przechowuje jawna `RefreshPolicy`: `AutoHighest` jest domyslne, a `Fixed` istnieje tylko dla explicit wyboru stalego trybu w nowym UI.
+- Legacy topology bez `refreshPolicy` jest migrowane do `AutoHighest`; stare pola exact refresh nie prowadza juz wyboru w UI i sa czyszczone przy zapisie.
+- Edytor `Profile Setup > Ekrany` ma osobna warstwe geometrii w `src/GameShell.Ui/src/utils/displayTopologyGeometry.ts`. Canvas skaluje tylko prezentacje, a zapis zachowuje rzeczywiste `PositionX`/`PositionY` topology.
+- Canvas obsluguje ujemne wspolrzedne, proporcjonalny rozmiar monitorow, snap krawedzi i alignment oraz deterministyczne usuwanie overlapu. Ekrany disabled nadal uczestnicza w geometrii.
+- Przed apply snapshot jest normalizowany względem aktywnego primary: primary trafia do `0,0`, a pozostale pozycje zachowuja relacje wzajemne.
+- Przed budowa konfiguracji natywnej wykonywana jest walidacja jednego primary, rozmiarow, overlapu i duplikatow targetow. Niepoprawna topologia nie wywoluje `SetDisplayConfig`.
+- Log `[DISPLAY TOPOLOGY APPLY]` pokazuje dokładne wspolrzedne snapshotu przekazane do buildera natywnego.
+
 ## Frontend po refaktorze
 
 - `App.tsx` jest wyłącznie kompozycją stanu, feature coordinatorów i `AppView`.
@@ -88,7 +98,7 @@ Aktualne, robocze podsumowanie stanu projektu.
   - wymaga nazwy profilu,
   - wymaga wyboru co najmniej jednego ekranu,
   - pokazuje te bledy lokalnie i niezaleznie (osobne komunikaty),
-  - ogranicza profil do maksymalnie 2 ekranow (inline warning LIMIT).
+  - ogranicza profil do maksymalnie 5 ekranow (inline warning LIMIT).
 - Draft konfiguracji ekranow jest commitowany deterministycznie przed zapisem i przy kluczowej nawigacji.
 - Przy tworzeniu nowego profilu hotkey profilu startuje zawsze jako pusty.
 - Cofanie `Wroc` w flow tworzenia profilu nie pokazuje modala o niezapisanych zmianach.
@@ -128,7 +138,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja: `npm run build`, `npm run test:encoding` oraz `dotnet build .\GameShell.sln --no-restore` przeszly; pakowanie EXE zakonczone sukcesem. Ostatni przebieg testow .NET zapisany w repo obejmuje `76/76`, test runtime UI `1/1` i test setup routing `20/20`.
+- Ostatnia walidacja tego etapu: UI topology/geometria `21/21`, testy .NET `104/104`, `npm run build`, `dotnet build .\GameShell.sln --no-restore` oraz pakowanie EXE zakonczone sukcesem.
 
 ## Utrzymanie repo
 

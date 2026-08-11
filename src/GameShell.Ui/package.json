@@ -10,6 +10,7 @@
     "test:encoding": "node --experimental-strip-types --test tests/encoding.test.ts",
     "test:setup-routing": "node --experimental-strip-types --test tests/setupRouting.test.ts",
     "test:runtime-status": "node --experimental-strip-types --test tests/runtimeStatus.test.ts",
+    "test:display-topology": "node --experimental-strip-types --test tests/displayTopology.test.ts",
     "dev": "vite",
     "preview": "vite preview"
   },

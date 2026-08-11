@@ -23,6 +23,20 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         var mapper = new DisplayConfigMapper(_logger);
         var devices = mapper.MapDevices(topology);
         _logger.LogInformation("Detected {DisplayCount} available display(s).", devices.Count);
+        foreach (var device in devices)
+        {
+            _logger.LogInformation(
+                "[DISPLAY MODE ENUM SOURCE] FriendlyName={FriendlyName} AdapterLuid={AdapterLuid} TargetId={TargetId} SourceId={SourceId} SourceDeviceName={SourceDeviceName} Active={Active} Available={Available} EnumDisplaySettingsDeviceName={EnumDisplaySettingsDeviceName} CurrentMode={CurrentMode}",
+                device.Name,
+                device.AdapterLuid,
+                device.TargetId,
+                device.SourceId,
+                device.SourceDeviceName,
+                device.IsEnabled,
+                device.IsAvailable,
+                device.IsEnabled ? device.SourceDeviceName : "-",
+                FormatMode(device.Width, device.Height, device.RefreshRateHz));
+        }
         return Task.FromResult(devices);
     }
 
@@ -35,20 +49,133 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         return Task.FromResult(snapshot);
     }
 
+    public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var activeTopology = QueryActiveTopology(cancellationToken);
+        var mapper = new DisplayConfigMapper(_logger);
+        var activeDevices = mapper.MapDevices(activeTopology);
+        var activeMatch = FindUniqueDisplay(activeDevices, display);
+        var topology = activeMatch is not null
+            ? activeTopology
+            : QueryAvailableTopology(cancellationToken);
+        var devices = mapper.MapDevices(topology);
+        var candidates = devices
+            .Select(device => new { Device = device, Score = DisplayIdentityMatcher.GetStableIdentityScore(display, device.Identity) })
+            .Where(candidate => candidate.Score >= 35)
+            .OrderByDescending(candidate => candidate.Score)
+            .ToList();
+        if (candidates.Count == 0 || (candidates.Count > 1 && candidates[0].Score == candidates[1].Score))
+        {
+            return Task.FromResult(new DisplayModeQueryResult());
+        }
+
+        var selectedDevice = candidates[0].Device;
+        var sourceDeviceName = activeMatch is not null
+            ? activeMatch.SourceDeviceName
+            : string.Empty;
+        _logger.LogInformation(
+            "[DISPLAY MODE ENUM SOURCE] FriendlyName={FriendlyName} AdapterLuid={AdapterLuid} TargetId={TargetId} SourceId={SourceId} SourceDeviceName={SourceDeviceName} Active={Active} Available={Available} EnumDisplaySettingsDeviceName={EnumDisplaySettingsDeviceName} CurrentMode={CurrentMode}",
+            selectedDevice.Name,
+            selectedDevice.AdapterLuid,
+            selectedDevice.TargetId,
+            selectedDevice.SourceId,
+            selectedDevice.SourceDeviceName,
+            selectedDevice.IsEnabled,
+            selectedDevice.IsAvailable,
+            string.IsNullOrWhiteSpace(sourceDeviceName) ? "-" : sourceDeviceName,
+            FormatMode(selectedDevice.Width, selectedDevice.Height, selectedDevice.RefreshRateHz));
+        if (string.IsNullOrWhiteSpace(sourceDeviceName))
+        {
+            return Task.FromResult(new DisplayModeQueryResult { InventoryValid = activeMatch is null });
+        }
+
+        var modes = EnumerateDisplayModes(sourceDeviceName)
+            .Where(mode => mode.PelsWidth > 0 && mode.PelsHeight > 0 && mode.DisplayFrequency > 0)
+            .Select(mode => new DisplayModeInfo
+            {
+                Width = checked((int)mode.PelsWidth),
+                Height = checked((int)mode.PelsHeight),
+                RefreshRateNumerator = mode.DisplayFrequency,
+                RefreshRateDenominator = 1
+            })
+            .ToList();
+        var currentMode = activeMatch;
+        if (currentMode is not null
+            && currentMode.Width > 0
+            && currentMode.Height > 0
+            && currentMode.RefreshRateNumerator > 0
+            && currentMode.RefreshRateDenominator > 0
+            && !modes.Any(mode => SameMode(mode, currentMode)))
+        {
+            modes.Add(new DisplayModeInfo
+            {
+                Width = currentMode.Width,
+                Height = currentMode.Height,
+                RefreshRateNumerator = currentMode.RefreshRateNumerator,
+                RefreshRateDenominator = currentMode.RefreshRateDenominator
+            });
+        }
+        modes = modes
+            .GroupBy(mode => $"{mode.Width}:{mode.Height}:{mode.RefreshRateNumerator}:{mode.RefreshRateDenominator}")
+            .Select(group => group.First())
+            .ToList();
+        _logger.LogInformation(
+            "[DISPLAY MODE INVENTORY] Display={Display} CurrentMode={CurrentMode} AvailableModes={AvailableModes}",
+            currentMode?.Name ?? display.FriendlyName,
+            FormatMode(currentMode?.Width ?? 0, currentMode?.Height ?? 0, currentMode?.RefreshRateHz ?? 0),
+            FormatModes(modes));
+        return Task.FromResult(new DisplayModeQueryResult { Success = modes.Count > 0, Modes = modes });
+    }
+
+    private static DisplayDeviceInfo? FindUniqueDisplay(IReadOnlyList<DisplayDeviceInfo> devices, DisplayIdentity identity)
+    {
+        var matches = devices
+            .Where(device => DisplayIdentityMatcher.IsReliableMatch(identity, device.Identity))
+            .ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private static bool SameMode(DisplayModeInfo mode, DisplayDeviceInfo current)
+    {
+        if (mode.Width != current.Width || mode.Height != current.Height)
+        {
+            return false;
+        }
+
+        if (mode.RefreshRateDenominator == 0 || current.RefreshRateDenominator == 0)
+        {
+            return false;
+        }
+
+        return Math.Abs(mode.RefreshRateHz - current.RefreshRateHz) <= 0.25;
+    }
+
     public Task<DisplayOperationResult> ValidateLayoutAsync(DisplayLayoutSnapshot snapshot, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(ApplyLayout(snapshot, validateOnly: true, cancellationToken));
+        var normalizedSnapshot = DisplayLayoutTopologyNormalizer.NormalizePrimaryOrigin(snapshot);
+        return Task.FromResult(ApplyLayout(normalizedSnapshot, validateOnly: true, cancellationToken));
     }
 
     public Task<DisplayOperationResult> ApplyLayoutAsync(DisplayLayoutSnapshot snapshot, CancellationToken cancellationToken = default)
     {
-        var validation = ApplyLayout(snapshot, validateOnly: true, cancellationToken);
+        var normalizedSnapshot = DisplayLayoutTopologyNormalizer.NormalizePrimaryOrigin(snapshot);
+        var validation = ApplyLayout(normalizedSnapshot, validateOnly: true, cancellationToken);
         if (!validation.Success)
         {
             return Task.FromResult(validation);
         }
 
-        return Task.FromResult(ApplyLayout(snapshot, validateOnly: false, cancellationToken));
+        var result = ApplyLayout(normalizedSnapshot, validateOnly: false, cancellationToken);
+        if (result.Success)
+        {
+            foreach (var display in normalizedSnapshot.Displays.Where(display => display.IsActive && display.RefreshRateDenominator == 0))
+            {
+                TryApplyHighestRefreshRateForDisplay(display.Identity, cancellationToken);
+            }
+        }
+
+        return Task.FromResult(result);
     }
 
     public Task<DisplayOperationResult> ActivateOnlyAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
@@ -118,12 +245,12 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
 
         if (selected.Count == 1)
         {
-            TryApplyHighestRefreshRateForConsoleDisplay(selected[0].Identity, cancellationToken);
+            TryApplyHighestRefreshRateForDisplay(selected[0].Identity, cancellationToken);
         }
         return result;
     }
 
-    private void TryApplyHighestRefreshRateForConsoleDisplay(DisplayIdentity selectedDisplay, CancellationToken cancellationToken)
+    private void TryApplyHighestRefreshRateForDisplay(DisplayIdentity selectedDisplay, CancellationToken cancellationToken)
     {
         try
         {
@@ -133,21 +260,13 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             }
 
             var activeTopology = QueryActiveTopology(cancellationToken);
-            var activePaths = activeTopology.Paths.Where(path => path.IsActive).ToList();
-            if (activePaths.Count != 1)
+            var activePath = activeTopology.Paths
+                .Where(path => path.IsActive)
+                .FirstOrDefault(path => DisplayIdentityMatcher.IsReliableMatch(selectedDisplay, ToIdentity(path)));
+            if (activePath is null)
             {
                 _logger.LogDebug(
-                    "Skipping Console refresh-rate correction because active display count is {DisplayCount}.",
-                    activePaths.Count);
-                return;
-            }
-
-            var activePath = activePaths[0];
-            if (!DisplayIdentityMatcher.IsReliableMatch(selectedDisplay, ToIdentity(activePath)))
-            {
-                _logger.LogWarning(
-                    "Skipping Console refresh-rate correction because the active display does not match the selected Console display. Active: {FriendlyName}.",
-                    activePath.MonitorFriendlyName);
+                    "Skipping display refresh-rate correction because the requested display is not active.");
                 return;
             }
 
@@ -245,6 +364,13 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
     private DisplayOperationResult ApplyLayout(DisplayLayoutSnapshot snapshot, bool validateOnly, CancellationToken cancellationToken)
     {
         var activeSnapshotDisplays = snapshot.Displays.Where(display => display.IsActive).ToList();
+        var geometryValidation = ValidateSnapshotGeometry(snapshot);
+        if (!geometryValidation.Success)
+        {
+            LogTopologyApply(snapshot, geometryValidation.Message);
+            return geometryValidation;
+        }
+
         if (activeSnapshotDisplays.Count == 0)
         {
             return new DisplayOperationResult { Success = false, Message = "Uklad ekranow nie zawiera zadnego aktywnego ekranu." };
@@ -253,8 +379,11 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         var topology = QueryLayoutApplicationTopology(cancellationToken);
         if (!TryBuildNativeConfiguration(snapshot, topology, out var paths, out var modes, out var message))
         {
+            LogTopologyApply(snapshot, message);
             return new DisplayOperationResult { Success = false, Message = message };
         }
+
+        LogTopologyApply(snapshot, "OK");
 
         var flags = DisplayConfigNative.SdcUseSuppliedDisplayConfig
             | DisplayConfigNative.SdcAllowChanges
@@ -299,6 +428,81 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             Success = true,
             Message = validateOnly ? "Uklad ekranow jest poprawny." : "Zastosowano uklad ekranow."
         };
+    }
+
+    private static DisplayOperationResult ValidateSnapshotGeometry(DisplayLayoutSnapshot snapshot)
+    {
+        var active = snapshot.Displays.Where(display => display.IsActive).ToList();
+        if (active.Count == 0)
+        {
+            return new DisplayOperationResult { Success = false, Message = "Uklad ekranow nie zawiera zadnego aktywnego ekranu." };
+        }
+
+        if (active.Count(display => display.IsPrimary) != 1)
+        {
+            return new DisplayOperationResult { Success = false, Message = "Topologia musi zawierac dokładnie jeden główny ekran." };
+        }
+
+        var primary = active.Single(display => display.IsPrimary);
+        if (primary.PositionX != 0 || primary.PositionY != 0)
+        {
+            return new DisplayOperationResult { Success = false, Message = "Główny ekran topologii nie znajduje się w punkcie 0,0." };
+        }
+
+        if (active.Any(display => display.Width <= 0 || display.Height <= 0))
+        {
+            return new DisplayOperationResult { Success = false, Message = "Topologia zawiera ekran bez poprawnego rozmiaru." };
+        }
+
+        if (active
+            .Where(display => display.Identity.AdapterLuid != 0 && display.Identity.TargetId != 0)
+            .GroupBy(display => $"{display.Identity.AdapterLuid}:{display.Identity.TargetId}")
+            .Any(group => group.Count() > 1))
+        {
+            return new DisplayOperationResult { Success = false, Message = "Topologia zawiera zduplikowany cel fizyczny." };
+        }
+
+        for (var leftIndex = 0; leftIndex < active.Count; leftIndex++)
+        {
+            for (var rightIndex = leftIndex + 1; rightIndex < active.Count; rightIndex++)
+            {
+                var left = active[leftIndex];
+                var right = active[rightIndex];
+                if (left.PositionX < right.PositionX + right.Width
+                    && left.PositionX + left.Width > right.PositionX
+                    && left.PositionY < right.PositionY + right.Height
+                    && left.PositionY + left.Height > right.PositionY)
+                {
+                    return new DisplayOperationResult { Success = false, Message = $"Topologia zawiera nakładające się ekrany: {left.Identity.FriendlyName} i {right.Identity.FriendlyName}." };
+                }
+            }
+        }
+
+        return new DisplayOperationResult { Success = true, Message = "OK" };
+    }
+
+    private void LogTopologyApply(DisplayLayoutSnapshot snapshot, string validationResult)
+    {
+        var active = snapshot.Displays.Where(display => display.IsActive).ToList();
+        var bounds = active.Count == 0
+            ? "empty"
+            : $"{active.Min(display => display.PositionX)},{active.Min(display => display.PositionY)}..{active.Max(display => display.PositionX + display.Width)},{active.Max(display => display.PositionY + display.Height)}";
+        _logger.LogInformation("[DISPLAY TOPOLOGY APPLY] Profile={Profile} TopologyBounds={TopologyBounds} ValidationResult={ValidationResult}", "runtime", bounds, validationResult);
+        foreach (var display in active)
+        {
+            _logger.LogInformation(
+                "[DISPLAY TOPOLOGY APPLY] Name={Name} Primary={Primary} ResolvedSource={ResolvedSource} AdapterLuid={AdapterLuid} TargetId={TargetId} X={X} Y={Y} Width={Width} Height={Height} RefreshPolicy={RefreshPolicy}",
+                display.Identity.FriendlyName,
+                display.IsPrimary,
+                display.SourceDeviceName,
+                display.Identity.AdapterLuid,
+                display.Identity.TargetId,
+                display.PositionX,
+                display.PositionY,
+                display.Width,
+                display.Height,
+                display.RefreshRateDenominator == 0 ? "AutoHighest" : "Fixed");
+        }
     }
 
     private static bool TryBuildNativeConfiguration(
@@ -612,6 +816,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             EdidManufacturerId = path.EdidManufacturerId,
             EdidProductCodeId = path.EdidProductCodeId,
             ConnectorInstance = path.ConnectorInstance,
+            OutputTechnology = path.ConnectionTechnology,
             AdapterLuid = path.AdapterLuid,
             TargetId = path.TargetId
         };
@@ -773,8 +978,8 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             Width = checked((int)width),
             Height = checked((int)height),
             Rotation = MapRotation(path.TargetInfo.Rotation),
-            RefreshRateNumerator = path.TargetInfo.RefreshRate.Numerator,
-            RefreshRateDenominator = path.TargetInfo.RefreshRate.Denominator,
+            RefreshRateNumerator = ResolveRefreshRate(path.TargetInfo.RefreshRate, effectiveTargetMode).Numerator,
+            RefreshRateDenominator = ResolveRefreshRate(path.TargetInfo.RefreshRate, effectiveTargetMode).Denominator,
             ConnectionTechnology = FormatOutputTechnology(path.TargetInfo.OutputTechnology),
             IsActive = isActive,
             IsAvailable = path.TargetInfo.TargetAvailable,
@@ -789,6 +994,31 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             },
             TargetMode = effectiveTargetMode
         };
+    }
+
+    private static DisplayConfigRational ResolveRefreshRate(DisplayConfigRational pathRefreshRate, DisplayConfigTargetMode? targetMode)
+    {
+        if (pathRefreshRate.Numerator > 0 && pathRefreshRate.Denominator > 0)
+        {
+            return pathRefreshRate;
+        }
+
+        var targetRefreshRate = targetMode?.TargetVideoSignalInfo.VSyncFreq ?? default;
+        return targetRefreshRate.Numerator > 0 && targetRefreshRate.Denominator > 0
+            ? targetRefreshRate
+            : default;
+    }
+
+    private static string FormatModes(IReadOnlyList<DisplayModeInfo> modes)
+    {
+        return $"[{string.Join(", ", modes.Select(mode => FormatMode(mode.Width, mode.Height, mode.RefreshRateHz)))}]";
+    }
+
+    private static string FormatMode(int width, int height, double refreshRate)
+    {
+        return width > 0 && height > 0 && refreshRate > 0
+            ? $"{width}x{height}@{refreshRate:0.##}"
+            : "unknown";
     }
 
     private static uint ResolveNativeWidth(

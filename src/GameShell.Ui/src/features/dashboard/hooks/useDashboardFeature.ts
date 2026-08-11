@@ -41,7 +41,7 @@ type Options = {
   setLayout: (value: DisplayLayoutSnapshot | null) => void;
   setError: (value: string | null) => void;
   setMessage: Dispatch<SetStateAction<string>>;
-  syncDisplayProfileDraft: (draft: { profileName: string; identities: DisplayIdentity[] }) => void;
+  syncDisplayProfileDraft: (draft: { profileName: string; topology: import('../../../types/bridge').GamingProfileDisplayTopology }) => void;
   setStepIndex: Dispatch<SetStateAction<number>>;
   setSetupMode: Dispatch<SetStateAction<SetupMode>>;
   setBootstrapRoute: Dispatch<SetStateAction<BootstrapRoute>>;

@@ -32,6 +32,7 @@ public sealed class WebViewBridge
         "getDependencies",
         "getAudioDevices",
         "getDisplays",
+        "getDisplayModes",
         "captureDisplayLayout",
         "saveConsoleDisplay",
         "saveConsoleDisplays",
@@ -234,6 +235,7 @@ public sealed class WebViewBridge
                 "getDependencies" => await _dependencyDetectionService.DetectAsync(await _settingsService.LoadAsync()),
                 "getAudioDevices" => await GetAudioDevicesAsync(),
                 "getDisplays" => await GetDisplaysAsync(),
+                "getDisplayModes" => await GetDisplayModesAsync(message.Payload),
                 "captureDisplayLayout" => await CaptureDisplayLayoutAsync(),
                 "saveConsoleDisplay" => await SaveConsoleDisplayAsync(message.Payload),
                 "saveConsoleDisplays" => await SaveConsoleDisplaysAsync(message.Payload),
@@ -322,8 +324,38 @@ public sealed class WebViewBridge
         var settings = payload.Value.Deserialize<AppSettings>(JsonOptions)
             ?? throw new InvalidOperationException("Settings payload is invalid.");
 
+        LogGamingProfileTopologies(settings);
         await SaveAndApplySettingsAsync(settings);
         return settings;
+    }
+
+    private void LogGamingProfileTopologies(AppSettings settings)
+    {
+        foreach (var profile in settings.Display.PcGamingProfiles.Where(profile => profile.DisplayTopology is not null))
+        {
+            var topology = profile.DisplayTopology!;
+            _logger.LogInformation(
+                "[GAMING PROFILE TOPOLOGY SAVED] ProfileId={ProfileId}, ProfileName={ProfileName}, DisplayCount={DisplayCount}",
+                profile.Name,
+                profile.Name,
+                topology.Displays.Count);
+
+            foreach (var display in topology.Displays)
+            {
+                _logger.LogInformation(
+                    "[GAMING PROFILE TOPOLOGY SAVED] ProfileId={ProfileId}, SavedName={SavedName}, Enabled={Enabled}, Primary={Primary}, Position={PositionX},{PositionY}, Mode={Width}x{Height}@{RefreshRateNumerator}/{RefreshRateDenominator}",
+                    profile.Name,
+                    display.Identity.FriendlyName,
+                    display.Enabled,
+                    display.IsPrimary,
+                    display.PositionX,
+                    display.PositionY,
+                    display.Width,
+                    display.Height,
+                    display.RefreshRateNumerator,
+                    display.RefreshRateDenominator);
+            }
+        }
     }
 
     public void ApplyWindowsIntegrationForCurrentSettings(AppSettings settings)
@@ -393,6 +425,12 @@ public sealed class WebViewBridge
             _logger.LogError(ex, "Failed to read active displays.");
             throw new InvalidOperationException("Nie udało się odczytać konfiguracji ekranów.");
         }
+    }
+
+    private async Task<DisplayModeQueryResult> GetDisplayModesAsync(JsonElement? payload)
+    {
+        var identity = ReadDisplayIdentity(payload);
+        return await _displayQueryService.GetAvailableDisplayModesAsync(identity);
     }
 
     private async Task<IReadOnlyList<AudioDeviceSnapshot>> GetAudioDevicesAsync()

@@ -21,7 +21,7 @@ public sealed class ModeOrchestratorTests
 
         var result = await orchestrator.EnterWorkModeAsync();
 
-        Assert.True(result.Success);
+        Assert.True(result.Success, result.Message);
         Assert.Equal(["prepare-work", "display-work", "post-work"], order);
     }
 
@@ -135,6 +135,107 @@ public sealed class ModeOrchestratorTests
         Assert.True(result.DurationMs < 200);
     }
 
+    [Fact]
+    public async Task EnterProfile_BlockedReadinessDoesNotCallDisplayTransition()
+    {
+        var settings = new AppSettings
+        {
+            Display =
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "KONSOLA",
+                        DisplayTopology = new GamingProfileDisplayTopology
+                        {
+                            Displays =
+                            [
+                                new ProfileDisplayTarget
+                                {
+                                    Identity = new DisplayIdentity { AdapterLuid = 1, TargetId = 7, EdidManufacturerId = 123, EdidProductCodeId = 456 },
+                                    Enabled = true,
+                                    Width = 3840,
+                                    Height = 2160,
+                                    RefreshRateNumerator = 144,
+                                    RefreshRateDenominator = 1
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        };
+        var display = new FakeDisplayTransitionService();
+        var query = new FakeReadinessDisplayQuery();
+        var evaluator = new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance);
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            display,
+            new FakeRuntimeStateService(new RuntimeState()),
+            evaluator,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterGameShellWithDisplayProfileAsync("KONSOLA");
+
+        Assert.Equal(ModeResultStatus.InvalidConfiguration, result.Status);
+        Assert.Contains("zapisany tryb profilu", result.Message);
+        Assert.Equal(0, display.PcGamingCount);
+    }
+
+    [Fact]
+    public async Task EnterProfile_RecoversExpectedModeAfterApplyingProfile()
+    {
+        var settings = new AppSettings
+        {
+            Display =
+            {
+                PcGamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "KONSOLA",
+                        DisplayTopology = new GamingProfileDisplayTopology
+                        {
+                            Displays =
+                            [
+                                new ProfileDisplayTarget
+                                {
+                                    Identity = new DisplayIdentity { AdapterLuid = 1, TargetId = 7, EdidManufacturerId = 123, EdidProductCodeId = 456 },
+                                    Enabled = true,
+                                    Width = 3840,
+                                    Height = 2160,
+                                    RefreshRateNumerator = 144,
+                                    RefreshRateDenominator = 1
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        };
+        var display = new FakeDisplayTransitionService();
+        var query = new RecoveringReadinessDisplayQuery();
+        display.OnPcGaming = () => query.Active = true;
+        var evaluator = new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance);
+        var recovery = new FakeDisplayRecoveryService(query);
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            display,
+            new FakeRuntimeStateService(new RuntimeState()),
+            evaluator,
+            recovery,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterGameShellWithDisplayProfileAsync("KONSOLA");
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(1, recovery.AttemptCount);
+        Assert.Equal(1, display.PcGamingCount);
+    }
+
     private sealed class FakeSettingsService : ISettingsService
     {
         private readonly AppSettings _settings;
@@ -220,11 +321,15 @@ public sealed class ModeOrchestratorTests
 
         public DisplayTransitionResult WorkModeResult { get; init; } = DisplayTransitionResult.Ok();
         public bool BlockUntilCancellation { get; init; }
+        public int PcGamingCount { get; private set; }
+        public Action? OnPcGaming { get; set; }
 
         public Task<DisplayTransitionResult> EnterConsoleModeAsync(
             DisplayIdentity? consoleDisplay,
             CancellationToken cancellationToken = default)
         {
+            PcGamingCount++;
+            OnPcGaming?.Invoke();
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
 
@@ -233,6 +338,8 @@ public sealed class ModeOrchestratorTests
             DisplayIdentity? fallbackConsoleDisplay,
             CancellationToken cancellationToken = default)
         {
+            PcGamingCount++;
+            OnPcGaming?.Invoke();
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
 
@@ -301,6 +408,110 @@ public sealed class ModeOrchestratorTests
         {
             State = state;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeReadinessDisplayQuery : IDisplayQueryService
+    {
+        public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<DisplayDeviceInfo>>
+            ([new DisplayDeviceInfo
+            {
+                Name = "S90F",
+                Identity = new DisplayIdentity { FriendlyName = "S90F", AdapterLuid = 1, TargetId = 7, EdidManufacturerId = 123, EdidProductCodeId = 456 },
+                SourceDeviceName = @"\\.\DISPLAY1",
+                AdapterLuid = 1,
+                TargetId = 7,
+                IsEnabled = true,
+                IsAvailable = true
+            }]);
+        }
+
+        public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DisplayLayoutSnapshot());
+        }
+
+        public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DisplayModeQueryResult
+            {
+                Success = true,
+                Modes = [new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 60, RefreshRateDenominator = 1 }]
+            });
+        }
+    }
+
+    private sealed class RecoveringReadinessDisplayQuery : IDisplayQueryService
+    {
+        public bool Recovered { get; set; }
+        public bool Active { get; set; }
+
+        public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<DisplayDeviceInfo>>
+            ([new DisplayDeviceInfo
+            {
+                Name = "S90F",
+                Identity = new DisplayIdentity { FriendlyName = "S90F", AdapterLuid = 1, TargetId = 7, EdidManufacturerId = 123, EdidProductCodeId = 456 },
+                SourceDeviceName = @"\\.\DISPLAY1",
+                AdapterLuid = 1,
+                TargetId = 7,
+                IsEnabled = Active,
+                IsAvailable = true
+            }]);
+        }
+
+        public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DisplayLayoutSnapshot());
+        }
+
+        public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DisplayModeQueryResult
+            {
+                Success = true,
+                Modes = Recovered
+                    ? [
+                        new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 60, RefreshRateDenominator = 1 },
+                        new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 144, RefreshRateDenominator = 1 }
+                    ]
+                    : [new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 60, RefreshRateDenominator = 1 }]
+            });
+        }
+    }
+
+    private sealed class FakeDisplayRecoveryService : IDisplayRecoveryService
+    {
+        private readonly RecoveringReadinessDisplayQuery _query;
+
+        public FakeDisplayRecoveryService(RecoveringReadinessDisplayQuery query)
+        {
+            _query = query;
+        }
+
+        public int AttemptCount { get; private set; }
+
+        public Task<DisplayRecoveryAttempt> RecoverAsync(
+            string profileName,
+            ProfileDisplayTarget savedTarget,
+            DisplayDeviceInfo resolvedTarget,
+            IReadOnlyList<DisplayModeInfo> beforeModes,
+            CancellationToken cancellationToken = default)
+        {
+            AttemptCount++;
+            _query.Recovered = true;
+            return Task.FromResult(new DisplayRecoveryAttempt
+            {
+                ProfileName = profileName,
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolvedTarget,
+                Mechanism = "fake",
+                Result = DisplayRecoveryResult.Succeeded,
+                BeforeModes = beforeModes
+            });
         }
     }
 }

@@ -43,6 +43,7 @@ internal sealed class DisplayConfigMapper
                 Name = display.Identity.FriendlyName,
                 IsPrimary = display.IsPrimary,
                 IsEnabled = display.IsActive,
+                IsAvailable = topology.Paths.Any(path => string.Equals(path.MonitorDevicePath, display.Identity.MonitorDevicePath, StringComparison.OrdinalIgnoreCase) && path.IsAvailable),
                 Identity = display.Identity,
                 SourceDeviceName = display.SourceDeviceName,
                 SourceId = display.SourceId,
@@ -69,6 +70,7 @@ internal sealed class DisplayConfigMapper
             EdidManufacturerId = path.EdidManufacturerId,
             EdidProductCodeId = path.EdidProductCodeId,
             ConnectorInstance = path.ConnectorInstance,
+            OutputTechnology = path.ConnectionTechnology,
             AdapterLuid = path.AdapterLuid,
             TargetId = path.TargetId
         };
