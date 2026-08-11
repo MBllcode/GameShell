@@ -2213,6 +2213,10 @@ h1 {
 .display-properties-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .display-properties-grid label { display: grid; gap: 4px; color: var(--text-muted); font-size: 0.68rem; }
 .display-properties-grid .text-input { width: 100%; min-width: 0; }
+.display-properties-grid .display-refresh-field { grid-column: 1 / -1; margin-top: 3px; margin-bottom: 2px; }
+.display-refresh-select { position: relative; width: 100%; }
+.display-refresh-select select { appearance: none; -webkit-appearance: none; padding-right: 38px; }
+.display-refresh-chevron { position: absolute; top: 50%; right: 13px; width: 7px; height: 7px; border-right: 1px solid var(--text-muted); border-bottom: 1px solid var(--text-muted); transform: translateY(-65%) rotate(45deg); pointer-events: none; }
 .display-topology-validation, .display-topology-ready { margin: 2px 0 0; padding: 7px 10px; border-left: 2px solid var(--warning); background: color-mix(in srgb, var(--bg-panel) 88%, var(--warning) 12%); color: var(--warning); font-size: 0.72rem; }
 .display-topology-validation { display: grid; gap: 3px; }
 .display-topology-ready { border-left-color: var(--accent); color: var(--accent-soft); }

@@ -85,6 +85,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Motion nie zmienia layoutu ani wymiarow buttonow. Przy reduced motion ruch transformacji jest wylaczany.
 - Sidebar navigation wypelnia dostepna szerokosc kontenera. Tekst ma flexowe miejsce, a chevron pozostaje pionowo wycentrowany i przesuwa sie tylko poziomo.
 - Dashboardowe i ustawieniowe chevrony nie uzywaja `translateY` jako efektu hoveru.
+- Dropdown `Odświeżanie` w panelu właściwości ekranu ma własny chevron, `appearance: none` i `38px` prawego paddingu. Strzałka jest subtelna, wycentrowana pionowo i odsunięta o `13px` od prawej ramki bez zmiany szerokości pola ani logiki `RefreshPolicy`.
 
 - Po pierwszej konfiguracji aplikacja otwiera dashboard z profilem.
 - Opcja minimalizowania pozostałych okien enumeruje wszystkie widoczne okna top-level przez Win32 `EnumWindows`, więc obejmuje aplikacje i okna na wszystkich ekranach. Minimalizacja jest wykonywana także po przełączeniu layoutu ekranów, bezpośrednio przed uruchomieniem launchera, aby Windows nie przywrócił okien podczas zmiany konfiguracji monitorów.

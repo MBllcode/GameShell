@@ -72,6 +72,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Primary moze byc wizualnie ustawiony w dowolnym miejscu. Dopiero snapshot runtime jest normalizowany do primary `0,0`, bez przesuwania draftu w edytorze.
 - Przed wywolaniem DisplayConfig topology runtime sprawdza jeden primary, rozmiary, overlap i unikalnosc fizycznych targetow. Bledna geometria zatrzymuje apply z opisem wewnetrznego bledu.
 - Diagnostyke apply czytamy z logu `[DISPLAY TOPOLOGY APPLY]`; wspolrzedne w tym logu sa wspolrzednymi przekazanymi do Windows, nie pikselami canvasa.
+- Pole `Odświeżanie` zachowuje szerokosc i geometrie pozostalych pol, ale uzywa `appearance: none`, prawego paddingu `38px` oraz wlasnego subtelnego chevrona ustawionego `13px` od prawej ramki. Chevron ma `pointer-events: none`, a tekst opcji nie nachodzi na niego.
 
 ## Krok Skroty profilu
 
