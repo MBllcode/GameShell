@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { GamingProfileDisplayTopology } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { DisplayProfileDraft, DisplayValidationState, OverwriteProfileAction } from '../../profiles/hooks/useDisplayProfileWorkflow';
@@ -7,8 +8,9 @@ import type { SetupMode } from '../setupFlow';
 import type { BootstrapRoute } from '../setupRouting';
 
 export function useSetupWorkflowState() {
+  const { t } = useTranslation();
   const [stepIndex, setStepIndex] = useState(0);
-  const [message, setMessage] = useState('Gotowe.');
+  const [message, setMessage] = useState(t('setup.ready'));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);

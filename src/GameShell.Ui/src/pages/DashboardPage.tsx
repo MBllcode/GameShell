@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../types/bridge';
 import { summarizeLayout } from '../utils/displays';
 import { formatCurrentMode, formatSessionState } from '../utils/status';
@@ -53,6 +54,7 @@ export function DashboardPage({
   createProfile,
   editSettings
 }: DashboardPageProps) {
+  const { t } = useTranslation();
   const [showDeleteProfileDialog, setShowDeleteProfileDialog] = useState(false);
   const dashboardSelectedProfileName = selectedProfileName || activeProfileName || pcGamingProfiles[0]?.name || '';
   const runtimeActiveProfileName = status.activeProfileName;
@@ -64,18 +66,24 @@ export function DashboardPage({
     : null;
   const resolvedGamingLayout = activeGamingProfileLayout ?? pcGamingLayout;
   const visibleLayoutSummary = isWorkModeActive
-    ? 'Układ roboczy'
+    ? t('dashboard.workModeLayout')
     : isPcGamingActive
-      ? resolvedGamingLayout ? summarizeLayout(resolvedGamingLayout) : 'Brak zapisanego profilu'
+      ? resolvedGamingLayout ? summarizeLayout(resolvedGamingLayout, t) : t('summary.layoutMissing')
       : isConsoleModeActive
-        ? status.selectedConsoleDisplay ?? 'Brak wybranego ekranu Console Mode'
-        : pcGamingLayout ? summarizeLayout(pcGamingLayout) : 'Brak zapisanego profilu';
+        ? status.selectedConsoleDisplay ?? t('dashboard.consoleDisplayMissing')
+        : pcGamingLayout ? summarizeLayout(pcGamingLayout, t) : t('summary.layoutMissing');
   const shouldShowLauncherFact = !isWorkModeActive;
-  const visibleLauncher = status.activeLauncher ?? 'Brak aktywnego launchera';
+  const visibleLauncher = status.activeLauncher ?? t('dashboard.noActiveLauncher');
   const selectedProfile = pcGamingProfiles.find((profile) => profile.name === dashboardSelectedProfileName) ?? null;
   const canRunSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
   const canDeleteSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
-  const profileCountLabel = pcGamingProfiles.length === 0 ? 'PROFILI' : pcGamingProfiles.length === 1 ? 'profil' : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4 ? 'profile' : 'profili';
+  const profileCountLabel = pcGamingProfiles.length === 0
+    ? t('dashboard.profileCount.zero')
+    : pcGamingProfiles.length === 1
+      ? t('dashboard.profileCount.one')
+      : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4
+        ? t('dashboard.profileCount.few')
+        : t('dashboard.profileCount.many');
 
   useEffect(() => {
     console.info('[DASHBOARD RUNTIME STATE]', {
@@ -90,32 +98,32 @@ export function DashboardPage({
   return (
     <main className="app-shell">
       <section className="setup-window" aria-labelledby="app-title">
-        <aside className="brand-panel dashboard-sidebar" aria-label="System GameShell">
-          <section className="sidebar-state-block" aria-label="Stan">
-            <div className="sidebar-section-label">Stan</div>
+        <aside className="brand-panel dashboard-sidebar" aria-label={t('app.globalSettings')}>
+          <section className="sidebar-state-block" aria-label={t('app.globalSettings')}>
+            <div className="sidebar-section-label">{t('app.globalSettings')}</div>
             {isWorkModeActive ? (
               <div className="sidebar-state-content">
-                <div className="status-row"><strong>Work Mode</strong><span className="work-return-status">AKTYWNY</span></div>
-                <p>Tryb pracy</p><small>{globalWorkModeHotkey || 'Brak skrótu'}</small>
+                <div className="status-row"><strong>{t('app.workMode')}</strong><span className="work-return-status">{t('app.active')}</span></div>
+                <p>{t('setup.workMode')}</p><small>{globalWorkModeHotkey || t('app.missingHotkey')}</small>
               </div>
             ) : (
               <div className="sidebar-state-content">
-                <div className="status-row"><strong>{formatCurrentMode(status)}</strong>{isPcGamingActive ? <span className="work-return-status">AKTYWNY</span> : null}</div>
-                {isPcGamingActive ? <p>Profil: {runtimeActiveProfileName || 'Nie wybrano'}</p> : null}
-                {status.sessionState && status.sessionState !== 'Idle' ? <p className="sidebar-session-state">Sesja: {formatSessionState(status.sessionState)}</p> : null}
+                <div className="status-row"><strong>{formatCurrentMode(status, t)}</strong>{isPcGamingActive ? <span className="work-return-status">{t('app.active')}</span> : null}</div>
+                {isPcGamingActive ? <p>{t('profile.activeProfile')}: {runtimeActiveProfileName || t('summary.activeProfileNone')}</p> : null}
+                {status.sessionState && status.sessionState !== 'Idle' ? <p className="sidebar-session-state">{t('app.sessionState', { state: formatSessionState(status.sessionState, t) })}</p> : null}
                 <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
                 {shouldShowLauncherFact ? <small>{visibleLauncher}</small> : null}
-                {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || 'Brak skrótu'}</small> : null}
-                {!isWorkModeActive ? <button className="sidebar-state-action" type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode')}>Przełącz na Work Mode</button> : null}
+                {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || t('app.missingHotkey')}</small> : null}
+                {!isWorkModeActive ? <button className="sidebar-state-action" type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode')}>{t('dashboard.switchToWorkMode')}</button> : null}
               </div>
             )}
           </section>
-          <section className="sidebar-global-settings" aria-label="Ustawienia globalne">
-            <div className="sidebar-section-label">Ustawienia globalne</div>
+          <section className="sidebar-global-settings" aria-label={t('app.globalSettings')}>
+            <div className="sidebar-section-label">{t('app.globalSettings')}</div>
             <div className="sidebar-global-links">
-              <button type="button" onClick={() => editSettings('work-behaviour')}><span>Zachowanie Work Mode</span></button>
-              <button type="button" onClick={() => editSettings('work-shortcuts')}><span>Skróty Work Mode</span></button>
-              <button type="button" onClick={() => editSettings('app-behaviour')}><span>Uruchamianie aplikacji</span></button>
+              <button type="button" onClick={() => editSettings('work-behaviour')}><span>{t('setup.workMode')}</span></button>
+              <button type="button" onClick={() => editSettings('work-shortcuts')}><span>{t('setup.workModeShortcuts')}</span></button>
+              <button type="button" onClick={() => editSettings('app-behaviour')}><span>{t('setup.appBehaviour')}</span></button>
             </div>
           </section>
         </aside>
@@ -124,25 +132,25 @@ export function DashboardPage({
           <section className="setup-page dashboard-page">
             <div className="dashboard-layout">
               <section className="dashboard-band dashboard-mode-band" aria-labelledby="dashboard-modes-title">
-                <section className="quick-switch-panel profile-module" aria-label="Zapisane profile ekranów">
+                <section className="quick-switch-panel profile-module" aria-label={t('dashboard.profiles')}>
                   <div className="profile-module-header">
-                    <div className="profile-module-title-wrap"><h1 id="app-title" className="profile-module-title">Profile gamingowe</h1></div>
+                    <div className="profile-module-title-wrap"><h1 id="app-title" className="profile-module-title">{t('dashboard.profiles')}</h1></div>
                     <div className="profile-module-header-actions">
                       <small className="profile-module-count">{pcGamingProfiles.length} {profileCountLabel}</small>
-                      <button className="secondary-button compact add-profile-head-button" type="button" onClick={createProfile} disabled={isRemovingProfile}>+ Dodaj profil</button>
+                      <button className="secondary-button compact add-profile-head-button" type="button" onClick={createProfile} disabled={isRemovingProfile}>+ {t('dashboard.addProfile')}</button>
                     </div>
                   </div>
                   <div className="profile-list-shell">
-                    <div className="profile-quick-list" role="listbox" aria-label="Lista profili gamingowych">
+                    <div className="profile-quick-list" role="listbox" aria-label={t('dashboard.profiles')}>
                       {pcGamingProfiles.map((profile) => {
                         const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
                         const isProfileConfiguredAsActive = runtimeActiveProfileName === profile.name;
                         const isProfileSelectedForEditing = dashboardSelectedProfileName === profile.name;
                         const isPcGamingNow = status.currentMode === 'PcGaming';
-                        const stateLabel = isPcGamingNow && isProfileConfiguredAsActive ? 'AKTYWNY' : isProfileSelectedForEditing ? 'ZAZNACZONY' : 'GOTOWY';
+                        const stateLabel = isPcGamingNow && isProfileConfiguredAsActive ? t('app.active') : isProfileSelectedForEditing ? t('app.selected') : t('app.ready');
                         return (
                           <button className={`profile-quick-row ${isProfileSelectedForEditing ? 'selected' : ''} ${isPcGamingNow && isProfileConfiguredAsActive ? 'active' : ''}`} type="button" key={profile.name} disabled={isModeSwitching || isRemovingProfile} onClick={() => selectProfile(profile.name)} role="option" aria-selected={isProfileSelectedForEditing}>
-                            <div className="profile-quick-main"><strong>{profile.name}</strong><small>{summarizeLayout(profile.layout)} · {profileLauncher}</small></div>
+                            <div className="profile-quick-main"><strong>{profile.name}</strong><small>{summarizeLayout(profile.layout, t)} · {profileLauncher}</small></div>
                             <div className="profile-quick-meta"><span className="profile-quick-state">{stateLabel}</span></div>
                           </button>
                         );
@@ -150,21 +158,21 @@ export function DashboardPage({
                     </div>
                   </div>
                   <div className="profile-actions profile-module-footer">
-                    <button className="danger-button secondary-button compact delete-action" type="button" disabled={!canDeleteSelectedProfile} onClick={() => setShowDeleteProfileDialog(true)}>Usuń profil</button>
-                    <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: dashboardSelectedProfileName })}><span>Uruchom profil{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
+                    <button className="danger-button secondary-button compact delete-action" type="button" disabled={!canDeleteSelectedProfile} onClick={() => setShowDeleteProfileDialog(true)}>{t('dashboard.deleteProfile')}</button>
+                    <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: dashboardSelectedProfileName })}><span>{t('dashboard.runProfile')}{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
                   </div>
                 </section>
-                {pcGamingProfiles.length === 0 ? <p className="hint-line">Nie masz jeszcze profilu. Dodaj go w sekcji Ekrany.</p> : null}
+                {pcGamingProfiles.length === 0 ? <p className="hint-line">{t('dashboard.noProfile')}</p> : null}
               </section>
-              <section className="dashboard-band dashboard-config-section" aria-label="Konfiguracja profilu">
-                <div className="dashboard-shortcut-groups" aria-label="Edycja ustawień">
+              <section className="dashboard-band dashboard-config-section" aria-label={t('dashboard.profileSettings')}>
+                <div className="dashboard-shortcut-groups" aria-label={t('dashboard.profileSettings')}>
                   <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
-                    <div className="profile-settings-heading"><h3 id="profile-settings-title">Konfiguracja profilu</h3><span className="profile-context">{dashboardSelectedProfileName || 'PC'}</span></div>
+                    <div className="profile-settings-heading"><h3 id="profile-settings-title">{t('dashboard.profileSettings')}</h3><span className="profile-context">{dashboardSelectedProfileName || t('dashboard.profileContext')}</span></div>
                     <div className="section-shortcuts">
-                      <button type="button" onClick={() => editSettings('gaming-display')}><span>Ekrany</span><small>Dobierz układ wyświetlaczy dla profilu.</small></button>
-                      <button type="button" onClick={() => editSettings('launcher')}><span>Launcher profilu</span><small>Wybierz aplikację aktywowaną razem z profilem.</small></button>
-                      <button type="button" onClick={() => editSettings('console-behaviour')}><span>Zachowanie profilu</span><small>Kontroluj pulpit po aktywacji profilu.</small></button>
-                      <button type="button" onClick={() => editSettings('controller')}><span>Skróty profilu</span><small>Skonfiguruj wejście i aktywację profilu.</small></button>
+                      <button type="button" onClick={() => editSettings('gaming-display')}><span>{t('dashboard.summaryScreen')}</span><small>{t('dashboard.summaryScreenHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('launcher')}><span>{t('dashboard.summaryLauncher')}</span><small>{t('dashboard.summaryLauncherHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('console-behaviour')}><span>{t('dashboard.summaryBehaviour')}</span><small>{t('dashboard.summaryBehaviourHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('controller')}><span>{t('dashboard.summaryShortcuts')}</span><small>{t('dashboard.summaryShortcutsHint')}</small></button>
                     </div>
                   </section>
                 </div>
@@ -174,11 +182,11 @@ export function DashboardPage({
           <footer className="setup-footer"><p className={hasError ? 'error-line' : 'operation-line'}>{message}</p></footer>
           {showDeleteProfileDialog ? (
             <div className="dialog-backdrop" role="presentation"><div className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="delete-profile-dialog-title">
-              <h3 id="delete-profile-dialog-title">Usuwanie profilu</h3>
-              <p>Czy na pewno chcesz usunąć profil{selectedProfile ? ` „${selectedProfile.name}”` : ''}?</p>
+              <h3 id="delete-profile-dialog-title">{t('dashboard.deleteDialog')}</h3>
+              <p>{t('dashboard.deleteDialogConfirm', { name: selectedProfile ? selectedProfile.name : '' })}</p>
               <div className="dialog-actions">
-                <button className="secondary-button" type="button" disabled={isRemovingProfile} onClick={() => setShowDeleteProfileDialog(false)}>Anuluj</button>
-                <button className="danger-button secondary-button" type="button" disabled={isRemovingProfile} onClick={() => { void (async () => { await deleteSelectedProfile(); setShowDeleteProfileDialog(false); })(); }}>{isRemovingProfile ? 'Usuwanie...' : 'Usuń profil'}</button>
+                <button className="secondary-button" type="button" disabled={isRemovingProfile} onClick={() => setShowDeleteProfileDialog(false)}>{t('dashboard.deleteDialogCancel')}</button>
+                <button className="danger-button secondary-button" type="button" disabled={isRemovingProfile} onClick={() => { void (async () => { await deleteSelectedProfile(); setShowDeleteProfileDialog(false); })(); }}>{isRemovingProfile ? t('dashboard.deleteDialogDeleting') : t('dashboard.deleteDialogDelete')}</button>
               </div>
             </div></div>
           ) : null}

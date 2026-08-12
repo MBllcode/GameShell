@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand } from '../services/webViewBridge';
 import { formatHotkey, isClearHotkeyEvent } from '../utils/hotkeys';
 
@@ -15,6 +16,7 @@ export function HotkeyField({
   disabled?: boolean;
   error?: string | null;
 }) {
+  const { t } = useTranslation();
   const hintId = useId();
   const errorId = useId();
   const [isListening, setIsListening] = useState(false);
@@ -29,10 +31,10 @@ export function HotkeyField({
   }, []);
 
   const helperText = isListening
-    ? 'Naciśnij kombinację klawiszy…'
+    ? t('shortcut.listening')
     : hasValue
-      ? 'Zapisany skrót klawiaturowy.'
-      : 'Kliknij i naciśnij skrót';
+      ? t('shortcut.keyboardSaved')
+      : t('shortcut.clickToRecord');
 
   return (
     <div className={`hotkey-field ${isListening ? 'is-listening' : ''} ${disabled ? 'is-disabled' : ''}`}>
@@ -83,7 +85,7 @@ export function HotkeyField({
           onPaste={(event) => event.preventDefault()}
           onDrop={(event) => event.preventDefault()}
         />
-        {isListening ? <span className="hotkey-listening-badge">NASŁUCHIWANIE</span> : null}
+        {isListening ? <span className="hotkey-listening-badge">{t('shortcut.listening')}</span> : null}
       </div>
       <p id={hintId} className="hotkey-field-hint">{helperText}</p>
       {error ? (

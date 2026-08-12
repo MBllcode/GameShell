@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import { normalizePcGamingProfileName } from '../utils';
@@ -48,13 +49,14 @@ type Options = {
 };
 
 export function useDisplayProfileWorkflow(options: Options) {
+  const { t } = useTranslation();
   const messages = options.messages ?? {
-    invalid: 'Uzupełnij nazwę nowego profilu i wybierz co najmniej jeden ekran.',
-    noProfiles: 'Dodaj profil i wybierz ekran, aby kontynuować.',
-    unavailable: 'Nie udało się odczytać listy ekranów.',
-    prepared: (name: string) => `Profil ekranów przygotowany: ${name}. Zapisz zmiany, aby zatwierdzić.`,
-    ready: (name: string) => name ? `Profil ekranów gotowy: ${name}. Kliknij Dalej, aby kontynuować.` : 'Odświeżono listę ekranów.',
-    empty: 'Nie znaleziono ekranów.'
+    invalid: t('profile.validationMinDisplays'),
+    noProfiles: t('profile.topologyEmpty'),
+    unavailable: t('profile.displayLoadError'),
+    prepared: (name: string) => t('profile.layoutPrepared', { name }),
+    ready: (name: string) => name ? t('profile.layoutReadyContinue', { name }) : t('profile.refreshListUpdated'),
+    empty: t('profile.noDisplaysFound')
   };
   const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isFirstRun, isEditingSection, pcGamingBehaviour, launcher, hotkeys, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, setProfileBehaviours, setProfileLaunchers, setProfileHotkeys, setProfileControllerShortcuts, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
 

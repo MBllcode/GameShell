@@ -180,6 +180,7 @@ public sealed class UiSettings
 {
     public bool CloseToTray { get; set; } = true;
     public bool IsFirstRunCompleted { get; set; }
+    public string Language { get; set; } = "en";
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }

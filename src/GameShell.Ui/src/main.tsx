@@ -8,6 +8,8 @@ import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import '@fontsource/ibm-plex-mono/700.css';
+import { I18nextProvider, useTranslation } from 'react-i18next';
+import i18n from './i18n/i18n';
 import { App } from './App';
 import './styles.css';
 
@@ -37,16 +39,17 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: strin
 }
 
 function BootstrapApp() {
+  const { t } = useTranslation();
   const [startupError, setStartupError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      setStartupError(event.message || 'Wystąpił nieoczekiwany błąd podczas uruchamiania aplikacji.');
+      setStartupError(event.message || t('app.startupError'));
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unknown error');
-      setStartupError(reason || 'Wystąpił nieoczekiwany błąd podczas uruchamiania aplikacji.');
+      setStartupError(reason || t('app.startupError'));
     };
 
     window.addEventListener('error', handleError);
@@ -56,7 +59,7 @@ function BootstrapApp() {
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
-  }, []);
+  }, [t]);
 
   if (startupError) {
     return <StartupErrorScreen message={startupError} />;
@@ -70,6 +73,8 @@ function BootstrapApp() {
 }
 
 function StartupErrorScreen({ message }: { message: string }) {
+  const { t } = useTranslation();
+
   return (
     <main className="app-shell">
       <section className="setup-window compact-window" aria-labelledby="app-title">
@@ -77,14 +82,14 @@ function StartupErrorScreen({ message }: { message: string }) {
           <header className="masthead">
             <div>
                 <h1 id="app-title">GameShell</h1>
-              <p className="intro">GameShell nie uruchomił się poprawnie.</p>
+              <p className="intro">{t('app.startupError')}</p>
             </div>
-            <span className="status-pill has-error">Błąd</span>
+            <span className="status-pill has-error">{t('app.error')}</span>
           </header>
           <div className="startup-error-panel">
-            <h2>Nie udało się uruchomić GameShell</h2>
+            <h2>{t('app.startupFailureTitle')}</h2>
             <p>{message}</p>
-            <p>Sprawdź log aplikacji w folderze danych lokalnych.</p>
+            <p>{t('app.startupFailureHint')}</p>
           </div>
         </div>
       </section>
@@ -94,6 +99,8 @@ function StartupErrorScreen({ message }: { message: string }) {
 
 createRoot(root).render(
   <StrictMode>
-    <BootstrapApp />
+    <I18nextProvider i18n={i18n}>
+      <BootstrapApp />
+    </I18nextProvider>
   </StrictMode>
 );

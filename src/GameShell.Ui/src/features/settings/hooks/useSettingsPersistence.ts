@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppSettings, AppStatus } from '../../../types/bridge';
@@ -49,6 +50,8 @@ export function useSettingsPersistence({
   setError,
   setMessage
 }: UseSettingsPersistenceOptions) {
+  const { t } = useTranslation();
+
   async function saveCurrentSettings(isFirstRunCompleted = settings?.ui?.isFirstRunCompleted ?? false, overrides?: SettingsPayloadOverrides) {
     const completion = resolvePersistedCompletion(setupMode, settings?.ui?.isFirstRunCompleted ?? false, isFirstRunCompleted);
     const savedSettings = await sendBridgeCommand<AppSettings>('saveSettings', buildSettingsPayload(completion, overrides));
@@ -67,12 +70,12 @@ export function useSettingsPersistence({
     setError(null);
 
     if (pcGamingProfilesCount === 0) {
-      setError('Najpierw dodaj co najmniej jeden profil ekranów.');
+      setError(t('setup.requireProfile'));
       return;
     }
 
     setIsSaving(true);
-    setMessage(setupMode === 'EditProfile' ? 'Zapisywanie zmian...' : 'Zapisywanie ustawień...');
+    setMessage(setupMode === 'EditProfile' ? t('setup.savingChanges') : t('setup.savingSettings'));
 
     try {
       const preferredName = preferredProfileName();
@@ -89,9 +92,9 @@ export function useSettingsPersistence({
       setBootstrapRoute('Dashboard');
       setEditingProfileId(null);
       setIsSetupComplete(resolvePostSaveSetupComplete(setupMode, savedSettings.ui.isFirstRunCompleted));
-      setMessage('Zapisano zmiany.');
+      setMessage(t('setup.savedChanges'));
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');
+      setError(reason instanceof Error ? reason.message : t('setup.saveFailed'));
     } finally {
       setIsSaving(false);
     }

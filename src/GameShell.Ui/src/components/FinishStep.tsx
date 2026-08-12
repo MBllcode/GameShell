@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { DisplayLayoutSnapshot } from '../types/bridge';
 import { summarizeLayout } from '../utils/displays';
 
@@ -25,6 +26,7 @@ export function FinishStep({
   pcGamingProfileHotkeys: PcGamingProfileHotkeysMap;
   activeProfileName: string | null;
 }) {
+  const { t } = useTranslation();
   const activeLauncher = activeProfileName ? pcGamingProfileLaunchers[activeProfileName] ?? launcher : launcher;
   const activeHotkeys = activeProfileName
     ? pcGamingProfileHotkeys[activeProfileName] ?? { enterProfile: '' }
@@ -32,24 +34,24 @@ export function FinishStep({
 
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Podsumowanie ustawień</h2>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{t('setup.finishSummary')}</h2>
       <dl className="summary-list">
         <div>
-          <dt>Profil gamingowy</dt>
-          <dd>{activeProfileName || 'Nie wybrano'}</dd>
+          <dt>{t('summary.profileGaming')}</dt>
+          <dd>{activeProfileName || t('summary.activeProfileNone')}</dd>
         </div>
         <div>
-          <dt>Układ ekranów</dt>
-          <dd>{pcGamingLayout ? summarizeLayout(pcGamingLayout) : 'Brak aktywnego profilu'}</dd>
+          <dt>{t('summary.layout')}</dt>
+          <dd>{pcGamingLayout ? summarizeLayout(pcGamingLayout, t) : t('summary.layoutMissing')}</dd>
         </div>
         <div>
-          <dt>Launcher</dt>
+          <dt>{t('summary.launcher')}</dt>
           <dd>{activeLauncher}</dd>
         </div>
         <div>
-          <dt>Skrót profilu</dt>
-          <dd>{activeHotkeys.enterProfile || 'Brak przypisanego skrótu'}</dd>
+          <dt>{t('summary.hotkey')}</dt>
+          <dd>{activeHotkeys.enterProfile || t('summary.hotkeyMissing')}</dd>
         </div>
       </dl>
     </div>

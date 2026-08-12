@@ -48,16 +48,20 @@ export function getModeCardClass(command: ModeCommand, status: AppStatus, isUnco
   return classes.join(' ');
 }
 
-export function getModeCardStateLabel(command: ModeCommand, status: AppStatus, isUnconfigured: boolean) {
+type TranslationLike = (key: string, options?: Record<string, string | number>) => string;
+
+export function getModeCardStateLabel(command: ModeCommand, status: AppStatus, isUnconfigured: boolean, t?: TranslationLike) {
   if (isCurrentMode(command, status)) {
-    return 'AKTYWNY';
+    return t ? t('app.active') : 'ACTIVE';
   }
 
-  return isUnconfigured ? 'NIESKONFIGUROWANY' : 'GOTOWY';
+  return isUnconfigured ? (t ? t('mode.unconfigured') : 'UNCONFIGURED') : (t ? t('app.ready') : 'READY');
 }
 
-export function getModeCardHint(command: ModeCommand, status: AppStatus) {
-  return isCurrentMode(command, status) ? 'Jesteś tutaj' : `Przełącz na ${formatCommandTargetMode(command)}`;
+export function getModeCardHint(command: ModeCommand, status: AppStatus, t?: TranslationLike) {
+  return isCurrentMode(command, status)
+    ? (t ? t('mode.youAreHere') : 'You are here')
+    : (t ? t('mode.switchTo', { mode: formatCommandTargetMode(command, t) }) : `Switch to ${formatCommandTargetMode(command)}`);
 }
 
 export function isCurrentMode(command: ModeCommand, status: AppStatus) {

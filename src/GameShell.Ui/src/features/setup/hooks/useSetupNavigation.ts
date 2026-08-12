@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppSettings } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
@@ -47,6 +48,7 @@ type UseSetupNavigationOptions = {
 };
 
 export function useSetupNavigation(options: UseSetupNavigationOptions) {
+  const { t } = useTranslation();
   const {
     setupMode, hasAdvancedInCreateProfileFlow, hasUnsavedChanges,
     isLastStep, canSelectSidebarStep, currentStepId, stepIndex, activeStepIndexes,
@@ -75,7 +77,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     if (currentStepId === 'gaming-display' && !(await commitGamingDisplayDraft(false, 'next'))) return;
     setError(null);
     setStepIndex(nextIndex);
-    setMessage('Wybrano sekcję do edycji.');
+    setMessage(t('setup.sectionSelected'));
   }
 
   async function goNextInternal() {
@@ -93,7 +95,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
       setStepIndex(nextIndex);
       if (setupMode === 'CreateProfile') setHasAdvancedInCreateProfileFlow(true);
     }
-    setMessage(setupMode === 'FirstRun' ? 'Gotowe.' : 'Możesz przejść dalej lub zapisać zmiany.');
+    setMessage(setupMode === 'FirstRun' ? t('setup.ready') : t('setup.continueLater'));
   }
 
   async function continueFromGamingDisplayStep(allowOverwrite: boolean) {
@@ -103,7 +105,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
       setStepIndex(nextIndex);
       if (setupMode === 'CreateProfile') setHasAdvancedInCreateProfileFlow(true);
     }
-    setMessage(setupMode === 'FirstRun' ? 'Gotowe.' : 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.');
+    setMessage(setupMode === 'FirstRun' ? t('setup.ready') : t('setup.continueLater'));
   }
 
   async function executeNavigation(action: PendingNavigationAction) {
@@ -127,7 +129,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     setShowOverwriteProfileDialog(false);
     setPendingOverwriteProfileAction(null);
     pendingSettingsOverrideRef.current = null;
-    setMessage('Gotowe.');
+    setMessage(t('setup.ready'));
   }
 
   async function handleOverwriteProfileDialogConfirm() {
@@ -153,7 +155,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
           await executeNavigation(nextAction);
         }
       } catch (reason: unknown) {
-        setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');
+        setError(reason instanceof Error ? reason.message : t('setup.saveFailed'));
       } finally {
         setIsSaving(false);
       }
@@ -161,7 +163,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     }
     const nextIndex = activeStepIndexes[resolvedFlowPosition + 1];
     if (typeof nextIndex === 'number') setStepIndex(nextIndex);
-    setMessage(setupMode === 'FirstRun' ? 'Gotowe.' : 'Możesz przejrzeć kolejne sekcje albo zapisać zmiany.');
+    setMessage(setupMode === 'FirstRun' ? t('setup.ready') : t('setup.continueLater'));
   }
 
   async function handleUnsavedDialogSave() {
@@ -190,7 +192,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
       setHasUnsavedChanges(false);
       await executeNavigation(pendingNavigationAction);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Nie udało się zapisać zmian.');
+      setError(reason instanceof Error ? reason.message : t('setup.saveFailed'));
     } finally {
       setIsSaving(false);
       if (shouldReset) setPendingNavigationAction(null);

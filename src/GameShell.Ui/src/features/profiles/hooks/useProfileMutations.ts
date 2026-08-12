@@ -1,4 +1,5 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   isDuplicateProfileControllerShortcut,
   isDuplicateWorkModeControllerShortcut,
@@ -79,6 +80,8 @@ export function useProfileMutations({
   setError,
   markUnsavedChanges
 }: UseProfileMutationsOptions) {
+  const { t } = useTranslation();
+
   const setPcGamingBehaviourForProfile = useCallback((profileName: string, behaviour: PcGamingBehaviourState) => {
     setProfileBehaviours((current) => ({ ...current, [profileName]: behaviour }));
     setPcGamingBehaviour(behaviour);
@@ -104,7 +107,7 @@ export function useProfileMutations({
   const updateProfileHotkey = useCallback((profileName: string, key: keyof ProfileHotkeysState, value: string) => {
     const normalizedValue = normalizeHotkeyForDisplay(value);
     if (key === 'enterProfile' && (isDuplicateProfileEnterHotkey(profileName, normalizedValue, profileHotkeys) || isSameHotkey(normalizedValue, workModeHotkey))) {
-      setProfileHotkeyValidationError('Ten skrót jest już przypisany do innego profilu lub Work Mode. Wybierz inną kombinację.');
+      setProfileHotkeyValidationError(t('profile.duplicateHotkeyOther'));
       return;
     }
 
@@ -124,7 +127,7 @@ export function useProfileMutations({
   const updateProfileControllerShortcut = useCallback((profileName: string, buttons: string[]) => {
     const normalizedButtons = normalizeControllerButtons(buttons);
     if (isDuplicateProfileControllerShortcut(profileName, normalizedButtons, profileControllerShortcuts) || isSameControllerShortcut(normalizedButtons, workModeControllerShortcut?.buttons)) {
-      setProfileControllerValidationError('Ta kombinacja przyciskow jest juz przypisana do innego profilu lub Work Mode. Wybierz inna kombinacje.');
+      setProfileControllerValidationError(t('profile.duplicateControllerOther'));
       return;
     }
 
@@ -143,7 +146,7 @@ export function useProfileMutations({
   const updateWorkModeControllerShortcut = useCallback((buttons: string[]) => {
     const normalizedButtons = normalizeControllerButtons(buttons);
     if (isDuplicateWorkModeControllerShortcut(normalizedButtons, profileControllerShortcuts)) {
-      setProfileControllerValidationError('Ta kombinacja przyciskow jest juz przypisana do profilu. Wybierz inna kombinacje.');
+      setProfileControllerValidationError(t('profile.duplicateControllerProfile'));
       return;
     }
 
@@ -159,7 +162,7 @@ export function useProfileMutations({
   const updateWorkModeHotkey = useCallback((value: string) => {
     const normalizedValue = normalizeHotkeyForDisplay(value);
     if (isDuplicateWorkModeHotkey(normalizedValue, profileHotkeys)) {
-      setProfileHotkeyValidationError('Ten skrót jest już przypisany do profilu. Wybierz inną kombinację.');
+      setProfileHotkeyValidationError(t('profile.duplicateHotkeyProfile'));
       return;
     }
 

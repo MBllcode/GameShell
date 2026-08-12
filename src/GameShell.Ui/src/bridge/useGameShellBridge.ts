@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand, subscribeBridgeEvent } from '../services/webViewBridge';
 import type { AppSettings, AppStatus, ControllerStatusInfo, DisplayDeviceInfo } from '../types/bridge';
 
@@ -21,6 +22,7 @@ export function useGameShellBridge({
   onInitialLoadingChange: (isLoading: boolean) => void;
   onHydrationComplete: () => void;
 }) {
+  const { t } = useTranslation();
   const callbacksRef = useRef({ onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete });
   callbacksRef.current = { onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete };
 
@@ -32,7 +34,7 @@ export function useGameShellBridge({
       sendBridgeCommand<DisplayDeviceInfo[]>('getDisplays').catch((reason: unknown) => {
         console.error('[GameShell] getDisplays failed', reason);
         if (isMounted) {
-          callbacksRef.current.onDisplayError(reason instanceof Error ? reason.message : 'Nie udało się odczytać listy ekranów.');
+          callbacksRef.current.onDisplayError(reason instanceof Error ? reason.message : t('bridge.displayReadError'));
         }
         return [];
       })
@@ -48,7 +50,7 @@ export function useGameShellBridge({
       })
       .catch((reason: unknown) => {
         if (isMounted) {
-          callbacksRef.current.onError(reason instanceof Error ? reason.message : 'Nie udało się odczytać statusu aplikacji.');
+          callbacksRef.current.onError(reason instanceof Error ? reason.message : t('bridge.statusReadError'));
           callbacksRef.current.onHydrationComplete();
           callbacksRef.current.onInitialLoadingChange(false);
         }
@@ -73,7 +75,7 @@ export function useGameShellBridge({
       });
       callbacksRef.current.onStatus(nextStatus);
     } catch (reason: unknown) {
-      callbacksRef.current.onError(reason instanceof Error ? reason.message : 'Nie udało się odświeżyć statusu aplikacji.');
+      callbacksRef.current.onError(reason instanceof Error ? reason.message : t('bridge.statusRefreshError'));
     }
   }), []);
 
@@ -86,7 +88,7 @@ export function useGameShellBridge({
         const nextStatus = await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus');
         if (!isDisposed) callbacksRef.current.onControllerStatus(nextStatus);
       } catch (reason: unknown) {
-        callbacksRef.current.onError(reason instanceof Error ? reason.message : 'Nie udało się odświeżyć statusu kontrolera.');
+        callbacksRef.current.onError(reason instanceof Error ? reason.message : t('bridge.controllerRefreshError'));
       }
     });
 
@@ -95,7 +97,7 @@ export function useGameShellBridge({
         if (!isDisposed) callbacksRef.current.onControllerStatus(nextStatus);
       })
       .catch((reason: unknown) => {
-        if (!isDisposed) callbacksRef.current.onError(reason instanceof Error ? reason.message : 'Nie udało się odczytać statusu kontrolera.');
+        if (!isDisposed) callbacksRef.current.onError(reason instanceof Error ? reason.message : t('bridge.controllerReadError'));
       });
 
     return () => {

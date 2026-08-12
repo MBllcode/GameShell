@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProfileEditingFeature } from './features/profiles/hooks/useProfileEditingFeature';
 import { useDisplayProfileWorkflow } from './features/profiles/hooks/useDisplayProfileWorkflow';
 import { useDashboardFeature } from './features/dashboard/hooks/useDashboardFeature';
 import { useSettingsIntegrationFeature } from './features/settings/hooks/useSettingsIntegrationFeature';
 import { useSetupWorkflowState } from './features/setup/hooks/useSetupWorkflowState';
+import { setI18nLanguage } from './i18n/i18n';
 import { useSetupNavigationFeature } from './features/setup/hooks/useSetupNavigationFeature';
 import { useSetupPageActions } from './features/setup/hooks/useSetupPageActions';
 import { useSetupFeature } from './features/setup/hooks/useSetupFeature';
@@ -29,7 +30,11 @@ export function App() {
   const displayState = useDisplayConfigurationState({ selectedProfileName: selectedPcGamingBehaviourProfileName });
   const { displays, setDisplays, isRefreshingDisplays, setIsRefreshingDisplays, displayListError, setDisplayListError, selectedConsoleDisplay, setSelectedConsoleDisplay, selectedConsoleDisplays, setSelectedConsoleDisplays, pcGamingLayout, setPcGamingLayout, pcGamingProfiles, setPcGamingProfiles, activePcGamingProfileName, setActivePcGamingProfileName, pcGamingProfileBehaviours, setPcGamingProfileBehaviours, pcGamingProfileLaunchers, setPcGamingProfileLaunchers, pcGamingProfileHotkeys, setPcGamingProfileHotkeys, pcGamingProfileControllerShortcuts, setPcGamingProfileControllerShortcuts, workModeControllerShortcut, setWorkModeControllerShortcut, profileHotkeyValidationError, setProfileHotkeyValidationError, profileControllerValidationError, setProfileControllerValidationError } = displayState;
   const formState = useSettingsFormState();
-  const { hotkeys, setHotkeys, launcher, setLauncher, consoleBehaviour, setConsoleBehaviour, pcGamingBehaviour, setPcGamingBehaviour, workBehaviour, setWorkBehaviour, finishOptions, setFinishOptions } = formState;
+  const { hotkeys, setHotkeys, launcher, setLauncher, language, setLanguage, consoleBehaviour, setConsoleBehaviour, pcGamingBehaviour, setPcGamingBehaviour, workBehaviour, setWorkBehaviour, finishOptions, setFinishOptions } = formState;
+
+  useEffect(() => {
+    setI18nLanguage(language);
+  }, [language]);
 
   const profileFeature = useProfileEditingFeature({
     workingProfileName,
@@ -145,6 +150,7 @@ export function App() {
     pcGamingBehaviour,
     launcher,
     hotkeys,
+    language,
     consoleBehaviour,
     workBehaviour,
     finishOptions,
@@ -168,6 +174,7 @@ export function App() {
     setLayout: setPcGamingLayout,
     setHotkeys,
     setLauncher,
+    setLanguage,
     setConsoleBehaviour,
     setPcGamingBehaviour,
     setWorkBehaviour,

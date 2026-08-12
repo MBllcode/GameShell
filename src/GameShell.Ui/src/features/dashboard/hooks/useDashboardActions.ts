@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import { formatCommandTargetMode } from '../../../utils/status';
 import { getModeActionKey, type ModeCommand } from '../../../utils/modes';
@@ -27,10 +28,11 @@ type Options = {
 };
 
 export function useDashboardActions(options: Options) {
+  const { t } = useTranslation();
   const { hasUnsavedChanges, isSetupComplete, selectedProfileName, profiles, activeProfileName, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, saveCurrentSettings, setStatus, setActiveModeAction, setIsRemovingProfile, setActiveProfileName, setSelectedProfileName, setLayout, setError, setMessage } = options;
 
   async function runModeCommand(command: ModeCommand, saveBeforeRun = false, payload?: unknown) {
-    setActiveModeAction(getModeActionKey(command)); setError(null); setMessage(`Przełączanie na ${formatCommandTargetMode(command)}...`);
+    setActiveModeAction(getModeActionKey(command)); setError(null); setMessage(t('dashboard.switchingTo', { mode: formatCommandTargetMode(command, t) }));
     try {
       if (saveBeforeRun || hasUnsavedChanges) await saveCurrentSettings(isSetupComplete);
       const result = await sendBridgeCommand<ModeResult>(command, payload);
@@ -60,8 +62,8 @@ export function useDashboardActions(options: Options) {
           await saveCurrentSettings(isSetupComplete, { activePcGamingProfileName: matched.name, pcGamingLayout: matched.layout });
         }
       }
-      setMessage(command === 'enterWorkMode' && result.message === 'Enter Work Mode completed.' ? 'Przełączono do Work Mode.' : result.message);
-    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : 'Nie udało się uruchomić trybu.'); }
+      setMessage(command === 'enterWorkMode' && result.message === 'Enter Work Mode completed.' ? t('dashboard.switchComplete') : result.message);
+    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : t('dashboard.runModeError')); }
     finally { setActiveModeAction(null); }
   }
 
@@ -74,11 +76,11 @@ export function useDashboardActions(options: Options) {
     const deletedActiveProfile = activeProfileName?.toLowerCase() === profileKey;
     const nextActiveProfileName = deletedActiveProfile ? nextProfiles[0]?.name ?? null : activeProfileName && nextProfiles.some((profile) => profile.name === activeProfileName) ? activeProfileName : nextProfiles[0]?.name ?? null;
     const nextLayout = nextActiveProfileName ? nextProfiles.find((profile) => profile.name === nextActiveProfileName)?.layout ?? null : null;
-    setError(null); setIsRemovingProfile(true); setMessage(`Usuwanie profilu ${profileName}...`);
+    setError(null); setIsRemovingProfile(true); setMessage(t('dashboard.deleteInProgress', { name: profileName }));
     try {
       await saveCurrentSettings(true, { pcGamingProfiles: nextProfiles, activePcGamingProfileName: nextActiveProfileName, pcGamingLayout: nextLayout, pcGamingProfileBehaviours: nextProfileBehaviours, pcGamingProfileLaunchers: nextProfileLaunchers, pcGamingProfileHotkeys: nextProfileHotkeys, pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts });
-      setMessage(`Usunięto profil ${profileName}.`);
-    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : 'Nie udało się usunąć profilu.'); }
+      setMessage(t('dashboard.deleteSuccess', { name: profileName }));
+    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : t('dashboard.deleteError')); }
     finally { setIsRemovingProfile(false); }
   }
 

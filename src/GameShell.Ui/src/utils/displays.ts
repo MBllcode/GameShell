@@ -83,8 +83,8 @@ export function profileTargetForAddition(display: DisplayDeviceInfo, fallbackMod
   return { ...profileTargetFromDisplay(display, fallbackModes), enabled: true, isPrimary: isFirstDisplay };
 }
 
-export function getTopologyEditorErrors(topology: GamingProfileDisplayTopology): string[] {
-  return topology.displays.length === 0 ? [] : validateTopology(topology);
+export function getTopologyEditorErrors(topology: GamingProfileDisplayTopology, translate?: (key: string) => string): string[] {
+  return topology.displays.length === 0 ? [] : validateTopology(topology, translate);
 }
 
 export function normalizeTopologyPrimary(topology: GamingProfileDisplayTopology): GamingProfileDisplayTopology {
@@ -132,15 +132,25 @@ export function areTopologiesEqual(left: GamingProfileDisplayTopology, right: Ga
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function validateTopology(topology: GamingProfileDisplayTopology): string[] {
+const defaultTopologyValidationMessages: Record<string, string> = {
+  'profile.validationMinDisplays': 'Add at least one display.',
+  'profile.validationNoEnabledDisplays': 'Enable at least one display.',
+  'profile.validationSinglePrimary': 'Select exactly one primary display.',
+  'profile.validationDisabledPrimary': 'A disabled display cannot be the primary display.',
+  'profile.validationInvalidResolution': 'Every enabled display must have a valid resolution.',
+  'profile.validationInvalidRefresh': 'Choose a valid fixed refresh rate for this display.'
+};
+
+export function validateTopology(topology: GamingProfileDisplayTopology, translate?: (key: string) => string): string[] {
+  const t = translate ?? ((key: string) => defaultTopologyValidationMessages[key] ?? key);
   const errors: string[] = [];
-  if (topology.displays.length === 0) errors.push('Dodaj co najmniej jeden ekran.');
+  if (topology.displays.length === 0) errors.push(t('profile.validationMinDisplays'));
   const enabled = topology.displays.filter((display) => display.enabled);
-  if (enabled.length === 0) errors.push('Włącz co najmniej jeden ekran.');
-  if (enabled.filter((display) => display.isPrimary).length !== 1) errors.push('Wybierz dokładnie jeden główny ekran.');
-  if (topology.displays.some((display) => !display.enabled && display.isPrimary)) errors.push('Wyłączony ekran nie może być głównym ekranem.');
-  if (enabled.some((display) => display.width <= 0 || display.height <= 0)) errors.push('Każdy włączony ekran musi mieć poprawną rozdzielczość.');
-  if (enabled.some((display) => getRefreshPolicy(display) === 'Fixed' && !hasValidFixedRefresh(display))) errors.push('Wybierz poprawną stałą częstotliwość odświeżania dla tego ekranu.');
+  if (enabled.length === 0) errors.push(t('profile.validationNoEnabledDisplays'));
+  if (enabled.filter((display) => display.isPrimary).length !== 1) errors.push(t('profile.validationSinglePrimary'));
+  if (topology.displays.some((display) => !display.enabled && display.isPrimary)) errors.push(t('profile.validationDisabledPrimary'));
+  if (enabled.some((display) => display.width <= 0 || display.height <= 0)) errors.push(t('profile.validationInvalidResolution'));
+  if (enabled.some((display) => getRefreshPolicy(display) === 'Fixed' && !hasValidFixedRefresh(display))) errors.push(t('profile.validationInvalidRefresh'));
   return errors;
 }
 
@@ -185,24 +195,26 @@ export function areIdentitySetsEqual(left: DisplayIdentity[], right: DisplayIden
   return left.every((identity) => right.some((candidate) => sameIdentity(identity, candidate)));
 }
 
-export function summarizeLayout(layout: DisplayLayoutSnapshot) {
+type TranslationLike = (key: string) => string;
+
+export function summarizeLayout(layout: DisplayLayoutSnapshot, t?: TranslationLike) {
   const active = layout.displays.filter((display) => display.isActive);
   if (active.length === 0) {
-    return 'brak aktywnych ekranów';
+    return t ? t('profile.summaryNoActiveDisplays') : 'No active displays';
   }
 
-  return active.map((display) => `${display.identity.friendlyName || 'Ekran'} ${display.width} × ${display.height}`).join(' / ');
+  return active.map((display) => `${display.identity.friendlyName || (t ? t('profile.displayUnknown') : 'Unknown display')} ${display.width} × ${display.height}`).join(' / ');
 }
 
-export function formatDisplayResolution(display: { width: number; height: number; preferredWidth?: number; preferredHeight?: number }) {
+export function formatDisplayResolution(display: { width: number; height: number; preferredWidth?: number; preferredHeight?: number }, t?: TranslationLike) {
   const width = display.width > 0 ? display.width : display.preferredWidth ?? 0;
   const height = display.height > 0 ? display.height : display.preferredHeight ?? 0;
-  return width > 0 && height > 0 ? `${width} × ${height}` : 'Rozdzielczość nieznana';
+  return width > 0 && height > 0 ? `${width} × ${height}` : (t ? t('profile.resolutionUnknown') : 'Resolution unknown');
 }
 
-export function formatDisplayRefresh(display: { refreshRateHz: number }) {
+export function formatDisplayRefresh(display: { refreshRateHz: number }, t?: TranslationLike) {
   if (!display.refreshRateHz || display.refreshRateHz <= 0) {
-    return 'Hz nieznane';
+    return t ? t('profile.refreshUnknown') : 'Refresh unknown';
   }
 
   return `${formatNumber(display.refreshRateHz)} Hz`;

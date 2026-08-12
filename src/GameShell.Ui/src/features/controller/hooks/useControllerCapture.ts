@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ControllerFamily, detectControllerFamily } from '../../../controllerDisplayMapper';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import type { ControllerShortcutSettings, ControllerStatusInfo } from '../../../types/bridge';
@@ -27,7 +28,7 @@ const initialControllerStatus: ControllerStatusInfo = {
   controllerId: null,
   lastReadButtons: [],
   lastReadAt: null,
-  diagnosticStatus: 'Brak zgodnego kontrolera'
+  diagnosticStatus: 'No compatible controller'
 };
 
 type ShortcutMap = Record<string, ControllerShortcutSettings | null>;
@@ -47,6 +48,7 @@ export function useControllerCapture({
   onWorkModeShortcutCaptured: (buttons: string[]) => void;
   onError: (message: string) => void;
 }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState(initialControllerStatus);
   const [captureSuccessButtons, setCaptureSuccessButtons] = useState<string[] | null>(null);
   const [notice, setNotice] = useState<'missing' | 'disconnected' | null>(null);
@@ -87,7 +89,7 @@ export function useControllerCapture({
       await sendBridgeCommand('startControllerShortcutCapture', { profileId });
       applyStatus(await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
     } catch {
-      onError('Nie udało się rozpocząć nasłuchiwania kontrolera.');
+      onError(t('controller.captureStartFailed'));
     }
   }
 
@@ -102,7 +104,7 @@ export function useControllerCapture({
         .then(() => sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
       applyStatus(nextStatus);
     } catch {
-      onError('Nie udało się anulować nasłuchiwania kontrolera.');
+      onError(t('controller.captureCancelFailed'));
     }
   }
 
@@ -148,7 +150,7 @@ export function useControllerCapture({
       .then(applyStatus)
       .catch(() => {
         acknowledgedRef.current = null;
-        onError('Nie udało się potwierdzić zapisania kombinacji kontrolera.');
+        onError(t('controller.captureAckFailed'));
       });
     completionTimerRef.current = setTimeout(() => setCaptureSuccessButtons(null), 1500);
   }, [onError, onProfileShortcutCaptured, onWorkModeShortcutCaptured, profileShortcuts, status.completedCapture, status.captureSessionId, workModeShortcut]);

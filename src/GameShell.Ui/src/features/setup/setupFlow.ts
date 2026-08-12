@@ -11,18 +11,18 @@ export type StepId =
 
 export type SetupMode = 'None' | 'FirstRun' | 'CreateProfile' | 'EditProfile' | 'EditGlobal';
 
-export type SetupStep = { id: StepId; title: string; subtitle: string };
+export type SetupStep = { id: StepId; titleKey: string; subtitleKey: string };
 
 export const FIRST_RUN_STEPS: SetupStep[] = [
-  { id: 'welcome', title: 'Start', subtitle: 'Pierwsza konfiguracja' },
-  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Ustawienie profilu' },
-  { id: 'launcher', title: 'Launcher profilu', subtitle: 'Aktywacja aplikacji' },
-  { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Przygotowanie pulpitu' },
-  { id: 'controller', title: 'Skróty profilu', subtitle: 'Wejście i aktywacja' },
-  { id: 'work-behaviour', title: 'Work Mode', subtitle: 'Przywrócenie środowiska' },
-  { id: 'work-shortcuts', title: 'Skróty Work Mode', subtitle: 'Powrót do pracy' },
-  { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Uruchamianie i integracja' },
-  { id: 'finish', title: 'Podsumowanie', subtitle: 'Sprawdź i zapisz' },
+  { id: 'welcome', titleKey: 'setup.start', subtitleKey: 'setup.firstRun' },
+  { id: 'gaming-display', titleKey: 'setup.displays', subtitleKey: 'setup.profileSetup' },
+  { id: 'launcher', titleKey: 'setup.launcherProfile', subtitleKey: 'setup.launcherActivation' },
+  { id: 'console-behaviour', titleKey: 'setup.profileBehaviour', subtitleKey: 'setup.desktopSetup' },
+  { id: 'controller', titleKey: 'setup.profileShortcuts', subtitleKey: 'setup.inputActivation' },
+  { id: 'work-behaviour', titleKey: 'setup.workMode', subtitleKey: 'setup.environmentRestore' },
+  { id: 'work-shortcuts', titleKey: 'setup.workModeShortcuts', subtitleKey: 'setup.returnToWork' },
+  { id: 'app-behaviour', titleKey: 'setup.appBehaviour', subtitleKey: 'setup.startupIntegration' },
+  { id: 'finish', titleKey: 'setup.summary', subtitleKey: 'setup.reviewAndSave' },
 ];
 
 export const PROFILE_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['gaming-display', 'launcher', 'console-behaviour', 'controller'].includes(step.id));

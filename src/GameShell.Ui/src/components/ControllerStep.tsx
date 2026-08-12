@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ControllerFamily, detectControllerFamily } from '../controllerDisplayMapper';
 import type { ControllerShortcutSettings, ControllerStatusInfo, DisplayLayoutProfile } from '../types/bridge';
 import { ControllerKeycaps } from './ControllerKeycaps';
@@ -45,10 +46,11 @@ export function ControllerStep({
   onRemoveHotkey: () => void;
   onChangeHotkey: (key: 'enterProfile' | 'workMode', value: string) => void;
 }) {
+  const { t } = useTranslation();
   const [showHotkeySaved, setShowHotkeySaved] = useState(false);
   const hotkeySavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasWorkingProfile = selectedProfileName.trim().length > 0;
-  const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
+  const selectedProfileLabel = isWorkMode ? t('setup.workMode') : (selectedProfileName || t('profile.noProfileSelected'));
   const currentHotkey = isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode;
   const selectedControllerButtons = controllerShortcut?.buttons ?? [];
   const hasControllerShortcut = selectedControllerButtons.length > 0;
@@ -65,14 +67,14 @@ export function ControllerStep({
   const controllerFamily = detectControllerFamily(controllerStatus.deviceName);
   const controllerDeviceLabel = controllerStatus.isConnected
     ? controllerFamily === ControllerFamily.PlayStation
-      ? 'PLAYSTATION POŁĄCZONY'
+      ? t('shortcut.controllerStatusConnected')
       : controllerFamily === ControllerFamily.Xbox
-        ? 'XBOX POŁĄCZONY'
+        ? t('shortcut.controllerStatusConnected')
         : controllerFamily === ControllerFamily.Nintendo
-          ? 'NINTENDO POŁĄCZONY'
-          : 'KONTROLER POŁĄCZONY'
-    : 'BRAK KONTROLERA';
-  const controllerDeviceDescription = controllerStatus.deviceName || 'Brak wykrytego kontrolera';
+          ? t('shortcut.controllerStatusConnected')
+          : t('shortcut.controllerStatusConnected')
+    : t('shortcut.controllerStatusMissing');
+  const controllerDeviceDescription = controllerStatus.deviceName || t('shortcut.controllerMissing');
 
   useEffect(() => {
     return () => {
@@ -110,23 +112,23 @@ export function ControllerStep({
 
   return (
     <div className="wizard-copy profile-shortcuts-content">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>{isWorkMode ? 'Skrót Work Mode' : 'Skróty profilu'}</h2>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{isWorkMode ? t('shortcut.workTitle') : t('shortcut.profileTitle')}</h2>
       <div className="profile-shortcuts-intro">
-        <p>{isWorkMode ? 'Ustaw skrót powrotu do Work Mode. To pozwala szybko przełączać pracę i sesje gamingowe bez ręcznego otwierania menu.' : `Ustaw skrót uruchamiający profil ${selectedProfileLabel}. Ten skrót pozwala aktywować profil z dowolnego miejsca w systemie.`}</p>
-        <span className="profile-shortcuts-profile-label">{isWorkMode ? 'CEL: WORK MODE' : `PROFIL: ${selectedProfileLabel.toUpperCase()}`}</span>
+        <p>{isWorkMode ? t('shortcut.keyboardHelpWork') : t('shortcut.keyboardProfileHint', { name: selectedProfileLabel })}</p>
+        <span className="profile-shortcuts-profile-label">{isWorkMode ? t('shortcut.workTitle').toUpperCase() : `${t('shortcut.profileTitle').toUpperCase()}: ${selectedProfileLabel.toUpperCase()}`}</span>
       </div>
 
       <section className="shortcut-module keyboard-shortcut-module">
         <header className="shortcut-module-header">
           <div>
-            <h3>Skrót klawiaturowy</h3>
-            <p>{isWorkMode ? 'Wraca do Work Mode z dowolnego miejsca.' : 'Uruchamia profil z dowolnego miejsca.'}</p>
+            <h3>{t('shortcut.keyboardLabel')}</h3>
+            <p>{isWorkMode ? t('shortcut.keyboardHelpWork') : t('shortcut.keyboardHelp')}</p>
           </div>
         </header>
         <div className="shortcut-module-body keyboard-shortcut-body">
           <div className="shortcut-control-label">
-            <span>SKRÓT</span>
+            <span>{t('shortcut.keyboardLabel').toUpperCase()}</span>
             <div className="keyboard-shortcut-row">
               <label className="keyboard-shortcut-field">
                 <HotkeyField
@@ -138,10 +140,10 @@ export function ControllerStep({
                 />
               </label>
               {showHotkeySaved ? (
-                <span className="shortcut-saved-status is-saved">ZAPISANO</span>
+                <span className="shortcut-saved-status is-saved">{t('shortcut.save')}</span>
               ) : currentHotkey ? (
                 <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={handleHotkeyRemove}>
-                  Usuń
+                  {t('shortcut.remove')}
                 </button>
               ) : null}
             </div>
@@ -152,8 +154,8 @@ export function ControllerStep({
       <section className={`shortcut-module controller-shortcut-module ${isCapturePhase || isCaptureSuccess ? 'is-capturing' : ''}`}>
         <header className="shortcut-module-header controller-module-header">
           <div>
-            <h3>Skrót kontrolera</h3>
-            <p>Przytrzymaj kombinację, aby {isWorkMode ? 'wrócić do Work Mode' : 'uruchomić profil'}.</p>
+            <h3>{t('shortcut.controllerLabel')}</h3>
+            <p>{t('shortcut.controllerHelp', { action: isWorkMode ? t('shortcut.workAction') : t('shortcut.profileAction') })}</p>
           </div>
           <span className={`controller-status-pill ${controllerStatus.isConnected ? 'is-connected' : 'is-disconnected'}`} title={controllerDeviceDescription}>
             {controllerDeviceLabel}
@@ -162,11 +164,11 @@ export function ControllerStep({
         <div className="shortcut-module-body controller-shortcut-body">
           {controllerNotice ? (
             <div className="inline-notice controller-device-notice" role="alert" aria-live="assertive">
-              <span className="inline-notice-label">{controllerNotice === 'missing' ? 'URZĄDZENIE' : 'ROZŁĄCZONO'}</span>
+              <span className="inline-notice-label">{controllerNotice === 'missing' ? t('shortcut.controllerStatusMissing') : t('shortcut.controllerStatusDisconnected')}</span>
               <div className="inline-notice-copy">
-                <strong>{controllerNotice === 'missing' ? 'Nie wykryto kontrolera.' : 'Kontroler został rozłączony.'}</strong>
-                <span>{controllerNotice === 'missing' ? 'Podłącz kontroler przez USB lub Bluetooth i spróbuj ponownie.' : 'Podłącz go ponownie, aby kontynuować.'}</span>
-                {controllerNotice === 'missing' ? <span>Aplikacja wykryje go automatycznie.</span> : null}
+                <strong>{controllerNotice === 'missing' ? t('shortcut.controllerMissing') : t('shortcut.controllerDisconnected')}</strong>
+                <span>{controllerNotice === 'missing' ? t('shortcut.controllerMissingHelp') : t('shortcut.controllerDisconnectedHelp')}</span>
+                {controllerNotice === 'missing' ? <span>{t('shortcut.controllerAutoDetect')}</span> : null}
               </div>
             </div>
           ) : null}
@@ -174,41 +176,41 @@ export function ControllerStep({
             <div className="controller-capture-panel" aria-live="polite">
               {isCaptureSuccess ? (
                 <>
-                  <span className="capture-mode-label capture-success-label">ZAPISANO</span>
+                  <span className="capture-mode-label capture-success-label">{t('shortcut.save')}</span>
                   <ControllerKeycaps buttons={captureSuccessButtons ?? controllerStatus.completedCapture?.buttons ?? []} family={controllerFamily} />
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'WaitingForRelease' ? (
                 <>
-                  <span className="capture-mode-label">NASŁUCHIWANIE</span>
-                  <p>Puść wszystkie przyciski kontrolera.</p>
-                  <small>Możesz teraz zwolnić przyciski.</small>
+                  <span className="capture-mode-label">{t('shortcut.listening')}</span>
+                  <p>{t('shortcut.captureWaitingRelease')}</p>
+                  <small>{t('shortcut.captureHold')}</small>
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'WaitingForFirstPress' ? (
                 <>
-                  <span className="capture-mode-label">NASŁUCHIWANIE</span>
-                  <p className="capture-primary-message">Naciśnij i przytrzymaj wybraną kombinację.</p>
-                  <small>Możesz naciskać przyciski po kolei.</small>
+                  <span className="capture-mode-label">{t('shortcut.listening')}</span>
+                  <p className="capture-primary-message">{t('shortcut.captureWaitingPress')}</p>
+                  <small>{t('shortcut.captureHold')}</small>
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'Recording' ? (
                 <>
-                  <span className="capture-mode-label">NASŁUCHIWANIE</span>
-                  <p>Wykryto kombinację</p>
+                  <span className="capture-mode-label">{t('shortcut.listening')}</span>
+                  <p>{t('shortcut.captureRecording')}</p>
                   <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
-                  <small>Przytrzymaj ją jeszcze chwilę.</small>
+                  <small>{t('shortcut.captureHold')}</small>
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'WaitingForCombinationRelease' ? (
                 <>
-                  <p>Puść kombinację, aby ją zapisać.</p>
+                  <p>{t('shortcut.captureRelease')}</p>
                   <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
                 </>
               ) : null}
               {canCancelCapture ? (
                 <button className="secondary-button controller-capture-cancel" type="button" onClick={onCancelControllerCapture}>
-                  Anuluj
+                  {t('shortcut.cancel')}
                 </button>
               ) : null}
             </div>
@@ -216,28 +218,28 @@ export function ControllerStep({
             <>
               {controllerStatus.capturePhase === 'Completed' && displayControllerButtons.length > 0 ? (
                 <div className="controller-capture-completed" aria-live="polite">
-                  <span className="capture-step-label">KOMBINACJA ZAPISANA</span>
+                  <span className="capture-step-label">{t('shortcut.captureAssigned')}</span>
                   <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
                 </div>
               ) : hasControllerShortcut ? (
                 <div className="controller-assigned-state">
-                  <span className="capture-step-label">PRZYPISANY SKRÓT</span>
+                  <span className="capture-step-label">{t('shortcut.controllerSet')}</span>
                   <ControllerKeycaps buttons={selectedControllerButtons} family={controllerFamily} />
-                  <p>Przytrzymaj przez {((controllerShortcut?.holdDurationMs ?? 700) / 1000).toFixed(1)} s, aby {isWorkMode ? 'przejść w Work Mode' : 'uruchomić profil'}.</p>
+                  <p>{t('shortcut.controllerHelp', { action: isWorkMode ? t('shortcut.workAction') : t('shortcut.profileAction') })}</p>
                 </div>
               ) : (
                 <div className="controller-empty-state">
-                  <span className="capture-step-label">BRAK PRZYPISANEGO SKRÓTU</span>
-                  <p>Ustaw przyciski, których przytrzymanie {isWorkMode ? 'wróci do Work Mode' : 'uruchomi profil'}.</p>
+                  <span className="capture-step-label">{t('shortcut.controllerNone')}</span>
+                  <p>{t('shortcut.controllerInputHint', { action: isWorkMode ? t('shortcut.workActionShort') : t('shortcut.profileActionShort') })}</p>
                 </div>
               )}
               <div className="controller-shortcut-actions">
                 <button className="primary-button controller-shortcut-listen-button" type="button" disabled={!isWorkMode && !hasWorkingProfile} onClick={onStartControllerCapture}>
-                  {hasControllerShortcut ? 'Zmień kombinację' : 'Przypisz kombinację'}
+                  {hasControllerShortcut ? t('shortcut.listenChange') : t('shortcut.listen')}
                 </button>
                 {hasControllerShortcut ? (
                   <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={onRemoveControllerShortcut}>
-                    Usuń
+                    {t('shortcut.remove')}
                   </button>
                 ) : null}
               </div>
@@ -245,10 +247,10 @@ export function ControllerStep({
           )}
           {controllerValidationError ? <div className="field-validation-error" role="alert">{controllerValidationError}</div> : null}
           <details className="controller-diagnostics">
-            <summary>Szczegóły diagnostyczne</summary>
+            <summary>{t('shortcut.captureDetails')}</summary>
             <dl>
-              <div><dt>Kontrolery</dt><dd>{controllerStatus.controllerCount}</dd></div>
-              <div><dt>Urządzenie</dt><dd>{controllerDeviceDescription}</dd></div>
+              <div><dt>{t('shortcut.controllerCount')}</dt><dd>{controllerStatus.controllerCount}</dd></div>
+              <div><dt>{t('shortcut.deviceLabel')}</dt><dd>{controllerDeviceDescription}</dd></div>
             </dl>
           </details>
         </div>

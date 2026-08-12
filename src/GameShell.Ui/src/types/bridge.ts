@@ -280,6 +280,7 @@ export interface AppSettings {
   ui: {
     closeToTray: boolean;
     isFirstRunCompleted: boolean;
+    language: string;
     windowLeft?: number | null;
     windowTop?: number | null;
     windowWidth?: number | null;

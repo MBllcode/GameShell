@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LauncherIcon, type LauncherBrand } from './LauncherIcon';
 import { sendBridgeCommand } from '../services/webViewBridge';
 import type { DependencyStatus } from '../types/bridge';
@@ -6,25 +7,25 @@ import type { DisplayLayoutProfile } from '../types/bridge';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 
-const launcherOptions: Array<{ value: LauncherType; title: string; description: string; badge: string; brand: LauncherBrand }> = [
+const launcherOptions: Array<{ value: LauncherType; title: string; descriptionKey: string; badge: string; brand: LauncherBrand }> = [
   {
     value: 'Playnite Fullscreen',
     title: 'Playnite Fullscreen',
-    description: 'Łączy gry z różnych launcherów w jednej bibliotece.',
+    descriptionKey: 'launcher.playniteDescription',
     badge: 'PLAYNITE',
     brand: 'playnite'
   },
   {
     value: 'Steam Big Picture',
     title: 'Steam Big Picture',
-    description: 'Uruchamia Steam w trybie Big Picture.',
+    descriptionKey: 'launcher.steamDescription',
     badge: 'STEAM',
     brand: 'steam'
   },
   {
     value: 'Xbox App',
     title: 'Xbox App',
-    description: 'Otwiera aplikację Xbox i bibliotekę Game Pass.',
+    descriptionKey: 'launcher.xboxDescription',
     badge: 'XBOX',
     brand: 'xbox'
   }
@@ -43,8 +44,9 @@ export function LauncherStep({
   launcher: LauncherType;
   setLauncher: (launcher: LauncherType) => void;
 }) {
+  const { t } = useTranslation();
   const hasWorkingProfile = selectedProfileName.trim().length > 0;
-  const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
+  const selectedProfileLabel = selectedProfileName || t('profile.noProfileSelected');
   const [dependencies, setDependencies] = useState<DependencyStatus[]>([]);
   const [dependencyError, setDependencyError] = useState<string | null>(null);
 
@@ -60,7 +62,7 @@ export function LauncherStep({
         })
         .catch(() => {
           if (isMounted) {
-            setDependencyError('Nie udało się sprawdzić dostępności launcherów.');
+            setDependencyError(t('launcher.dependencyCheckError'));
           }
         });
     };
@@ -72,7 +74,7 @@ export function LauncherStep({
       isMounted = false;
       window.clearInterval(refreshTimer);
     };
-  }, []);
+  }, [t]);
 
   const selectedLauncherName = launcher === 'Playnite Fullscreen'
     ? 'Playnite'
@@ -88,21 +90,21 @@ export function LauncherStep({
 
   const openDownloadPage = () => {
     void sendBridgeCommand('openDependencyDownloadPage', { name: selectedLauncherName })
-      .catch(() => setDependencyError('Nie udało się otworzyć strony pobierania launchera.'));
+      .catch(() => setDependencyError(t('launcher.downloadError')));
   };
 
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Launcher profilu</h2>
-      <p>Wybierz aplikację aktywowaną wraz z tym profilem. Po pierwszej konfiguracji będzie można zmieniać launcher i dodawać kolejne profile bez utraty istniejących ustawień.</p>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{t('launcher.title')}</h2>
+      <p>{t('launcher.description')}</p>
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
-          <span>Aktywny profil</span>
+          <span>{t('launcher.activeProfile')}</span>
           <strong>{selectedProfileLabel}</strong>
         </div>
       </div>
-      <div className="launcher-grid" aria-label="Launcher" aria-disabled={!hasWorkingProfile}>
+      <div className="launcher-grid" aria-label={t('launcher.title')} aria-disabled={!hasWorkingProfile}>
         {launcherOptions.map((item) => {
           const dependency = dependencies.find((candidate) => candidate.name === getDependencyName(item.value));
 
@@ -119,8 +121,8 @@ export function LauncherStep({
                 <span className="launcher-badge">{item.badge}</span>
               </span>
               <strong>{item.title}</strong>
-              <small>{item.description}</small>
-              {dependency ? <span className={`launcher-status ${dependency.isDetected ? 'detected' : 'missing'}`}>{dependency.isDetected ? 'WYKRYTO' : 'NIE WYKRYTO'}</span> : null}
+              <small>{t(item.descriptionKey)}</small>
+              {dependency ? <span className={`launcher-status ${dependency.isDetected ? 'detected' : 'missing'}`}>{dependency.isDetected ? t('launcher.statusDetected') : t('launcher.statusMissing')}</span> : null}
             </button>
           );
         })}
@@ -128,11 +130,11 @@ export function LauncherStep({
       {selectedDependency && !selectedDependency.isDetected ? (
         <div className="launcher-install-panel" role="alert">
           <div>
-            <h3>Nie wykryto: {selectedDependency.name}</h3>
-            <p>{selectedDependency.message} Zainstaluj launcher, aby móc uruchomić ten profil.</p>
+            <h3>{t('launcher.notDetected', { name: selectedDependency.name })}</h3>
+            <p>{selectedDependency.message} {t('launcher.installPrompt', { name: selectedDependency.name })}</p>
           </div>
           <button className="secondary-button" type="button" onClick={openDownloadPage} disabled={!hasWorkingProfile}>
-            Pobierz {selectedDependency.name}
+            {t('launcher.download', { name: selectedDependency.name })}
           </button>
         </div>
       ) : null}

@@ -2,47 +2,49 @@ import type { AppStatus } from '../types/bridge';
 
 type ModeCommand = 'enterGameShell' | 'enterGameShellWithProfile' | 'enterWorkMode';
 
-export function formatCurrentMode(status: AppStatus) {
+type TranslationLike = (key: string, options?: Record<string, string | number>) => string;
+
+export function formatCurrentMode(status: AppStatus, t?: TranslationLike) {
   switch (status.currentMode) {
     case 'Console':
     case 'PcGaming':
-      return 'Tryb gamingowy';
+      return t ? t('status.gamingMode') : 'Gaming mode';
     case 'Work':
-      return 'Work Mode';
+      return t ? t('status.workMode') : 'Work Mode';
     default:
-      return formatModeState(status.state);
+      return formatModeState(status.state, t);
   }
 }
 
-export function formatSessionState(state: string) {
+export function formatSessionState(state: string, t?: TranslationLike) {
   switch (state) {
-    case 'EnteringProfile': return 'uruchamianie profilu';
-    case 'LauncherActive': return 'launcher aktywny';
-    case 'LaunchingGame': return 'uruchamianie gry';
-    case 'GameActive': return 'gra aktywna';
-    case 'ReturningToLauncher': return 'powrot do launchera';
-    case 'ExitingToWorkMode': return 'powrot do Work Mode';
-    case 'Faulted': return 'blad sesji';
+    case 'EnteringProfile': return t ? t('status.session.launchingProfile') : 'starting profile';
+    case 'LauncherActive': return t ? t('status.session.launcherActive') : 'launcher active';
+    case 'LaunchingGame': return t ? t('status.session.launchingGame') : 'launching game';
+    case 'GameActive': return t ? t('status.session.gameActive') : 'game active';
+    case 'ReturningToLauncher': return t ? t('status.session.returningToLauncher') : 'returning to launcher';
+    case 'ExitingToWorkMode': return t ? t('status.session.exitingToWorkMode') : 'returning to Work Mode';
+    case 'Faulted': return t ? t('status.session.faulted') : 'session error';
     default: return state;
   }
 }
 
-function formatModeState(state: AppStatus['state']) {
+function formatModeState(state: AppStatus['state'], t?: TranslationLike) {
   switch (state) {
-    case 'WorkMode': return 'Work Mode';
-    case 'GameShell': return 'tryb gamingowy';
-    case 'SwitchingToConsole': return 'przełączanie do gamingowego';
-    case 'SwitchingToWork': return 'przełączanie do Work Mode';
-    case 'Error': return 'wymaga uwagi';
+    case 'WorkMode': return t ? t('status.workMode') : 'Work Mode';
+    case 'GameShell': return t ? t('status.gamingMode') : 'Gaming mode';
+    case 'SwitchingToConsole': return t ? t('status.mode.switchingToConsole') : 'switching to gaming mode';
+    case 'SwitchingToWork': return t ? t('status.mode.switchingToWork') : 'switching to Work Mode';
+    case 'Error': return t ? t('status.mode.error') : 'requires attention';
     case 'Unknown':
-    default: return 'nieustalony';
+    default: return t ? t('status.mode.unknown') : 'unknown';
   }
 }
 
-export function formatCommandTargetMode(command: ModeCommand) {
+export function formatCommandTargetMode(command: ModeCommand, t?: TranslationLike) {
   switch (command) {
     case 'enterGameShell':
-    case 'enterGameShellWithProfile': return 'Tryb gamingowy';
-    case 'enterWorkMode': return 'Work Mode';
+    case 'enterGameShellWithProfile': return t ? t('status.gamingMode') : 'Gaming mode';
+    case 'enterWorkMode': return t ? t('status.workMode') : 'Work Mode';
   }
 }

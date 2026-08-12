@@ -1,3 +1,6 @@
+import { useTranslation } from 'react-i18next';
+import { setI18nLanguage } from '../i18n/i18n';
+import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n/language.ts';
 import { SettingRow } from './SettingRow';
 
 type FinishOptions = {
@@ -10,20 +13,44 @@ type FinishOptions = {
 export function AppBehaviourStep({
   stepNumber,
   finishOptions,
-  setFinishOptions
+  setFinishOptions,
+  language,
+  setLanguage
 }: {
   stepNumber: number;
   finishOptions: FinishOptions;
   setFinishOptions: (options: FinishOptions) => void;
+  language: SupportedLanguage;
+  setLanguage: (value: SupportedLanguage) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Zachowanie aplikacji</h2>
-      <p>Ustaw sposób uruchamiania GameShell oraz integrację z systemem Windows. Te opcje dotyczą automatycznego startu i dostępności aplikacji po restarcie systemu.</p>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{t('behaviour.appTitle')}</h2>
+      <p>{t('behaviour.appDescription')}</p>
       <div className="settings-group">
+        <label className="field-label" htmlFor="app-language-select">{t('language.selectorLabel')}</label>
+        <select
+          id="app-language-select"
+          className="text-input"
+          value={language}
+          onChange={(event) => {
+            const nextLanguage = event.target.value as SupportedLanguage;
+            setLanguage(nextLanguage);
+            setI18nLanguage(nextLanguage);
+          }}
+        >
+          {SUPPORTED_LANGUAGES.map((code) => (
+            <option key={code} value={code}>
+              {LANGUAGE_LABELS[code]}
+            </option>
+          ))}
+        </select>
+
         <SettingRow
-          title="Uruchamiaj z Windows"
+          title={t('behaviour.startWithWindows')}
           checked={finishOptions.startWithWindows}
           onChange={(value) => setFinishOptions({
             ...finishOptions,
@@ -32,18 +59,18 @@ export function AppBehaviourStep({
           })}
         />
         <SettingRow
-          title="Uruchamiaj zminimalizowany"
+          title={t('behaviour.startMinimized')}
           checked={finishOptions.startMinimized}
           disabled={!finishOptions.startWithWindows}
           onChange={(value) => setFinishOptions({ ...finishOptions, startMinimized: value })}
         />
         <SettingRow
-          title="Utwórz skrót w menu Start"
+          title={t('behaviour.createStartMenuShortcut')}
           checked={finishOptions.startMenuShortcut}
           onChange={(value) => setFinishOptions({ ...finishOptions, startMenuShortcut: value })}
         />
         <SettingRow
-          title="Utwórz skrót na pulpicie"
+          title={t('behaviour.createDesktopShortcut')}
           checked={finishOptions.desktopShortcut}
           onChange={(value) => setFinishOptions({ ...finishOptions, desktopShortcut: value })}
         />

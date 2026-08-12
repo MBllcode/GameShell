@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { SettingRow } from './SettingRow';
 import { SettingsSection } from './SettingsSection';
 
@@ -17,21 +18,23 @@ export function WorkBehaviourStep({
   behaviour: WorkBehaviour;
   setBehaviour: (behaviour: WorkBehaviour) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Zachowanie Work Mode</h2>
-      <p>Ustaw, jak ma wyglądać środowisko pracy po powrocie do trybu roboczego. Te ustawienia pomagają przywrócić wygodny stan systemu po sesji gamingowej.</p>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{t('behaviour.workTitle')}</h2>
+      <p>{t('behaviour.workDescription')}</p>
       <div className="settings-category-list">
-        <SettingsSection title="LAUNCHER">
-          <SettingRow title="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
+        <SettingsSection title={t('behaviour.launcher')}>
+          <SettingRow title={t('behaviour.closeLauncher')} checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
         </SettingsSection>
-        <SettingsSection title="PULPIT">
-          <SettingRow title="Pokaż paski zadań" checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
-          <SettingRow title="Pokaż ikony pulpitu" checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
+        <SettingsSection title={t('behaviour.desktop')}>
+          <SettingRow title={t('behaviour.showTaskbars')} checked={behaviour.showTaskbars} onChange={(value) => setBehaviour({ ...behaviour, showTaskbars: value })} />
+          <SettingRow title={t('behaviour.showDesktopIcons')} checked={behaviour.showDesktopIcons} onChange={(value) => setBehaviour({ ...behaviour, showDesktopIcons: value })} />
         </SettingsSection>
-        <SettingsSection title="OKNA">
-          <SettingRow title="Przywróć otwarte okna" checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
+        <SettingsSection title={t('behaviour.windows')}>
+          <SettingRow title={t('behaviour.restoreOpenWindows')} checked={behaviour.doNotMinimizeWindows} onChange={(value) => setBehaviour({ ...behaviour, doNotMinimizeWindows: value })} />
         </SettingsSection>
       </div>
     </div>

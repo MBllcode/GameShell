@@ -13,7 +13,7 @@ export function sendBridgeCommand<T>(type: BridgeCommand, payload?: unknown): Pr
   const webview = window.chrome?.webview;
 
   if (!webview) {
-    return Promise.reject(new Error('Połączenie z aplikacją jest niedostępne.'));
+    return Promise.reject(new Error('Connection to the application is unavailable.'));
   }
 
   attachResponseListener(webview);

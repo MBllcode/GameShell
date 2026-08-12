@@ -73,6 +73,7 @@ If the destination EXE is locked (running process), script writes a timestamped 
 
 ## Current project status
 
+- GameShell ships as a single bilingual build with English and Polish support, auto-detecting the Windows/system UI culture on first run and preserving the selected interface language in app settings.
 - First-run mode initialization is fixed: the dashboard now hydrates the correct runtime mode instead of showing an uninitialized status after setup.
 - Settings persistence is now crash-safe and atomic: writes go through `.tmp` + backup recovery and avoid in-place corruption of `settings.json`.
 - The Windows session monitor now filters launcher/system processes, requires a short stabilization window before declaring a game active, and logs the real candidate/exit transitions for debug validation.

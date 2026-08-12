@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
 import type { DisplayLayoutProfile, GamingProfileDisplayTopology } from '../../../types/bridge';
 import { getProfileTopology } from '../../../utils/displays';
@@ -36,6 +37,8 @@ type Options = {
 };
 
 export function useDashboardSetupActions(options: Options) {
+  const { t } = useTranslation();
+
   const createProfile = () => {
     const targetIndex = options.steps.findIndex((step) => step.id === 'gaming-display');
     assertSetupStateInvariants('ProfileSetup', 'CreateProfile', null);
@@ -51,7 +54,7 @@ export function useDashboardSetupActions(options: Options) {
     options.setHotkeys((current) => ({ ...current, pcGamingMode: '' }));
     options.setShowOverwriteProfileDialog(false);
     options.setStepIndex(targetIndex >= 0 ? targetIndex : 0);
-    options.setMessage('Dodaj nowy profil i przejdź przez kroki profilu.');
+    options.setMessage(t('dashboard.createProfileHint'));
   };
 
   const editSettings = (stepId: StepId) => {
@@ -73,7 +76,7 @@ export function useDashboardSetupActions(options: Options) {
       options.syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } });
     }
     options.setStepIndex(targetIndex >= 0 ? targetIndex : 0);
-    options.setMessage('Edytujesz wybraną sekcję.');
+    options.setMessage(t('dashboard.editSection')); 
   };
 
   return { createProfile, editSettings };

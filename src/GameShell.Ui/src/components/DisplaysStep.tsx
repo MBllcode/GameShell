@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, DisplayModeQueryResult, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../types/bridge';
 import { normalizePcGamingProfileName } from '../features/profiles/utils';
 import { computeTopologyBounds, createCanvasTransform, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
@@ -35,6 +36,7 @@ export function DisplaysStep({
   displayListError,
   refreshDisplays
 }: DisplaysStepProps) {
+  const { t } = useTranslation();
   const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
   const [profileName, setProfileName] = useState('');
   const [topology, setTopology] = useState<GamingProfileDisplayTopology>({ displays: [] });
@@ -61,7 +63,7 @@ export function DisplaysStep({
   }, [onDraftChange, onValidationStateChange, prefillFromSelectedProfile, selectedProfile]);
 
   const selectedTarget = topology.displays.find((display) => identityKey(display.identity) === selectedIdentityKey) ?? topology.displays[0] ?? null;
-  const topologyErrors = getTopologyEditorErrors(topology);
+  const topologyErrors = getTopologyEditorErrors(topology, t);
   const savedIdentityKeys = useMemo(() => new Set(topology.displays.map((display) => identityKey(display.identity))), [topology.displays]);
   const availableDisplays = displays.filter((display) => !savedIdentityKeys.has(identityKey(display.identity)));
 
@@ -125,26 +127,26 @@ export function DisplaysStep({
       setSelectedIdentityKey(identityKey(nextTopology.displays[0]?.identity));
       commitTopology(nextTopology);
     } catch (reason: unknown) {
-      setActionError(reason instanceof Error ? reason.message : 'Nie udało się pobrać bieżącego układu ekranów.');
+      setActionError(reason instanceof Error ? reason.message : t('profile.displayLoadError'));
     }
   }
 
   return (
     <div className="wizard-copy displays-step">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Ekrany</h2>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{t('setup.displays')}</h2>
       <section className="settings-section display-topology-editor">
         <div className="display-topology-toolbar display-profile-row">
           <div className="display-profile-field">
-            <label className="profile-name-label" htmlFor="profile-name-input">Nazwa profilu</label>
-            <input id="profile-name-input" className="text-input profile-name-input" type="text" value={profileName} onChange={(event) => updateProfileName(event.target.value)} onBlur={() => onValidationStateChange({ ...validationState, showNameError: !profileName.trim() })} aria-invalid={validationState.showNameError && !profileName.trim()} placeholder="np. Salon TV + biurko" />
+            <label className="profile-name-label" htmlFor="profile-name-input">{t('profile.nameLabel')}</label>
+            <input id="profile-name-input" className="text-input profile-name-input" type="text" value={profileName} onChange={(event) => updateProfileName(event.target.value)} onBlur={() => onValidationStateChange({ ...validationState, showNameError: !profileName.trim() })} aria-invalid={validationState.showNameError && !profileName.trim()} placeholder={t('profile.namePlaceholder')} />
           </div>
           <div className="display-diagnostics-actions">
-            <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}>Użyj bieżącego układu</button>
-            <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}>{isRefreshingDisplays ? 'Odświeżanie...' : 'Odśwież listę'}</button>
+            <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}>{t('profile.displayCurrentLayout')}</button>
+            <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}>{isRefreshingDisplays ? t('profile.displayRefreshListBusy') : t('profile.displayRefreshList')}</button>
           </div>
         </div>
-        {validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">Wpisz nazwę profilu.</div> : null}
+        {validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">{t('profile.nameRequired')}</div> : null}
         {displayListError ? <p className="error-line display-error">{displayListError}</p> : null}
         {actionError ? <p className="error-line display-error">{actionError}</p> : null}
         <div className={`display-topology-layout ${topology.displays.length === 0 ? 'is-empty' : ''}`}>
@@ -152,17 +154,17 @@ export function DisplaysStep({
           <DisplayPropertiesPanel target={selectedTarget} observed={selectedTarget ? displays.find((display) => sameIdentity(display.identity, selectedTarget.identity)) ?? null : null} modes={selectedDisplayModes} onChange={(patch) => selectedTarget && updateTarget(selectedTarget.identity, patch)} onRemove={() => selectedTarget && commitTopology({ displays: topology.displays.filter((display) => !sameIdentity(display.identity, selectedTarget.identity)) })} />
         </div>
         {topology.displays.length > 0 ? <DisplayTopologyValidation errors={topologyErrors} showSelectionError={validationState.showSelectionError} /> : null}
-        <section className="display-inventory" aria-label="Wykryte ekrany dostępne do dodania">
+        <section className="display-inventory" aria-label={t('profile.displayHeading')}>
           <div className="display-module-header">
             <div className="display-inventory-header">
-              <strong>Wykryte ekrany</strong>
+              <strong>{t('profile.displayHeading')}</strong>
               <span className="display-inventory-count">{availableDisplays.length}</span>
             </div>
-            <p>Kliknij kafelek, aby dodać ekran do układu profilu.</p>
+            <p>{t('profile.displayClickHint')}</p>
           </div>
           <div className="display-inventory-list">
-            {availableDisplays.map((display) => <button className="display-inventory-item" type="button" key={identityKey(display.identity)} onClick={() => void addDisplay(display)}><span className="display-inventory-icon">+</span><strong>{display.name || 'Nieznany ekran'}</strong><span>{display.width || display.preferredWidth} × {display.height || display.preferredHeight} · {display.isEnabled ? 'aktywny' : 'nieaktywny'}</span><em>Dodaj do układu</em></button>)}
-            {availableDisplays.length === 0 ? <p className="hint-line">Brak dodatkowych wykrytych ekranów.</p> : null}
+            {availableDisplays.map((display) => <button className="display-inventory-item" type="button" key={identityKey(display.identity)} onClick={() => void addDisplay(display)}><span className="display-inventory-icon">+</span><strong>{display.name || t('profile.displayUnknown')}</strong><span>{display.width || display.preferredWidth} × {display.height || display.preferredHeight} · {display.isEnabled ? t('profile.displayEnabled') : t('profile.displayDisabled')}</span><em>{t('profile.addDisplay')}</em></button>)}
+            {availableDisplays.length === 0 ? <p className="hint-line">{t('profile.emptyState')}</p> : null}
           </div>
         </section>
       </section>
@@ -171,6 +173,7 @@ export function DisplaysStep({
 }
 
 function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove }: { topology: GamingProfileDisplayTopology; selectedIdentityKey: string | null; onSelect: (key: string) => void; onMove: (identity: ProfileDisplayTarget['identity'], positionX: number, positionY: number) => void }) {
+  const { t } = useTranslation();
   const dragRef = useRef<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ width: 760, height: 320 });
@@ -215,17 +218,17 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove
   }
 
   const previewRect = dragPreview ? rectToCanvas(dragPreview.rect, transform) : null;
-  return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''}`} style={{ height: `${fixedCanvasHeight}px` }} aria-label="Podgląd układu ekranów">
+  return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''}`} style={{ height: `${fixedCanvasHeight}px` }} aria-label={t('profile.topologyPreview')}>
     {topology.displays.map((display, index) => {
       const key = identityKey(display.identity);
       const topologyRect = dragPreview?.identityKey === key ? dragPreview.rect : rects[index];
       const visualRect = rectToCanvas(topologyRect, transform);
       return <button className={`display-topology-node ${display.enabled ? '' : 'is-disabled'} ${display.isPrimary ? 'is-primary' : ''} ${selectedIdentityKey === key ? 'is-selected' : ''} ${dragPreview?.identityKey === key ? 'is-dragging' : ''}`} style={{ left: `${visualRect.left}px`, top: `${visualRect.top}px`, width: `${visualRect.width}px`, height: `${visualRect.height}px` }} type="button" key={key} onClick={() => onSelect(key)} onPointerDown={(event) => beginDrag(event, display.identity, index)}>
-        <span className="display-topology-node-number">{index + 1}</span><strong>{display.identity.friendlyName || 'Ekran'}</strong><small>{display.width > 0 ? `${display.width} × ${display.height}` : 'Tryb nieznany'}</small>{display.isPrimary ? <em>GŁÓWNY</em> : null}
+        <span className="display-topology-node-number">{index + 1}</span><strong>{display.identity.friendlyName || t('profile.displayUnknown')}</strong><small>{display.width > 0 ? `${display.width} × ${display.height}` : t('profile.topologyUnknownMode')}</small>{display.isPrimary ? <em>{t('profile.topologyPrimary')}</em> : null}
       </button>;
     })}
     {previewRect ? <><div className="display-topology-preview" aria-hidden="true" style={{ left: `${previewRect.left}px`, top: `${previewRect.top}px`, width: `${previewRect.width}px`, height: `${previewRect.height}px` }} /><div className="display-topology-guide is-vertical" aria-hidden="true" style={{ left: `${previewRect.left}px` }} /><div className="display-topology-guide is-horizontal" aria-hidden="true" style={{ top: `${previewRect.top}px` }} /></> : null}
-    {topology.displays.length === 0 ? <p className="display-topology-empty">Dodaj ekran poniżej albo użyj bieżącego układu.</p> : null}
+    {topology.displays.length === 0 ? <p className="display-topology-empty">{t('profile.topologyEmpty')}</p> : null}
   </div>;
 }
 
@@ -284,22 +287,23 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove
   */
 
 function DisplayPropertiesPanel({ target, observed, modes, onChange, onRemove }: { target: ProfileDisplayTarget | null; observed: DisplayDeviceInfo | null; modes: DisplayModeInfo[]; onChange: (patch: Partial<ProfileDisplayTarget>) => void; onRemove: () => void }) {
-  if (!target) return <aside className="display-properties-panel is-empty"><strong>Wybierz ekran</strong><span>Jego ustawienia pojawią się tutaj.</span></aside>;
+  const { t } = useTranslation();
+  if (!target) return <aside className="display-properties-panel is-empty"><strong>{t('profile.displayNoSelection')}</strong><span>{t('profile.displayNoSelectionHint')}</span></aside>;
   const refreshState = getRefreshSelectionState(target, observed, modes);
   const refreshOptions = refreshState.modes;
   const isAutoHighest = getRefreshPolicy(target) === 'AutoHighest';
   const refreshPlaceholder = !observed
-    ? 'Brak danych bieżącego ekranu'
+    ? t('profile.refreshNoData')
     : refreshState.unavailable
-      ? 'Brak danych — włącz ekran, aby wykryć częstotliwości'
+      ? t('profile.refreshUnavailable')
       : refreshOptions.length === 0
-        ? 'Wybierz częstotliwość'
+        ? t('profile.refreshPick')
         : undefined;
-  return <aside className="display-properties-panel" aria-label="Właściwości wybranego ekranu">
-    <div className="display-properties-title"><div><strong>{target.identity.friendlyName || 'Ekran'}</strong><span>{observed?.connectionTechnology || 'Brak bieżących danych połączenia'}</span></div><button className="text-action" type="button" onClick={onRemove}>Usuń</button></div>
-    <div className="display-property-section"><span className="display-property-heading">Stan</span><label className="toggle-row"><span>Włączony w profilu</span><input type="checkbox" checked={target.enabled} onChange={(event) => onChange({ enabled: event.target.checked, isPrimary: event.target.checked ? target.isPrimary : false })} /></label></div>
-    <div className="display-property-section"><span className="display-property-heading">Główne ustawienia</span><label className="toggle-row"><span>Główny ekran</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label><div className="display-properties-grid"><label>Pozycja X<input className="text-input" type="number" value={target.positionX} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionX: Number(event.target.value) })} /></label><label>Pozycja Y<input className="text-input" type="number" value={target.positionY} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionY: Number(event.target.value) })} /></label><label>Szerokość<input className="text-input" type="number" min="1" value={target.width} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ width: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>Wysokość<input className="text-input" type="number" min="1" value={target.height} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ height: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label></div></div>
-    <div className="display-property-section"><span className="display-property-heading">Odświeżanie</span><div className="display-refresh-field"><div className="display-refresh-select"><select className="text-input" value={resolveRefreshSelectionKey(target, refreshOptions)} disabled={!isAutoHighest && refreshState.disabled} onChange={(event) => { if (event.target.value === 'auto') { onChange({ refreshPolicy: 'AutoHighest', fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 }); return; } const mode = refreshOptions.find((candidate) => modeKey(candidate) === event.target.value); if (mode) onChange({ refreshPolicy: 'Fixed', fixedRefreshRateNumerator: mode.refreshRateNumerator, fixedRefreshRateDenominator: mode.refreshRateDenominator, refreshRateNumerator: 0, refreshRateDenominator: 0 }); }}><option value="auto">Najwyższe dostępne</option>{refreshOptions.map((mode) => <option key={modeKey(mode)} value={modeKey(mode)}>{formatRefresh(mode.refreshRateHz)}</option>)}{!isAutoHighest && refreshOptions.length === 0 && hasValidFixedRefresh(target) ? <option value={fixedModeKey(target)}>{formatRefresh((target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator ?? 1))}</option> : null}{refreshOptions.length === 0 && !hasValidFixedRefresh(target) && !isAutoHighest ? <option value="" disabled>{refreshPlaceholder}</option> : null}</select><span className="display-refresh-chevron" aria-hidden="true" /></div></div>{observed && !observed.isEnabled && getRefreshPolicy(target) === 'Fixed' && hasValidFixedRefresh(target) ? <p className="hint-line">Pokazano zapisaną stałą częstotliwość profilu. Pełną listę trybów można zweryfikować po włączeniu ekranu.</p> : null}{!observed ? <p className="hint-line">Ekran nie jest obecnie wykryty. Zapisana konfiguracja pozostaje bez zmian.</p> : null}</div>
+  return <aside className="display-properties-panel" aria-label={t('profile.displayProperties')}>
+    <div className="display-properties-title"><div><strong>{target.identity.friendlyName || t('profile.displayUnknown')}</strong><span>{observed?.connectionTechnology || t('profile.displayConnectionUnknown')}</span></div><button className="text-action" type="button" onClick={onRemove}>{t('profile.removeDisplay')}</button></div>
+    <div className="display-property-section"><span className="display-property-heading">{t('profile.displayStatus')}</span><label className="toggle-row"><span>{t('profile.displayUsed')}</span><input type="checkbox" checked={target.enabled} onChange={(event) => onChange({ enabled: event.target.checked, isPrimary: event.target.checked ? target.isPrimary : false })} /></label></div>
+    <div className="display-property-section"><span className="display-property-heading">{t('profile.displaySettings')}</span><label className="toggle-row"><span>{t('profile.displayPrimary')}</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label><div className="display-properties-grid"><label>{t('profile.positionX')}<input className="text-input" type="number" value={target.positionX} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionX: Number(event.target.value) })} /></label><label>{t('profile.positionY')}<input className="text-input" type="number" value={target.positionY} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionY: Number(event.target.value) })} /></label><label>{t('profile.width')}<input className="text-input" type="number" min="1" value={target.width} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ width: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>{t('profile.height')}<input className="text-input" type="number" min="1" value={target.height} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ height: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label></div></div>
+    <div className="display-property-section"><span className="display-property-heading">{t('profile.refresh')}</span><div className="display-refresh-field"><div className="display-refresh-select"><select className="text-input" value={resolveRefreshSelectionKey(target, refreshOptions)} disabled={!isAutoHighest && refreshState.disabled} onChange={(event) => { if (event.target.value === 'auto') { onChange({ refreshPolicy: 'AutoHighest', fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 }); return; } const mode = refreshOptions.find((candidate) => modeKey(candidate) === event.target.value); if (mode) onChange({ refreshPolicy: 'Fixed', fixedRefreshRateNumerator: mode.refreshRateNumerator, fixedRefreshRateDenominator: mode.refreshRateDenominator, refreshRateNumerator: 0, refreshRateDenominator: 0 }); }}><option value="auto">{t('profile.refreshAuto')}</option>{refreshOptions.map((mode) => <option key={modeKey(mode)} value={modeKey(mode)}>{formatRefresh(mode.refreshRateHz)}</option>)}{!isAutoHighest && refreshOptions.length === 0 && hasValidFixedRefresh(target) ? <option value={fixedModeKey(target)}>{formatRefresh((target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator ?? 1))}</option> : null}{refreshOptions.length === 0 && !hasValidFixedRefresh(target) && !isAutoHighest ? <option value="" disabled>{refreshPlaceholder}</option> : null}</select><span className="display-refresh-chevron" aria-hidden="true" /></div></div>{observed && !observed.isEnabled && getRefreshPolicy(target) === 'Fixed' && hasValidFixedRefresh(target) ? <p className="hint-line">{t('profile.refreshSavedHint')}</p> : null}{!observed ? <p className="hint-line">{t('profile.refreshMissingHint')}</p> : null}</div>
   </aside>;
 }
 
@@ -328,8 +332,10 @@ function formatRefresh(refreshRate: number) {
 }
 
 function DisplayTopologyValidation({ errors, showSelectionError }: { errors: string[]; showSelectionError: boolean }) {
+  const { t } = useTranslation();
   if (!showSelectionError && errors.length === 0) return null;
-  return <div className="display-topology-validation" role="alert">{(showSelectionError ? ['Dodaj co najmniej jeden ekran.', ...errors] : errors).filter((error, index, all) => all.indexOf(error) === index).map((error) => <span key={error}>{error}</span>)}</div>;
+  const fallbackMissing = t('profile.validationMinDisplays');
+  return <div className="display-topology-validation" role="alert">{(showSelectionError ? [fallbackMissing, ...errors] : errors).filter((error, index, all) => all.indexOf(error) === index).map((error) => <span key={error}>{error}</span>)}</div>;
 }
 
 function identityKey(identity: ProfileDisplayTarget['identity'] | undefined): string {

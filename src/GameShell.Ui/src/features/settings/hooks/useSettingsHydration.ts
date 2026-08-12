@@ -1,4 +1,6 @@
 import type { AppSettings, DisplayIdentity } from '../../../types/bridge';
+import { setI18nLanguage } from '../../../i18n/i18n';
+import { DEFAULT_LANGUAGE, detectPreferredLanguage, normalizeLanguageCode, type SupportedLanguage } from '../../../i18n/language';
 import { normalizeControllerShortcut } from '../../../utils/controllers';
 import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
 import { toLauncherType } from '../../../utils/modes';
@@ -20,6 +22,7 @@ type Options = {
   setLayout: (value: AppSettings['display']['pcGamingLayout']) => void;
   setHotkeys: (value: { consoleMode: string; pcGamingMode: string; workMode: string }) => void;
   setLauncher: (value: ReturnType<typeof toLauncherType>) => void;
+  setLanguage: (value: SupportedLanguage) => void;
   setConsoleBehaviour: (value: Pick<AppSettings['gameShell'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>) => void;
   setPcGamingBehaviour: (value: ReturnType<typeof toPcGamingBehaviourState>) => void;
   setWorkBehaviour: (value: Pick<AppSettings['workMode'], 'closeLauncher' | 'showTaskbars' | 'showDesktopIcons' | 'doNotMinimizeWindows'>) => void;
@@ -45,6 +48,9 @@ export function useSettingsHydration(options: Options) {
     options.setSelectedConsoleDisplays(consoleDisplays); options.setSelectedConsoleDisplay(consoleDisplays[0] ?? null); options.setProfiles(loadedProfiles); options.setActiveProfileName(activeProfile?.name ?? null); options.setProfileBehaviours(nextProfileBehaviours); options.setProfileLaunchers(nextProfileLaunchers); options.setProfileHotkeys(nextProfileHotkeys); options.setProfileControllerShortcuts(nextProfileControllerShortcuts); options.setWorkModeControllerShortcut(normalizeControllerShortcut(loadedSettings.controller?.workMode ?? null)); options.setSelectedProfileName(selectedProfileName); options.setLayout(activeProfile?.layout ?? loadedSettings.display?.pcGamingLayout ?? null);
     options.setHotkeys({ consoleMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.consoleMode || ''), pcGamingMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.pcGamingMode || ''), workMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.workMode || '') });
     options.setLauncher(nextProfileLaunchers[selectedProfileName] ?? defaultLauncher);
+    const detectedLanguage = normalizeLanguageCode(loadedSettings.ui?.language ?? detectPreferredLanguage());
+    setI18nLanguage(detectedLanguage);
+    options.setLanguage(detectedLanguage);
     const isFirstRun = !(loadedSettings.ui?.isFirstRunCompleted ?? false);
     options.setConsoleBehaviour(isFirstRun ? defaultConsoleBehaviour : { hideDesktopIcons: loadedSettings.gameShell?.hideDesktopIcons ?? true, hideTaskbar: loadedSettings.gameShell?.hideTaskbar ?? true, closeVisibleWindows: loadedSettings.gameShell?.closeVisibleWindows ?? true, minimizeRemainingWindows: loadedSettings.gameShell?.minimizeRemainingWindows ?? true, moveCursorToCorner: loadedSettings.gameShell?.moveCursorToCorner ?? true, hideCursor: loadedSettings.gameShell?.hideCursor ?? true, startLauncher: loadedSettings.gameShell?.startLauncher ?? true, bringLauncherToForeground: loadedSettings.gameShell?.bringLauncherToForeground ?? true });
     options.setPcGamingBehaviour(isFirstRun ? defaultPcGamingBehaviour : nextProfileBehaviours[selectedProfileName] ?? defaultBehaviour);

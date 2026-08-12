@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { DisplayLayoutProfile } from '../types/bridge';
 import { SettingRow } from './SettingRow';
 import { SettingsSection } from './SettingsSection';
@@ -15,15 +16,15 @@ type PcGamingBehaviour = {
 
 type PcGamingBehaviourKey = keyof PcGamingBehaviour;
 
-const pcGamingBehaviourOptions: Array<{ key: PcGamingBehaviourKey; label: string; description?: string }> = [
-  { key: 'hideDesktopIcons', label: 'Ukryj ikony pulpitu' },
-  { key: 'hideTaskbar', label: 'Ukryj pasek zadań' },
-  { key: 'closeVisibleWindows', label: 'Zamknij widoczne okna aplikacji' },
-  { key: 'minimizeRemainingWindows', label: 'Zminimalizuj pozostałe okna' },
-  { key: 'moveCursorToCorner', label: 'Przesuń kursor w róg' },
-  { key: 'hideCursor', label: 'Ukryj kursor' },
-  { key: 'startLauncher', label: 'Uruchom launcher' },
-  { key: 'bringLauncherToForeground', label: 'Przenieś launcher na pierwszy plan' }
+const pcGamingBehaviourOptions: Array<{ key: PcGamingBehaviourKey; labelKey: string; description?: string }> = [
+  { key: 'hideDesktopIcons', labelKey: 'behaviour.hideDesktopIcons' },
+  { key: 'hideTaskbar', labelKey: 'behaviour.hideTaskbar' },
+  { key: 'closeVisibleWindows', labelKey: 'behaviour.closeVisibleWindows' },
+  { key: 'minimizeRemainingWindows', labelKey: 'behaviour.minimizeRemainingWindows' },
+  { key: 'moveCursorToCorner', labelKey: 'behaviour.moveCursorToCorner' },
+  { key: 'hideCursor', labelKey: 'behaviour.hideCursor' },
+  { key: 'startLauncher', labelKey: 'behaviour.startLauncher' },
+  { key: 'bringLauncherToForeground', labelKey: 'behaviour.bringLauncherToForeground' }
 ];
 
 export function ConsoleBehaviourStep({
@@ -39,26 +40,27 @@ export function ConsoleBehaviourStep({
   pcGamingBehaviour: PcGamingBehaviour;
   onChangeBehaviourFlag: (key: PcGamingBehaviourKey, value: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const hasWorkingProfile = selectedProfileName.trim().length > 0;
-  const selectedProfileLabel = selectedProfileName || 'Brak zaznaczonego profilu';
+  const selectedProfileLabel = selectedProfileName || t('profile.noProfileSelected');
 
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">Krok {stepNumber}</p>
-      <h2>Zachowanie profilu</h2>
-      <p>Zdefiniuj, jak GameShell ma przygotować pulpit po aktywacji profilu. Te ustawienia będą stosowane podczas przechodzenia do trybu gamingowego.</p>
+      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
+      <h2>{t('behaviour.profileTitle')}</h2>
+      <p>{t('behaviour.profileDescription')}</p>
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
-          <span>Aktywny profil</span>
+          <span>{t('profile.activeProfile')}</span>
           <strong>{selectedProfileLabel}</strong>
         </div>
       </div>
       <div className="settings-category-list">
-        <SettingsSection title="PULPIT">
+        <SettingsSection title={t('behaviour.desktop')}>
           {pcGamingBehaviourOptions.slice(0, 2).map((option) => (
             <SettingRow
               key={option.key}
-              title={option.label}
+              title={t(option.labelKey)}
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
@@ -68,7 +70,7 @@ export function ConsoleBehaviourStep({
           {pcGamingBehaviourOptions.slice(4, 6).map((option) => (
             <SettingRow
               key={option.key}
-              title={option.label}
+              title={t(option.labelKey)}
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
@@ -76,11 +78,11 @@ export function ConsoleBehaviourStep({
             />
           ))}
         </SettingsSection>
-        <SettingsSection title="OKNA">
+        <SettingsSection title={t('behaviour.windows')}>
           {pcGamingBehaviourOptions.slice(2, 4).map((option) => (
             <SettingRow
               key={option.key}
-              title={option.label}
+              title={t(option.labelKey)}
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
@@ -88,11 +90,11 @@ export function ConsoleBehaviourStep({
             />
           ))}
         </SettingsSection>
-        <SettingsSection title="LAUNCHER">
+        <SettingsSection title={t('behaviour.launcher')}>
           {pcGamingBehaviourOptions.slice(6).map((option) => (
             <SettingRow
               key={option.key}
-              title={option.label}
+              title={t(option.labelKey)}
               description={option.description}
               checked={pcGamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}

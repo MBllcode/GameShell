@@ -36,7 +36,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
   const { setupState, displayState, formState, profileFeature, setupPageActions, displayWorkflow, navigation, flow } = options;
   const { mutations: profileMutations, controllerCapture } = profileFeature;
   const { setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog } = setupState;
-  const { launcher, pcGamingBehaviour, workBehaviour, hotkeys, finishOptions } = formState;
+  const { launcher, language, setLanguage, pcGamingBehaviour, workBehaviour, hotkeys, finishOptions } = formState;
 
   return useProfileSetupPageModel({
     flow: {
@@ -74,6 +74,8 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
     profile: {
       launcher,
       setLauncher: setupPageActions.updateProfileLauncher,
+      language,
+      setLanguage,
       pcGamingBehaviour,
       onChangePcGamingBehaviour: profileMutations.updatePcGamingBehaviourFlag,
       workBehaviour,

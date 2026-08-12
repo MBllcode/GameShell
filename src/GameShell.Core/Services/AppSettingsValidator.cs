@@ -24,6 +24,7 @@ public static class AppSettingsValidator
         settings.Hotkeys ??= new HotkeySettings();
         settings.Startup ??= new StartupSettings();
         settings.Ui ??= new UiSettings();
+        settings.Ui.Language = NormalizeLanguage(settings.Ui.Language ?? CultureInfo.CurrentUICulture.Name);
 
         settings.GameShell.CompletionDelaySeconds = Math.Clamp(settings.GameShell.CompletionDelaySeconds, 0, 600);
         settings.GameShell.ProtectedProcessNames ??= [];
@@ -54,6 +55,22 @@ public static class AppSettingsValidator
         EnsureGlobalWorkModeShortcutUniqueness(settings);
 
         return settings;
+    }
+
+    private static string NormalizeLanguage(string? value)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = CultureInfo.CurrentUICulture.Name;
+        }
+
+        if (normalized.StartsWith("pl", StringComparison.OrdinalIgnoreCase))
+        {
+            return "pl";
+        }
+
+        return normalized.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? "en" : "en";
     }
 
     private static double? ValidateWindowDimension(double? value, double minimum, double maximum)

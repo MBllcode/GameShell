@@ -10,6 +10,7 @@ import type { LauncherType } from '../../../utils/modes';
 import type { SetupMode } from '../../setup/setupFlow';
 import { assertSetupStateInvariants, resolveBootstrapState, type BootstrapRoute } from '../../setup/setupRouting';
 import { steps } from '../../setup/setupFlow';
+import type { SupportedLanguage } from '../../../i18n/language';
 
 type Options = BuildSettingsPayloadState & {
   isSetupComplete: boolean;
@@ -31,6 +32,7 @@ type Options = BuildSettingsPayloadState & {
   setLayout: (value: AppSettings['display']['pcGamingLayout']) => void;
   setHotkeys: (value: BuildSettingsPayloadState['hotkeys']) => void;
   setLauncher: (value: LauncherType) => void;
+  setLanguage: (value: SupportedLanguage) => void;
   setConsoleBehaviour: (value: BuildSettingsPayloadState['consoleBehaviour']) => void;
   setPcGamingBehaviour: (value: BuildSettingsPayloadState['pcGamingBehaviour']) => void;
   setWorkBehaviour: (value: BuildSettingsPayloadState['workBehaviour']) => void;
@@ -68,6 +70,7 @@ export function useSettingsIntegrationFeature(options: Options) {
     setLayout: options.setLayout,
     setHotkeys: options.setHotkeys,
     setLauncher: options.setLauncher,
+    setLanguage: options.setLanguage,
     setConsoleBehaviour: options.setConsoleBehaviour,
     setPcGamingBehaviour: options.setPcGamingBehaviour,
     setWorkBehaviour: options.setWorkBehaviour,

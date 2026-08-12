@@ -1,3 +1,4 @@
+import { normalizeLanguageCode } from '../../i18n/language';
 import { normalizeControllerShortcut } from '../../utils/controllers';
 import { normalizeHotkeyForDisplay } from '../../utils/hotkeys';
 import { getLauncherSettings, type LauncherType } from '../../utils/modes';
@@ -34,6 +35,7 @@ export type BuildSettingsPayloadState = {
   workModeControllerShortcut: AppSettings['controller']['workMode'];
   pcGamingBehaviour: PcGamingBehaviourState;
   launcher: LauncherType;
+  language: string;
   hotkeys: HotkeySettingsState;
   consoleBehaviour: ConsoleBehaviourState;
   workBehaviour: WorkBehaviourState;
@@ -86,6 +88,6 @@ export function buildSettingsPayload(
     controller: { enabled: Object.values(effectivePcGamingProfileControllerShortcuts).some((shortcut) => (shortcut?.buttons.length ?? 0) > 0) || (state.workModeControllerShortcut?.buttons.length ?? 0) > 0 || state.settings?.controller?.enabled || false, consoleMode: state.settings?.controller?.consoleMode ?? null, pcGamingMode: activeProfileName ? normalizeControllerShortcut(activeProfileControllerShortcut) : normalizeControllerShortcut(state.settings?.controller?.pcGamingMode ?? null), workMode: normalizeControllerShortcut(state.workModeControllerShortcut) },
     hotkeys: { consoleMode: normalizeHotkeyForDisplay(state.hotkeys.consoleMode), pcGamingMode: normalizeHotkeyForDisplay(savedHotkeys.enterProfile || state.hotkeys.pcGamingMode), workMode: normalizeHotkeyForDisplay(state.hotkeys.workMode) },
     startup: { startWithWindows: state.finishOptions.startWithWindows, startMinimizedToTray: state.finishOptions.startMinimized, createStartMenuShortcut: state.finishOptions.startMenuShortcut, createDesktopShortcut: state.finishOptions.desktopShortcut },
-    ui: { closeToTray: true, isFirstRunCompleted }
+    ui: { closeToTray: true, isFirstRunCompleted, language: normalizeLanguageCode(state.language) }
   };
 }

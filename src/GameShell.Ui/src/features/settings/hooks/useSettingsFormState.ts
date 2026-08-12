@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '../../../i18n/language';
 import type { LauncherType } from '../../../utils/modes';
 
 export type HotkeySettingsState = { consoleMode: string; pcGamingMode: string; workMode: string };
@@ -64,6 +65,7 @@ export const defaultFinishOptions: FinishOptions = {
 export function useSettingsFormState() {
   const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', pcGamingMode: '', workMode: '' });
   const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
+  const [language, setLanguage] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
   const [consoleBehaviour, setConsoleBehaviour] = useState<ConsoleBehaviourState>({ ...defaultConsoleBehaviour });
   const [pcGamingBehaviour, setPcGamingBehaviour] = useState<PcGamingBehaviourState>({ ...defaultPcGamingBehaviour });
   const [workBehaviour, setWorkBehaviour] = useState<WorkBehaviourState>({ ...defaultWorkBehaviour });
@@ -74,6 +76,8 @@ export function useSettingsFormState() {
     setHotkeys,
     launcher,
     setLauncher,
+    language,
+    setLanguage,
     consoleBehaviour,
     setConsoleBehaviour,
     pcGamingBehaviour,
