@@ -26,6 +26,7 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         int? gameProcessId = null,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("[PLAYNITE RETURN START] GamePid={GamePid} PlaynitePid={PlaynitePid} Reason={Reason}.", gameProcessId, "unknown", "GameExited");
         _logger.LogInformation("PLAYNITE POST-GAME RECOVERY START");
         await Task.Delay(TimeSpan.FromMilliseconds(1500), cancellationToken);
 
@@ -37,6 +38,13 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
             gameProcessId,
             diagnostics?.ProcessId,
             1500);
+        _logger.LogInformation("[PLAYNITE ACTIVATION STATE] GamePid={GamePid} PlaynitePid={PlaynitePid} Window={WindowHandle} IsForeground={IsForeground} IsHealthy={IsHealthy} Reason={Reason}.",
+            gameProcessId,
+            diagnostics?.ProcessId ?? -1,
+            diagnostics is null ? "unknown" : FormatHandle(diagnostics.MainWindowHandle),
+            diagnostics?.IsForeground ?? false,
+            diagnostics?.IsHealthy ?? false,
+            diagnostics is null ? "launcher not found" : "diagnostics captured");
         if (diagnostics is not null)
         {
             LogDiagnostics("launcher return", diagnostics);
@@ -256,19 +264,51 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
                         var foregroundWindow = GetForegroundWindow();
                         GetWindowThreadProcessId(foregroundWindow, out var foregroundProcessId);
                         var activeWindow = GetActiveWindow();
+                        var focusWindow = GetFocus();
+                        var guiThreadId = foregroundWindow != IntPtr.Zero ? GetWindowThreadProcessId(foregroundWindow, out var threadId) : 0;
+                        var guiThreadInfo = default(GuiThreadInfo);
+                        var guiThreadInfoReady = guiThreadId != 0 && GetGUIThreadInfo(guiThreadId, ref guiThreadInfo);
+                        var captureWindow = guiThreadInfoReady ? guiThreadInfo.hwndCapture : IntPtr.Zero;
+                        var foregroundMatchesWindow = IsWindowOrChild(foregroundWindow, mainWindowHandle);
+                        var activeMatchesWindow = IsWindowOrChild(activeWindow, mainWindowHandle);
+                        var focusMatchesWindow = IsWindowOrChild(focusWindow, mainWindowHandle);
+                        var captureMatchesWindow = IsWindowOrChild(captureWindow, mainWindowHandle);
+                        var isForeground = foregroundProcessId == (uint)process.Id &&
+                            (foregroundMatchesWindow || activeMatchesWindow || focusMatchesWindow || captureMatchesWindow);
+
                         _logger.LogInformation("Launcher process found. PID={ProcessId}.", process.Id);
                         _logger.LogInformation("Launcher window found. HWND={WindowHandle}.", FormatHandle(mainWindowHandle));
+                        _logger.LogInformation(
+                            "[PLAYNITE ACTIVATION STATE] Window={WindowHandle}, Foreground={ForegroundHandle}, ForegroundPid={ForegroundPid}, Active={ActiveHandle}, Focus={FocusHandle}, Capture={CaptureHandle}, ParentMatch={ParentMatch}, ActiveMatch={ActiveMatch}, FocusMatch={FocusMatch}, CaptureMatch={CaptureMatch}, IsForegroundConfirmed={IsForeground}.",
+                            FormatHandle(mainWindowHandle),
+                            FormatHandle(foregroundWindow),
+                            foregroundProcessId,
+                            FormatHandle(activeWindow),
+                            FormatHandle(focusWindow),
+                            FormatHandle(captureWindow),
+                            foregroundMatchesWindow,
+                            activeMatchesWindow,
+                            focusMatchesWindow,
+                            captureMatchesWindow,
+                            isForeground);
+
                         return new LauncherDiagnostics(
                             process.Id,
                             mainWindowHandle,
                             foregroundWindow,
                             foregroundProcessId,
                             activeWindow,
+                            focusWindow,
+                            captureWindow,
                             IsWindowVisible(mainWindowHandle),
                             IsWindowEnabled(mainWindowHandle),
                             IsIconic(mainWindowHandle),
                             process.Responding,
-                            foregroundWindow == mainWindowHandle);
+                            isForeground,
+                            guiThreadInfoReady,
+                            foregroundMatchesWindow,
+                            activeMatchesWindow,
+                            focusMatchesWindow);
                     }
                 }
                 catch
@@ -288,7 +328,7 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
     private void LogDiagnostics(string phase, LauncherDiagnostics diagnostics)
     {
         _logger.LogInformation(
-            "Launcher focus diagnostics ({Phase}): LauncherWindowFound=true, HWND={MainHwnd}, Visible={Visible}, Minimized={Minimized}, Responding={Responding}, ForegroundBeforePid={ForegroundBeforePid}, ForegroundPid={ForegroundPid}, PlaynitePid={LauncherPid}, ForegroundConfirmed={IsForeground}.",
+            "Launcher focus diagnostics ({Phase}): LauncherWindowFound=true, HWND={MainHwnd}, Visible={Visible}, Minimized={Minimized}, Responding={Responding}, ForegroundBeforePid={ForegroundBeforePid}, ForegroundPid={ForegroundPid}, PlaynitePid={LauncherPid}, ForegroundConfirmed={IsForeground}, GuiThreadActive={GuiThreadActive}, ForegroundMatchesWindow={ForegroundMatchesWindow}, ActiveMatchesWindow={ActiveMatchesWindow}, FocusMatchesWindow={FocusMatchesWindow}.",
             phase,
             FormatHandle(diagnostics.MainWindowHandle),
             diagnostics.IsVisible,
@@ -297,13 +337,17 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
             diagnostics.ForegroundProcessId,
             diagnostics.ForegroundProcessId,
             diagnostics.ProcessId,
-            diagnostics.IsForeground);
+            diagnostics.IsForeground,
+            diagnostics.GuiThreadActive,
+            diagnostics.ForegroundMatchesWindow,
+            diagnostics.ActiveMatchesWindow,
+            diagnostics.FocusMatchesWindow);
     }
 
     private void LogFocusInspection(string phase, LauncherFocusInspection inspection)
     {
         _logger.LogInformation(
-            "Launcher focus diagnostics ({Phase}): LauncherWindowFound={WindowFound}, HWND={Hwnd}, Visible={Visible}, Minimized={Minimized}, Responding={Responding}, ForegroundAfterPid={ForegroundAfterPid}, ForegroundPid={ForegroundPid}, PlaynitePid={PlaynitePid}, ForegroundConfirmed={ForegroundConfirmed}.",
+            "Launcher focus diagnostics ({Phase}): LauncherWindowFound={WindowFound}, HWND={Hwnd}, Visible={Visible}, Minimized={Minimized}, Responding={Responding}, ForegroundAfterPid={ForegroundAfterPid}, ForegroundPid={ForegroundPid}, PlaynitePid={PlaynitePid}, ForegroundConfirmed={ForegroundConfirmed}, ActiveWindow={ActiveWindow}, FocusWindow={FocusWindow}, CaptureWindow={CaptureWindow}, ActiveMatchesWindow={ActiveMatchesWindow}, FocusMatchesWindow={FocusMatchesWindow}.",
             phase,
             inspection.WindowExists,
             FormatHandle(inspection.WindowHandle),
@@ -311,10 +355,15 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
             inspection.IsMinimized,
             inspection.IsResponding,
             inspection.ForegroundProcessId,
-                inspection.ForegroundProcessId,
+            inspection.ForegroundProcessId,
             inspection.ProcessId,
-            inspection.IsForeground);
-            }
+            inspection.IsForeground,
+            FormatHandle(inspection.ActiveWindow),
+            FormatHandle(inspection.FocusWindow),
+            FormatHandle(inspection.CaptureWindow),
+            inspection.ActiveMatchesWindow,
+            inspection.FocusMatchesWindow);
+    }
 
     private void TryRecoverFocus(IntPtr launcherWindow)
     {
@@ -323,11 +372,62 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
             return;
         }
 
+        _logger.LogInformation("[PLAYNITE ACTIVATION RECOVERY] Window={WindowHandle} Action={Action}.", FormatHandle(launcherWindow), "restore-and-foreground");
         _logger.LogInformation("Focus recovery attempt: restoring and foregrounding Playnite HWND={MainHwnd}.", FormatHandle(launcherWindow));
         ShowWindow(launcherWindow, SwRestore);
         BringWindowToTop(launcherWindow);
         SetForegroundWindow(launcherWindow);
-        _logger.LogInformation("Focus recovery SetForegroundWindow/BringWindowToTop calls completed; SetFocus skipped because this background thread does not own Playnite's UI thread.");
+
+        var foregroundWindow = GetForegroundWindow();
+        GetWindowThreadProcessId(foregroundWindow, out var foregroundProcessId);
+        var foregroundThreadId = GetWindowThreadProcessId(foregroundWindow, out var _);
+        var launcherThreadId = GetWindowThreadProcessId(launcherWindow, out var _);
+
+        if (foregroundThreadId != 0 && launcherThreadId != 0 && foregroundThreadId != launcherThreadId)
+        {
+            _logger.LogInformation(
+                "[PLAYNITE ACTIVATION RECOVERY] TargetWindow={WindowHandle}, ForegroundWindow={ForegroundWindow}, ForegroundPid={ForegroundPid}, LauncherThreadId={LauncherThreadId}, ForegroundThreadId={ForegroundThreadId}.",
+                FormatHandle(launcherWindow),
+                FormatHandle(foregroundWindow),
+                foregroundProcessId,
+                launcherThreadId,
+                foregroundThreadId);
+
+            if (AttachThreadInput(foregroundThreadId, launcherThreadId, true))
+            {
+                try
+                {
+                    SetForegroundWindow(launcherWindow);
+                    SetActiveWindow(launcherWindow);
+                    SetFocus(launcherWindow);
+                    _logger.LogInformation("[PLAYNITE ACTIVATION RECOVERY] AttachThreadInput fallback activated the launcher window with a bounded foreground handoff.");
+                }
+                finally
+                {
+                    AttachThreadInput(foregroundThreadId, launcherThreadId, false);
+                }
+            }
+        }
+
+        _logger.LogInformation("Focus recovery SetForegroundWindow/BringWindowToTop calls completed; background-thread activation is bounded and verified by the next inspection pass.");
+    }
+
+    private static bool IsWindowOrChild(IntPtr candidate, IntPtr rootWindow)
+    {
+        if (candidate == IntPtr.Zero || rootWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        for (var current = candidate; current != IntPtr.Zero; current = GetParent(current))
+        {
+            if (current == rootWindow)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IntPtr FindTopLevelWindow(int processId)
@@ -380,11 +480,17 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         IntPtr ForegroundWindow,
         uint ForegroundProcessId,
         IntPtr ActiveWindow,
+        IntPtr FocusWindow,
+        IntPtr CaptureWindow,
         bool IsVisible,
         bool IsEnabled,
         bool IsMinimized,
         bool IsResponding,
-        bool IsForeground)
+        bool IsForeground,
+        bool GuiThreadActive,
+        bool ForegroundMatchesWindow,
+        bool ActiveMatchesWindow,
+        bool FocusMatchesWindow)
     {
         public bool IsHealthy => IsVisible && IsEnabled && !IsMinimized && IsResponding;
 
@@ -395,7 +501,15 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
             IsVisible,
             IsMinimized,
             IsResponding,
-            ForegroundProcessId);
+            ForegroundProcessId,
+            ForegroundWindow,
+            ActiveWindow,
+            FocusWindow,
+            CaptureWindow,
+            GuiThreadActive,
+            ForegroundMatchesWindow,
+            ActiveMatchesWindow,
+            FocusMatchesWindow);
     }
 
     private const int ExStyleIndex = -20;
@@ -408,6 +522,20 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GuiThreadInfo
+    {
+        public uint Size;
+        public uint Flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+        public WindowRect rcCaret;
     }
 
     [DllImport("user32.dll")]
@@ -432,6 +560,12 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
     private static extern bool SetForegroundWindow(IntPtr window);
 
     [DllImport("user32.dll")]
+    private static extern IntPtr SetActiveWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr window);
+
+    [DllImport("user32.dll")]
     private static extern bool BringWindowToTop(IntPtr window);
 
     [DllImport("user32.dll")]
@@ -439,6 +573,18 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetFocus();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetParent(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo threadInfo);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);

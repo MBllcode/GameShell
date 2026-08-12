@@ -2,6 +2,13 @@
 
 Aktualne, robocze podsumowanie stanu projektu.
 
+## Aktualny status runtime
+
+- Naprawiono inicjalizację stanu po pierwszym uruchomieniu: dashboard nie pozostaje w nieustalonym stanie po skończeniu setupu.
+- Zabezpieczono zapis ustawień przez atomic write + backup recovery; `settings.json` nie jest już modyfikowany bezpośrednio w miejscu.
+- Monitor sesji Windows jest teraz bardziej ostrożny: filtruje procesy launchera/systemowe, czeka na stabilizację kandydata przed `GameActive`, i loguje realne przejścia `candidate observed -> stabilized -> exited`.
+- Recovery Playnite nie jest zbyt agresywnie rozbudowywany: loguje stan aktywacji i działa tylko po potwierdzeniu prawdziwego cyklu `GameExited`/`ReturningToLauncher`, bez dodatkowych mechanizmów focus bez dowodu runtime.
+
 ## Stack i architektura
 
 - .NET 9 + WPF (`GameShell.Desktop`) jako host UI.

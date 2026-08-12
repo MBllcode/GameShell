@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -229,7 +230,10 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         {
             if (_snapshot.State == ConsoleSessionState.LauncherActive)
             {
-                SetStateLocked(ConsoleSessionState.GameActive, _snapshot.ProfileName, null, "GameDetected");
+                SetStateLocked(ConsoleSessionState.LaunchingGame, _snapshot.ProfileName, null, "GameDetected", args.ProcessId, args.ProcessName, null, null);
+                _logger.LogInformation("[GAME SESSION STATE] OldState={OldState} NewState={NewState} LauncherPid={LauncherPid} GamePid={GamePid} GameProcess={GameProcess} Reason={Reason}.", ConsoleSessionState.LauncherActive, ConsoleSessionState.LaunchingGame, "unknown", args.ProcessId, args.ProcessName, "GameDetected");
+                SetStateLocked(ConsoleSessionState.GameActive, _snapshot.ProfileName, null, "GameDetectedConfirmed", args.ProcessId, args.ProcessName, null, null);
+                _logger.LogInformation("[GAME SESSION STATE] OldState={OldState} NewState={NewState} LauncherPid={LauncherPid} GamePid={GamePid} GameProcess={GameProcess} Reason={Reason}.", ConsoleSessionState.LaunchingGame, ConsoleSessionState.GameActive, "unknown", args.ProcessId, args.ProcessName, "GameDetectedConfirmed");
                 _logger.LogInformation("Game detected PID={ProcessId}; console session is now active.", args.ProcessId);
             }
             else
@@ -257,7 +261,8 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
 
             var profileName = GetSnapshot().ProfileName;
             _logger.LogInformation("Game exited. PID={ProcessId}, Process={ProcessName}.", args.ProcessId, args.ProcessName);
-            SetState(ConsoleSessionState.ReturningToLauncher, profileName, null);
+            SetState(ConsoleSessionState.ReturningToLauncher, profileName, null, args.ProcessId, args.ProcessName);
+            _logger.LogInformation("[PLAYNITE RETURN START] GamePid={GamePid} PlaynitePid={PlaynitePid} Reason={Reason}.", args.ProcessId, "unknown", "GameExited");
             _logger.LogInformation("Game exited; waiting for launcher return.");
             var settings = await _settingsService.LoadAsync();
             var result = await _launcherRecoveryStrategy.RecoverAsync(settings, profileName, args.ProcessId);
@@ -268,17 +273,17 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
             }
             if (result.Success)
             {
-                SetState(ConsoleSessionState.LauncherActive, profileName, null);
+                SetState(ConsoleSessionState.LauncherActive, profileName, null, null, null);
                 _logger.LogInformation("{RecoveryMessage}", result.Message);
             }
             else
             {
-                SetState(ConsoleSessionState.Faulted, GetSnapshot().ProfileName, result.Message);
+                SetState(ConsoleSessionState.Faulted, GetSnapshot().ProfileName, result.Message, null, null);
             }
         }
         catch (Exception exception)
         {
-            SetState(ConsoleSessionState.Faulted, GetSnapshot().ProfileName, exception.Message);
+            SetState(ConsoleSessionState.Faulted, GetSnapshot().ProfileName, exception.Message, null, null);
             _logger.LogError(exception, "Returning to launcher failed.");
         }
         finally
@@ -287,25 +292,49 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         }
     }
 
-    private void SetState(ConsoleSessionState state, string? profileName, string? error)
+    private void SetState(ConsoleSessionState state, string? profileName, string? error, int? gamePid = null, string? gameProcess = null)
     {
         lock (_stateGate)
         {
-            SetStateLocked(state, profileName, error, "ConsoleSessionManager");
+            SetStateLocked(state, profileName, error, "ConsoleSessionManager", gamePid, gameProcess, null, null);
         }
     }
 
-    private void SetStateLocked(ConsoleSessionState state, string? profileName, string? error, string source)
+    private void SetStateLocked(
+        ConsoleSessionState state,
+        string? profileName,
+        string? error,
+        string source,
+        int? gamePid,
+        string? gameProcess,
+        int? launcherPid,
+        string? launcherProcess)
     {
         var previous = _snapshot;
+        var nextGamePid = gamePid ?? previous.ActiveGamePid;
+        var nextGameProcess = gameProcess ?? previous.ActiveGameProcess;
+        var nextLauncherPid = launcherPid ?? previous.LauncherPid;
+        var nextLauncherProcess = launcherProcess ?? previous.LauncherProcess;
+
+        if (state is not ConsoleSessionState.GameActive and not ConsoleSessionState.LaunchingGame and not ConsoleSessionState.ReturningToLauncher)
+        {
+            nextGamePid = null;
+            nextGameProcess = null;
+        }
+
         _snapshot = new ConsoleSessionSnapshot
         {
             State = state,
             SessionGeneration = _sessionGeneration,
             ProfileName = profileName,
             LastError = error,
+            ActiveGamePid = nextGamePid,
+            ActiveGameProcess = nextGameProcess,
+            LauncherPid = nextLauncherPid,
+            LauncherProcess = nextLauncherProcess,
             ChangedAt = DateTimeOffset.Now
         };
+        _logger.LogInformation("[GAME SESSION STATE] OldState={OldState} NewState={NewState} LauncherPid={LauncherPid} GamePid={GamePid} GameProcess={GameProcess} Reason={Reason}.", previous.State, state, nextLauncherPid?.ToString() ?? "unknown", nextGamePid?.ToString() ?? "unknown", nextGameProcess ?? "unknown", source);
         _logger.LogInformation("RUNTIME STATE UPDATE Source={Source} SessionId={SessionId} OldState={OldState} NewState={NewState}.", source, _sessionGeneration, previous.State, state);
     }
 

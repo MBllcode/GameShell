@@ -9,6 +9,25 @@ namespace GameShell.Windows.Services;
 
 public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
 {
+    private static readonly HashSet<string> ProtectedProcessNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "GameShell",
+        "GameShell.Desktop",
+        "explorer",
+        "steam",
+        "steamwebhelper",
+        "Playnite.FullscreenApp",
+        "Playnite.DesktopApp",
+        "powershell",
+        "pwsh",
+        "cmd",
+        "conhost",
+        "wininit",
+        "csrss"
+    };
+
+    private static readonly TimeSpan CandidateStabilizationWindow = TimeSpan.FromSeconds(2);
+
     private readonly ILogger<WindowsGameSessionMonitor> _logger;
     private readonly object _gate = new();
     private CancellationTokenSource? _monitorCancellation;
@@ -16,6 +35,9 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
     private string[] _processNames = [];
     private int? _detectedProcessId;
     private string? _detectedProcessName;
+    private int? _candidateProcessId;
+    private string? _candidateProcessName;
+    private DateTimeOffset? _candidateObservedAt;
 
     public WindowsGameSessionMonitor(ILogger<WindowsGameSessionMonitor> logger)
     {
@@ -41,9 +63,22 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
             _processNames = normalizedNames;
             _detectedProcessId = null;
             _detectedProcessName = null;
+            _candidateProcessId = null;
+            _candidateProcessName = null;
+            _candidateObservedAt = null;
             _monitorCancellation = new CancellationTokenSource();
             _monitorTask = MonitorAsync(_monitorCancellation.Token);
         }
+
+        _logger.LogInformation(
+            "[GAME SESSION MONITOR] Launcher={Launcher} ForegroundPid={ForegroundPid} ForegroundProcess={ForegroundProcess} CandidateGamePid={CandidateGamePid} CandidateGameProcess={CandidateGameProcess} LauncherPid={LauncherPid} Reason={Reason}.",
+            "Playnite",
+            GetForegroundProcessId(),
+            GetForegroundProcessName(),
+            "unknown",
+            "unknown",
+            FindLauncherProcessId(),
+            normalizedNames.Length == 0 ? "no configured game names" : "monitor started");
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -60,6 +95,9 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
             _monitorTask = null;
             _detectedProcessId = null;
             _detectedProcessName = null;
+            _candidateProcessId = null;
+            _candidateProcessName = null;
+            _candidateObservedAt = null;
         }
 
         if (monitorTask is not null)
@@ -85,38 +123,81 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var detected = FindConfiguredGame();
+            var foreground = GetForegroundProcessInfo();
+            GameProcessInfo? candidate = null;
             EventHandler<GameSessionEventArgs>? handler = null;
             GameSessionEventArgs? eventArgs = null;
-            var isGameRunning = false;
+            string reason = string.Empty;
+            var logCandidate = false;
+
             lock (_gate)
             {
-                if (detected is not null && detected.ProcessId == _detectedProcessId)
+                candidate = FindConfiguredGame();
+
+                if (_detectedProcessId is not null)
                 {
-                    detected = null;
+                    if (candidate is null || candidate.ProcessId != _detectedProcessId.Value)
+                    {
+                        var processId = _detectedProcessId.Value;
+                        var processName = _detectedProcessName ?? string.Empty;
+                        _detectedProcessId = null;
+                        _detectedProcessName = null;
+                        _candidateProcessId = null;
+                        _candidateProcessName = null;
+                        _candidateObservedAt = null;
+                        handler = GameExited;
+                        eventArgs = new GameSessionEventArgs(processId, processName);
+                        reason = "tracked game process exited";
+                        logCandidate = true;
+                    }
                 }
-                else if (detected is not null)
+                else if (candidate is not null)
                 {
-                    _detectedProcessId = detected.ProcessId;
-                    _detectedProcessName = detected.ProcessName;
-                    handler = GameDetected;
-                    eventArgs = new GameSessionEventArgs(detected.ProcessId, detected.ProcessName);
-                    isGameRunning = true;
+                    if (_candidateProcessId != candidate.ProcessId)
+                    {
+                        _candidateProcessId = candidate.ProcessId;
+                        _candidateProcessName = candidate.ProcessName;
+                        _candidateObservedAt = DateTimeOffset.UtcNow;
+                        reason = "new candidate observed";
+                        logCandidate = true;
+                    }
+                    else if (_candidateObservedAt is not null && DateTimeOffset.UtcNow - _candidateObservedAt >= CandidateStabilizationWindow)
+                    {
+                        _detectedProcessId = candidate.ProcessId;
+                        _detectedProcessName = candidate.ProcessName;
+                        _candidateProcessId = null;
+                        _candidateProcessName = null;
+                        _candidateObservedAt = null;
+                        handler = GameDetected;
+                        eventArgs = new GameSessionEventArgs(candidate.ProcessId, candidate.ProcessName);
+                        reason = "candidate stabilized";
+                        logCandidate = true;
+                    }
                 }
-                else if (_detectedProcessId is not null)
+                else
                 {
-                    var processId = _detectedProcessId.Value;
-                    var processName = _detectedProcessName ?? string.Empty;
-                    _detectedProcessId = null;
-                    _detectedProcessName = null;
-                    handler = GameExited;
-                    eventArgs = new GameSessionEventArgs(processId, processName);
+                    _candidateProcessId = null;
+                    _candidateProcessName = null;
+                    _candidateObservedAt = null;
                 }
+            }
+
+            if (logCandidate)
+            {
+                _logger.LogInformation(
+                    "[GAME SESSION MONITOR] Launcher={Launcher} ForegroundPid={ForegroundPid} ForegroundProcess={ForegroundProcess} CandidateGamePid={CandidateGamePid} CandidateGameProcess={CandidateGameProcess} LauncherPid={LauncherPid} Reason={Reason}.",
+                    "Playnite",
+                    foreground?.ProcessId ?? -1,
+                    foreground?.ProcessName ?? "unknown",
+                    eventArgs?.ProcessId ?? _candidateProcessId ?? -1,
+                    eventArgs?.ProcessName ?? _candidateProcessName ?? "unknown",
+                    FindLauncherProcessId(),
+                    reason);
             }
 
             if (handler is not null)
             {
-                _logger.LogInformation("Configured game process state changed. PID={ProcessId}, Running={Running}.", eventArgs!.ProcessId, isGameRunning);
+                _logger.LogInformation("Configured game process state changed. PID={ProcessId}, Running={Running}.", eventArgs!.ProcessId, handler == GameDetected);
                 handler(this, eventArgs);
             }
 
@@ -136,14 +217,20 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
         {
             try
             {
-                if (Process.GetProcessesByName(processName).Any())
+                foreach (var process in Process.GetProcessesByName(processName))
                 {
-                    var process = Process.GetProcessesByName(processName).FirstOrDefault();
-                    if (process is not null)
+                    try
                     {
-                        var result = new GameProcessInfo(process.Id, process.ProcessName);
+                        if (!IsLikelyGameCandidate(process))
+                        {
+                            continue;
+                        }
+
+                        return new GameProcessInfo(process.Id, process.ProcessName);
+                    }
+                    finally
+                    {
                         process.Dispose();
-                        return result;
                     }
                 }
             }
@@ -156,6 +243,104 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
         return null;
     }
 
+    private static bool IsLikelyGameCandidate(Process process)
+    {
+        if (process.HasExited)
+        {
+            return false;
+        }
+
+        var normalizedName = process.ProcessName ?? string.Empty;
+        if (ProtectedProcessNames.Contains(normalizedName))
+        {
+            return false;
+        }
+
+        if (process.MainWindowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (!IsWindowVisible(process.MainWindowHandle))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int? FindLauncherProcessId()
+    {
+        foreach (var processName in new[] { "Playnite.FullscreenApp", "Playnite.DesktopApp" })
+        {
+            var process = Process.GetProcessesByName(processName).FirstOrDefault();
+            if (process is not null)
+            {
+                var id = process.Id;
+                process.Dispose();
+                return id;
+            }
+        }
+
+        return null;
+    }
+
+    private static int? GetForegroundProcessId()
+    {
+        var handle = GetForegroundWindow();
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        GetWindowThreadProcessId(handle, out var processId);
+        return processId == 0 ? null : (int)processId;
+    }
+
+    private static string? GetForegroundProcessName()
+    {
+        var foregroundProcessId = GetForegroundProcessId();
+        if (foregroundProcessId is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Process.GetProcessById(foregroundProcessId.Value).ProcessName;
+        }
+        catch
+        {
+            return "unknown";
+        }
+    }
+
+    private static ForegroundProcessInfo? GetForegroundProcessInfo()
+    {
+        var handle = GetForegroundWindow();
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        GetWindowThreadProcessId(handle, out var processId);
+        if (processId == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var process = Process.GetProcessById((int)processId);
+            return new ForegroundProcessInfo((int)processId, process.ProcessName);
+        }
+        catch
+        {
+            return new ForegroundProcessInfo((int)processId, "unknown");
+        }
+    }
+
+    private sealed record ForegroundProcessInfo(int ProcessId, string ProcessName);
     private sealed record GameProcessInfo(int ProcessId, string ProcessName);
 
     public void Dispose()
@@ -164,4 +349,12 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
         _monitorCancellation?.Dispose();
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr windowHandle, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
 }

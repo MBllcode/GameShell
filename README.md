@@ -69,6 +69,13 @@ If the destination EXE is locked (running process), script writes a timestamped 
 - `Start with Windows` writes Windows autostart integration, and `Start minimized to tray` now applies on normal app startup.
 - Sidebar navigation rows fill their available container width; their chevrons remain vertically centered and move only horizontally on hover.
 
+## Current project status
+
+- First-run mode initialization is fixed: the dashboard now hydrates the correct runtime mode instead of showing an uninitialized status after setup.
+- Settings persistence is now crash-safe and atomic: writes go through `.tmp` + backup recovery and avoid in-place corruption of `settings.json`.
+- The Windows session monitor now filters launcher/system processes, requires a short stabilization window before declaring a game active, and logs the real candidate/exit transitions for debug validation.
+- Playnite return diagnostics remain intentionally narrow: the code logs the full recovery state and invokes the existing bounded focus restore path only after the lifecycle transition is confirmed in runtime.
+
 ## Project layout
 
 ```text

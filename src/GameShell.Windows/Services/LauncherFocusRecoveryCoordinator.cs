@@ -7,10 +7,23 @@ public sealed record LauncherFocusInspection(
     bool IsVisible,
     bool IsMinimized,
     bool IsResponding,
-    uint ForegroundProcessId)
+    uint ForegroundProcessId,
+    IntPtr ForegroundWindow = default,
+    IntPtr ActiveWindow = default,
+    IntPtr FocusWindow = default,
+    IntPtr CaptureWindow = default,
+    bool GuiThreadActive = false,
+    bool ForegroundMatchesWindow = false,
+    bool ActiveMatchesWindow = false,
+    bool FocusMatchesWindow = false)
 {
     public bool IsHealthy => WindowExists && IsVisible && !IsMinimized && IsResponding;
-    public bool IsForeground => WindowExists && ForegroundProcessId == (uint)ProcessId;
+    public bool IsForeground =>
+        WindowExists &&
+        (ForegroundProcessId == (uint)ProcessId ||
+         ForegroundMatchesWindow ||
+         ActiveMatchesWindow ||
+         FocusMatchesWindow);
 }
 
 public sealed record LauncherFocusRecoveryResult(
