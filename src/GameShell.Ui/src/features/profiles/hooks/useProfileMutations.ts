@@ -1,23 +1,20 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  isDuplicateProfileControllerShortcut,
-  isDuplicateWorkModeControllerShortcut,
-  isSameControllerShortcut,
   normalizeControllerButtons
 } from '../../../utils/controllers';
-import { isSameHotkey, normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
+import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
 import {
-  isDuplicateProfileEnterHotkey,
-  isDuplicateWorkModeHotkey,
   type PcGamingProfileBehaviourMap,
   type PcGamingProfileControllerShortcutMap,
   type PcGamingProfileHotkeysMap,
   type PcGamingProfileLauncherMap,
   type ProfileHotkeysState
 } from '../utils';
+import { tryAssignProfileControllerShortcut, tryAssignProfileHotkey, tryAssignWorkModeControllerShortcut, tryAssignWorkModeHotkey } from '../shortcutAssignment';
 import type { ControllerShortcutSettings } from '../../../types/bridge';
 import type { LauncherType } from '../../../utils/modes';
+import { triggerValidationError } from '../../../utils/validation';
 
 type PcGamingBehaviourState = {
   hideDesktopIcons: boolean;
@@ -104,72 +101,75 @@ export function useProfileMutations({
     markUnsavedChanges();
   }, [markUnsavedChanges, setLauncher, setProfileLaunchers]);
 
-  const updateProfileHotkey = useCallback((profileName: string, key: keyof ProfileHotkeysState, value: string) => {
+  const updateProfileHotkey = useCallback((profileName: string, key: keyof ProfileHotkeysState, value: string): boolean => {
     const normalizedValue = normalizeHotkeyForDisplay(value);
-    if (key === 'enterProfile' && (isDuplicateProfileEnterHotkey(profileName, normalizedValue, profileHotkeys) || isSameHotkey(normalizedValue, workModeHotkey))) {
-      setProfileHotkeyValidationError(t('profile.duplicateHotkeyOther'));
-      return;
+    const assignment = key === 'enterProfile'
+      ? tryAssignProfileHotkey(profileName, normalizedValue, profileHotkeys, workModeHotkey)
+      : { accepted: true, value: profileHotkeys, validationResult: 'Valid' as const };
+    if (!assignment.accepted) {
+      console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileHotkeys[profileName]?.enterProfile ?? '', Candidate: normalizedValue, ValidationResult: 'Conflict', DraftUpdated: false, Persisted: false });
+      triggerValidationError(t('profile.duplicateHotkeyOther'), setProfileHotkeyValidationError);
+      return false;
     }
 
     setProfileHotkeyValidationError(null);
     setError(null);
-    setProfileHotkeys((current) => ({
-      ...current,
-      [profileName]: { ...(current[profileName] ?? defaultProfileHotkeys), [key]: normalizedValue }
-    }));
+    setProfileHotkeys(assignment.value);
     markUnsavedChanges();
 
     if (workingProfileName === profileName) {
       setHotkeys((current) => ({ ...current, pcGamingMode: key === 'enterProfile' ? normalizedValue : current.pcGamingMode }));
     }
+    console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileHotkeys[profileName]?.enterProfile ?? '', Candidate: normalizedValue, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
+    return true;
   }, [markUnsavedChanges, profileHotkeys, setError, setHotkeys, setProfileHotkeyValidationError, setProfileHotkeys, workModeHotkey, workingProfileName]);
 
-  const updateProfileControllerShortcut = useCallback((profileName: string, buttons: string[]) => {
-    const normalizedButtons = normalizeControllerButtons(buttons);
-    if (isDuplicateProfileControllerShortcut(profileName, normalizedButtons, profileControllerShortcuts) || isSameControllerShortcut(normalizedButtons, workModeControllerShortcut?.buttons)) {
-      setProfileControllerValidationError(t('profile.duplicateControllerOther'));
-      return;
+  const updateProfileControllerShortcut = useCallback((profileName: string, buttons: string[]): boolean => {
+    const assignment = tryAssignProfileControllerShortcut(profileName, buttons, profileControllerShortcuts, workModeControllerShortcut);
+    if (!assignment.accepted) {
+      console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileControllerShortcuts[profileName]?.buttons ?? [], Candidate: buttons, ValidationResult: 'Conflict', DraftUpdated: false, Persisted: false });
+      triggerValidationError(t('profile.duplicateControllerOther'), setProfileControllerValidationError);
+      return false;
     }
 
     setProfileControllerValidationError(null);
     setError(null);
-    setProfileControllerShortcuts((current) => ({
-      ...current,
-      [profileName]: normalizedButtons.length === 0 ? null : {
-        buttons: normalizedButtons,
-        holdDurationMs: current[profileName]?.holdDurationMs ?? defaultControllerShortcutHoldDurationMs
-      }
-    }));
+    setProfileControllerShortcuts(assignment.value);
     markUnsavedChanges();
+    console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileControllerShortcuts[profileName]?.buttons ?? [], Candidate: buttons, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
+    return true;
   }, [markUnsavedChanges, profileControllerShortcuts, setError, setProfileControllerShortcuts, setProfileControllerValidationError, workModeControllerShortcut]);
 
-  const updateWorkModeControllerShortcut = useCallback((buttons: string[]) => {
-    const normalizedButtons = normalizeControllerButtons(buttons);
-    if (isDuplicateWorkModeControllerShortcut(normalizedButtons, profileControllerShortcuts)) {
-      setProfileControllerValidationError(t('profile.duplicateControllerProfile'));
-      return;
+  const updateWorkModeControllerShortcut = useCallback((buttons: string[]): boolean => {
+    const assignment = tryAssignWorkModeControllerShortcut(buttons, profileControllerShortcuts, workModeControllerShortcut);
+    if (!assignment.accepted) {
+      console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: workModeControllerShortcut?.buttons ?? [], Candidate: buttons, ValidationResult: 'Conflict', DraftUpdated: false, Persisted: false });
+      triggerValidationError(t('profile.duplicateControllerProfile'), setProfileControllerValidationError);
+      return false;
     }
 
     setProfileControllerValidationError(null);
     setError(null);
-    setWorkModeControllerShortcut(normalizedButtons.length === 0 ? null : {
-      buttons: normalizedButtons,
-      holdDurationMs: workModeControllerShortcut?.holdDurationMs ?? defaultControllerShortcutHoldDurationMs
-    });
+    setWorkModeControllerShortcut(assignment.value);
     markUnsavedChanges();
+    console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: workModeControllerShortcut?.buttons ?? [], Candidate: buttons, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
+    return true;
   }, [markUnsavedChanges, profileControllerShortcuts, setError, setProfileControllerValidationError, setWorkModeControllerShortcut, workModeControllerShortcut]);
 
-  const updateWorkModeHotkey = useCallback((value: string) => {
-    const normalizedValue = normalizeHotkeyForDisplay(value);
-    if (isDuplicateWorkModeHotkey(normalizedValue, profileHotkeys)) {
-      setProfileHotkeyValidationError(t('profile.duplicateHotkeyProfile'));
-      return;
+  const updateWorkModeHotkey = useCallback((value: string): boolean => {
+    const assignment = tryAssignWorkModeHotkey(value, profileHotkeys);
+    if (!assignment.accepted) {
+      console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: workModeHotkey, Candidate: value, ValidationResult: 'Conflict', DraftUpdated: false, Persisted: false });
+      triggerValidationError(t('profile.duplicateHotkeyProfile'), setProfileHotkeyValidationError);
+      return false;
     }
 
     setProfileHotkeyValidationError(null);
     setError(null);
-    setHotkeys((current) => ({ ...current, workMode: normalizedValue }));
+    setHotkeys((current) => ({ ...current, workMode: assignment.value }));
     markUnsavedChanges();
+    console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: workModeHotkey, Candidate: value, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
+    return true;
   }, [markUnsavedChanges, profileHotkeys, setError, setHotkeys, setProfileHotkeyValidationError]);
 
   return {

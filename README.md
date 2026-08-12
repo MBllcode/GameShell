@@ -68,6 +68,8 @@ If the destination EXE is locked (running process), script writes a timestamped 
 - The profile toolbar and action buttons use a more refined card-like treatment, improving visual cohesion without altering backend or display logic.
 - Profile hotkeys are per-profile, normalized to canonical keys, and must remain unique across profiles.
 - During hotkey capture (`NASLUCHIWANIE`), registered global hotkeys are temporarily disabled so the UI can validate duplicate combinations locally.
+- A duplicate keyboard or controller shortcut remains visible in a red invalid state with its validation message for 2.8 seconds, then the field returns to its previously saved shortcut (or stays empty when there was no previous assignment). Save and dashboard navigation are blocked while the validation error is active.
+- The final action in the new-profile flow is labeled `Save changes` and persists the profile before returning to the dashboard.
 - `Start with Windows` writes Windows autostart integration, and `Start minimized to tray` now applies on normal app startup.
 - Sidebar navigation rows fill their available container width; their chevrons remain vertically centered and move only horizontally on hover.
 

@@ -1,7 +1,7 @@
-import type { AppSettings, ControllerShortcutSettings, DisplayIdentity, DisplayLayoutProfile } from '../../types/bridge';
-import { normalizeControllerShortcut } from '../../utils/controllers';
-import { normalizeHotkeyForDisplay, normalizeHotkeyValue } from '../../utils/hotkeys';
-import { toLauncherType, type LauncherType } from '../../utils/modes';
+import type { AppSettings, ControllerShortcutSettings, DisplayIdentity, DisplayLayoutProfile } from '../../types/bridge.ts';
+import { normalizeControllerShortcut } from '../../utils/controllers.ts';
+import { normalizeHotkeyForDisplay, normalizeHotkeyValue } from '../../utils/hotkeys.ts';
+import { toLauncherType, type LauncherType } from '../../utils/modes.ts';
 
 type ProfileHotkeysState = { enterProfile: string };
 type PcGamingBehaviourState = {
@@ -82,7 +82,8 @@ export function buildProfileControllerShortcutMap(profiles: DisplayLayoutProfile
 export function isDuplicateProfileEnterHotkey(profileName: string, candidateHotkey: string, profileHotkeys: PcGamingProfileHotkeysMap) {
   const normalizedCandidate = normalizeHotkeyValue(candidateHotkey);
   if (!normalizedCandidate) return false;
-  return Object.entries(profileHotkeys).some(([name, hotkeys]) => name.toLowerCase() !== profileName.toLowerCase() && normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate);
+  const currentOwnerId = normalizeOwnerId(profileName);
+  return Object.entries(profileHotkeys).some(([name, hotkeys]) => normalizeOwnerId(name) !== currentOwnerId && normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate);
 }
 
 export function isDuplicateWorkModeHotkey(candidateHotkey: string, profileHotkeys: PcGamingProfileHotkeysMap) {
@@ -104,6 +105,10 @@ export function resolvePreferredProfileNameForPostSaveSelection(draftProfileName
   if (trimmedDraft.length > 0) return trimmedDraft;
   const trimmedSelected = selectedProfileName.trim();
   return trimmedSelected.length > 0 ? trimmedSelected : '';
+}
+
+function normalizeOwnerId(value: string) {
+  return value.trim().toUpperCase();
 }
 
 export type { PcGamingBehaviourState, PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap, ProfileHotkeysState };

@@ -217,9 +217,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        var language = _traySettings.Ui.Language ?? "en";
         _trayMenu.Items.Clear();
 
-        var openItem = new ToolStripMenuItem("Otwórz GameShell")
+        var openItem = new ToolStripMenuItem(TrayMenuText.OpenGameShell(language))
         {
             Enabled = true,
             Font = new System.Drawing.Font(System.Drawing.SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold)
@@ -237,17 +238,13 @@ public partial class App : System.Windows.Application
         var isProfileMode = string.Equals(currentMode, GameShellMode.PcGaming.ToString(), StringComparison.OrdinalIgnoreCase)
             || string.Equals(currentMode, GameShellMode.Console.ToString(), StringComparison.OrdinalIgnoreCase);
         var activeProfileName = _traySettings.Display.ActivePcGamingProfileName;
-        var currentLabel = isWorkMode
-            ? "Aktualnie: Work Mode"
-            : !string.IsNullOrWhiteSpace(activeProfileName)
-                ? $"Aktualnie: {activeProfileName}"
-                : "Aktualnie: Nieznany tryb";
+        var currentLabel = TrayMenuText.CurrentStatus(language, isWorkMode, activeProfileName);
         _trayMenu.Items.Add(new ToolStripMenuItem(currentLabel) { Enabled = false });
 
-        var profilesItem = new ToolStripMenuItem("Profile gamingowe") { Enabled = true };
+        var profilesItem = new ToolStripMenuItem(TrayMenuText.GamingProfiles(language)) { Enabled = true };
         if (_traySettings.Display.PcGamingProfiles.Count == 0)
         {
-            profilesItem.DropDownItems.Add(new ToolStripMenuItem("Brak profili gamingowych") { Enabled = false });
+            profilesItem.DropDownItems.Add(new ToolStripMenuItem(TrayMenuText.NoGamingProfiles(language)) { Enabled = false });
         }
         else
         {
@@ -272,39 +269,26 @@ public partial class App : System.Windows.Application
         }
 
         _logger?.LogInformation(
-            "Tray menu rebuilt. Open enabled={OpenEnabled}; Profiles enabled={ProfilesEnabled} count={ProfileCount}; WorkMode enabled={WorkModeEnabled}; Restore enabled={RestoreEnabled}; Exit enabled={ExitEnabled}",
+            "Tray menu rebuilt. Open enabled={OpenEnabled}; Profiles enabled={ProfilesEnabled} count={ProfileCount}; WorkMode enabled={WorkModeEnabled}; Exit enabled={ExitEnabled}",
             openItem.Enabled,
             profilesItem.Enabled,
             _traySettings.Display.PcGamingProfiles.Count,
             true,
-            _trayRuntimeState.PreviousDisplayLayout is not null || _trayRuntimeState.WorkReturnLayout is not null,
             true);
 
         _trayMenu.Items.Add(profilesItem);
         _trayMenu.Items.Add(new ToolStripSeparator());
 
-        var workModeItem = new ToolStripMenuItem("Wróć do Work Mode") { Enabled = true };
+        var workModeItem = new ToolStripMenuItem(TrayMenuText.ReturnToWorkMode(language)) { Enabled = true };
         workModeItem.Click += async (_, _) =>
         {
             _logger?.LogInformation("Tray click: Work Mode");
             await RunTrayCommandAsync(() => _modeCommandService!.EnterWorkModeAsync());
         };
         _trayMenu.Items.Add(workModeItem);
-
-        var hasPreviousLayout = _trayRuntimeState.PreviousDisplayLayout is not null || _trayRuntimeState.WorkReturnLayout is not null;
-        var restoreItem = new ToolStripMenuItem("Przywróć poprzedni układ ekranów")
-        {
-            Enabled = hasPreviousLayout
-        };
-        restoreItem.Click += async (_, _) =>
-        {
-            _logger?.LogInformation("Tray click: Restore previous layout");
-            await RestorePreviousDisplayLayoutFromTrayAsync();
-        };
-        _trayMenu.Items.Add(restoreItem);
         _trayMenu.Items.Add(new ToolStripSeparator());
 
-        var exitItem = new ToolStripMenuItem("Zamknij GameShell") { Enabled = true };
+        var exitItem = new ToolStripMenuItem(TrayMenuText.CloseGameShell(language)) { Enabled = true };
         exitItem.Click += (_, _) => OnExitMenuClick();
         _trayMenu.Items.Add(exitItem);
     }

@@ -10,6 +10,7 @@ export function useSetupNavigationFeature(options: Options) {
   const saveAndReturnToDashboard = useSetupSaveWorkflow({
     setupMode: options.setupMode,
     currentStepId: options.currentStepId,
+    hasShortcutValidationError: options.hasShortcutValidationError,
     commitGamingDisplayDraft: options.commitGamingDisplayDraft,
     persistAndReturnToDashboard: options.persistAndReturnToDashboard
   });

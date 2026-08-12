@@ -1,5 +1,5 @@
-import { ControllerFamily, mapControllerButtons } from '../controllerDisplayMapper';
-import type { ControllerShortcutSettings, ControllerStatusInfo } from '../types/bridge';
+import { ControllerFamily, mapControllerButtons } from '../controllerDisplayMapper.ts';
+import type { ControllerShortcutSettings, ControllerStatusInfo } from '../types/bridge.ts';
 
 export function normalizeControllerButtons(buttons: string[] | null | undefined) {
   return [...new Set(
@@ -58,9 +58,10 @@ export function isDuplicateProfileControllerShortcut(
   }
 
   const normalizedCandidate = getControllerShortcutKey(candidateButtons);
+  const currentOwnerId = normalizeOwnerId(profileName);
 
   return Object.entries(profileControllerShortcuts).some(([name, shortcut]) => {
-    if (name.toLowerCase() === profileName.toLowerCase()) {
+    if (normalizeOwnerId(name) === currentOwnerId) {
       return false;
     }
 
@@ -85,6 +86,10 @@ export function isSameControllerShortcut(left: string[] | undefined, right: stri
 
 function getControllerShortcutKey(buttons: string[] | undefined) {
   return normalizeControllerButtons(buttons).sort((left, right) => left.localeCompare(right)).join('+').toUpperCase();
+}
+
+function normalizeOwnerId(value: string) {
+  return value.trim().toUpperCase();
 }
 
 export function formatControllerShortcutButtons(buttons: string[], family: ControllerFamily) {

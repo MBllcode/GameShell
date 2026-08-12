@@ -99,12 +99,13 @@ export function DashboardPage({
     <main className="app-shell">
       <section className="setup-window" aria-labelledby="app-title">
         <aside className="brand-panel dashboard-sidebar" aria-label={t('app.globalSettings')}>
-          <section className="sidebar-state-block" aria-label={t('app.globalSettings')}>
-            <div className="sidebar-section-label">{t('app.globalSettings')}</div>
+          <section className="sidebar-state-block" aria-label={t('app.status')}>
+            <div className="sidebar-section-label">{t('app.status')}</div>
             {isWorkModeActive ? (
               <div className="sidebar-state-content">
                 <div className="status-row"><strong>{t('app.workMode')}</strong><span className="work-return-status">{t('app.active')}</span></div>
-                <p>{t('setup.workMode')}</p><small>{globalWorkModeHotkey || t('app.missingHotkey')}</small>
+                <p className="sidebar-status-description">{t('dashboard.workModeDescription')}</p>
+                <small>{globalWorkModeHotkey || t('app.missingHotkey')}</small>
               </div>
             ) : (
               <div className="sidebar-state-content">

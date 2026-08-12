@@ -22,10 +22,10 @@ type Options = {
   setFinishOptions: Dispatch<SetStateAction<FinishOptions>>;
   markUnsavedChanges: () => void;
   setProfileLauncher: (profileName: string, launcher: LauncherType) => void;
-  updateProfileHotkey: (profileName: string, key: 'enterProfile', value: string) => void;
-  updateProfileControllerShortcut: (profileName: string, buttons: string[]) => void;
-  updateWorkModeHotkey: (value: string) => void;
-  updateWorkModeControllerShortcut: (buttons: string[]) => void;
+  updateProfileHotkey: (profileName: string, key: 'enterProfile', value: string) => boolean;
+  updateProfileControllerShortcut: (profileName: string, buttons: string[]) => boolean;
+  updateWorkModeHotkey: (value: string) => boolean;
+  updateWorkModeControllerShortcut: (buttons: string[]) => boolean;
   startControllerCapture: (profileId: string) => Promise<void>;
   cancelControllerCapture: () => Promise<void>;
 };

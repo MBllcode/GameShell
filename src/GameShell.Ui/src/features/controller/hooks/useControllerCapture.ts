@@ -44,13 +44,14 @@ export function useControllerCapture({
   selectedProfileName: string;
   profileShortcuts: ShortcutMap;
   workModeShortcut: ControllerShortcutSettings | null;
-  onProfileShortcutCaptured: (profileName: string, buttons: string[]) => void;
-  onWorkModeShortcutCaptured: (buttons: string[]) => void;
+  onProfileShortcutCaptured: (profileName: string, buttons: string[]) => boolean;
+  onWorkModeShortcutCaptured: (buttons: string[]) => boolean;
   onError: (message: string) => void;
 }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState(initialControllerStatus);
   const [captureSuccessButtons, setCaptureSuccessButtons] = useState<string[] | null>(null);
+  const [rejectedCaptureButtons, setRejectedCaptureButtons] = useState<string[] | null>(null);
   const [notice, setNotice] = useState<'missing' | 'disconnected' | null>(null);
   const sequenceRef = useRef(0);
   const sessionRef = useRef<string | null>(null);
@@ -79,6 +80,7 @@ export function useControllerCapture({
 
   async function startCapture(profileId: string) {
     setCaptureSuccessButtons(null);
+    setRejectedCaptureButtons(null);
     try {
       const currentStatus = applyStatus(await sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
       if (currentStatus.controllerCount === 0) {
@@ -99,6 +101,7 @@ export function useControllerCapture({
       completionTimerRef.current = null;
     }
     setCaptureSuccessButtons(null);
+    setRejectedCaptureButtons(null);
     try {
       const nextStatus = await sendBridgeCommand('cancelControllerShortcutCapture', { reason: 'UserCancelled' })
         .then(() => sendBridgeCommand<ControllerStatusInfo>('getControllerStatus'));
@@ -106,6 +109,29 @@ export function useControllerCapture({
     } catch {
       onError(t('controller.captureCancelFailed'));
     }
+  }
+
+  function resetTransientState() {
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current);
+      completionTimerRef.current = null;
+    }
+    captureActiveRef.current = false;
+    acknowledgedRef.current = null;
+    sessionRef.current = null;
+    setCaptureSuccessButtons(null);
+    setRejectedCaptureButtons(null);
+    setNotice(null);
+    setStatus((current) => ({
+      ...current,
+      capturePhase: 'Idle',
+      captureSessionId: null,
+      profileId: null,
+      startedAt: null,
+      capturedButtons: [],
+      completedCapture: null,
+      rawPressedButtons: []
+    }));
   }
 
   useEffect(() => {
@@ -139,13 +165,20 @@ export function useControllerCapture({
       ? workModeShortcut?.buttons ?? []
       : profileShortcuts[completedCapture.profileId]?.buttons ?? [];
     const unchanged = currentButtons.length === nextButtons.length && currentButtons.every((button, index) => button === nextButtons[index]);
+    let assignmentAccepted = unchanged;
     if (!unchanged) {
-      if (completedCapture.profileId === workModeCaptureId) onWorkModeShortcutCaptured(nextButtons);
-      else onProfileShortcutCaptured(completedCapture.profileId, nextButtons);
+      assignmentAccepted = completedCapture.profileId === workModeCaptureId
+        ? onWorkModeShortcutCaptured(nextButtons)
+        : onProfileShortcutCaptured(completedCapture.profileId, nextButtons);
     }
     if (acknowledgedRef.current === completedCapture.sessionId) return;
     acknowledgedRef.current = completedCapture.sessionId;
-    setCaptureSuccessButtons(nextButtons);
+    if (assignmentAccepted) {
+      setRejectedCaptureButtons(null);
+      setCaptureSuccessButtons(nextButtons);
+    } else {
+      setRejectedCaptureButtons(nextButtons);
+    }
     void sendBridgeCommand<ControllerStatusInfo>('acknowledgeControllerShortcutCapture', { sessionId: completedCapture.sessionId })
       .then(applyStatus)
       .catch(() => {
@@ -171,9 +204,11 @@ export function useControllerCapture({
     status,
     applyStatus,
     captureSuccessButtons,
+    rejectedCaptureButtons,
     notice,
     startCapture,
     cancelCapture,
+    resetTransientState,
     cancelActiveCapture: () => sendBridgeCommand('cancelControllerShortcutCapture', { reason: 'SectionLeft' }).catch(() => undefined),
     sessionRef
   };

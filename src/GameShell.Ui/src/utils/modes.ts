@@ -1,5 +1,5 @@
 import type { AppStatus } from '../types/bridge';
-import { formatCommandTargetMode } from './status';
+import { formatCommandTargetMode } from './status.ts';
 
 export type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 export type ModeCommand = 'enterGameShell' | 'enterGameShellWithProfile' | 'enterWorkMode';

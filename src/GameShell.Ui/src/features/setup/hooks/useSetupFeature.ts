@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { AppStatus } from '../../../types/bridge';
 import type { ProfileSetupPageProps } from '../../../pages/ProfileSetupPage';
 import { useProfileSetupPageModel } from './useProfileSetupPageModel';
@@ -37,6 +38,17 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
   const { mutations: profileMutations, controllerCapture } = profileFeature;
   const { setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog } = setupState;
   const { launcher, language, setLanguage, pcGamingBehaviour, workBehaviour, hotkeys, finishOptions } = formState;
+
+  useEffect(() => {
+    if (setupState.setupMode === 'None') {
+      displayState.setProfileHotkeyValidationError(null);
+      displayState.setProfileControllerValidationError(null);
+    }
+    if (setupState.setupMode === 'None' || (flow.currentStep.id !== 'controller' && flow.currentStep.id !== 'work-shortcuts')) {
+      controllerCapture.resetTransientState();
+      void controllerCapture.cancelActiveCapture();
+    }
+  }, [displayState.setProfileControllerValidationError, displayState.setProfileHotkeyValidationError, flow.currentStep.id, setupState.setupMode]);
 
   return useProfileSetupPageModel({
     flow: {
@@ -92,6 +104,9 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
       profileControllerShortcut: displayState.pcGamingProfileControllerShortcuts[options.selectedProfileName] ?? null,
       controllerStatus: controllerCapture.status,
       captureSuccessButtons: controllerCapture.captureSuccessButtons,
+      rejectedControllerButtons: controllerCapture.rejectedCaptureButtons,
+      onHotkeyValidationErrorChange: displayState.setProfileHotkeyValidationError,
+      onControllerValidationErrorChange: displayState.setProfileControllerValidationError,
       controllerNotice: controllerCapture.notice
     },
     actions: {

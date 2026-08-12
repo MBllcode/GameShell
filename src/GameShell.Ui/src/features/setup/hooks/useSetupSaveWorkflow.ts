@@ -4,12 +4,14 @@ import type { SetupMode } from '../setupFlow';
 type Options = {
   setupMode: SetupMode;
   currentStepId: string;
+  hasShortcutValidationError: boolean;
   commitGamingDisplayDraft: (allowOverwrite: boolean, action: OverwriteProfileAction) => Promise<boolean>;
   persistAndReturnToDashboard: () => Promise<void>;
 };
 
-export function useSetupSaveWorkflow({ setupMode, currentStepId, commitGamingDisplayDraft, persistAndReturnToDashboard }: Options) {
+export function useSetupSaveWorkflow({ setupMode, currentStepId, hasShortcutValidationError, commitGamingDisplayDraft, persistAndReturnToDashboard }: Options) {
   return async function saveAndReturnToDashboard() {
+    if (hasShortcutValidationError) return;
     if (setupMode === 'CreateProfile' || currentStepId === 'gaming-display') {
       const committed = await commitGamingDisplayDraft(false, 'save');
       if (!committed) return;

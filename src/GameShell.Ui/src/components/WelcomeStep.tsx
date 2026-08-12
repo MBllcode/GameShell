@@ -19,11 +19,11 @@ export function WelcomeStep({
       <h2>{t('setup.welcomeTitle')}</h2>
       <p>{t('setup.welcomeMessage')}</p>
 
-      <div className="settings-group" style={{ marginTop: '1.25rem' }}>
+      <div className="language-panel">
         <label className="field-label" htmlFor="welcome-language-select">{t('language.selectorLabel')}</label>
         <select
           id="welcome-language-select"
-          className="text-input"
+          className="language-select"
           value={language}
           onChange={(event) => {
             const nextLanguage = event.target.value as SupportedLanguage;
@@ -37,6 +37,7 @@ export function WelcomeStep({
             </option>
           ))}
         </select>
+        <p className="language-panel-hint">{t('language.changeLater')}</p>
       </div>
     </div>
   );

@@ -82,6 +82,14 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Gdy skrot klawiaturowy jest zapisany, przycisk `Usun` znajduje sie po prawej stronie inputa i jest kompaktowy, tak jak akcja usuwania skrotu kontrolera.
 - Podczas `NASLUCHIWANIE` pole zachowuje stan bledu (`aria-invalid`) i nie moze byc zagluszone przez globalny hotkey hosta.
 - Nowy profil nie dziedziczy hotkeya po poprzednio wybranym profilu.
+- Po wybraniu zajętej kombinacji kandydat pozostaje widoczny na czerwono wraz z komunikatem przez `2,8 s`; po tym czasie wraca poprzednio przypisany skrót, a niepoprawna wartość nie trafia do zapisu. Jeżeli pole było puste, po wygaśnięciu błędu nadal pozostaje puste.
+- Ten sam czas i zachowanie obowiązują dla skrótu kontrolera: zajęte przyciski są pokazane jako błędne, a następnie wraca poprzednie przypisanie.
+- Podczas aktywnego błędu zablokowane są `Zapisz zmiany`, zapis z modala niezapisanych zmian oraz wyjście do `Panel główny`. Po wygaśnięciu błędu komunikat znika i zapis ponownie jest możliwy.
+
+## Końcowe akcje flow profilu
+
+- W trybie dodawania nowego profilu przycisk na ostatnim kroku ma etykietę `Zapisz zmiany`.
+- Kliknięcie zapisuje profil i dopiero po pomyślnym zapisie wraca do dashboardu; `Panel główny` pozostaje akcją wyjścia bez zapisu.
 
 ## Zachowanie aplikacji
 

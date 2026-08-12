@@ -13,6 +13,7 @@ type UseSetupNavigationOptions = {
   setupMode: SetupMode;
   hasAdvancedInCreateProfileFlow: boolean;
   hasUnsavedChanges: boolean;
+  hasShortcutValidationError: boolean;
   isLastStep: boolean;
   canSelectSidebarStep: boolean;
   currentStepId: SetupStepId;
@@ -50,7 +51,7 @@ type UseSetupNavigationOptions = {
 export function useSetupNavigation(options: UseSetupNavigationOptions) {
   const { t } = useTranslation();
   const {
-    setupMode, hasAdvancedInCreateProfileFlow, hasUnsavedChanges,
+    setupMode, hasAdvancedInCreateProfileFlow, hasUnsavedChanges, hasShortcutValidationError,
     isLastStep, canSelectSidebarStep, currentStepId, stepIndex, activeStepIndexes,
     resolvedFlowPosition, isSetupComplete, pendingNavigationAction, pendingOverwriteProfileAction,
     settings, pendingSettingsOverrideRef, saveAndReturnToDashboard, saveCurrentSettings,
@@ -167,6 +168,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
   }
 
   async function handleUnsavedDialogSave() {
+    if (hasShortcutValidationError) return;
     if (!pendingNavigationAction) {
       setShowUnsavedDialog(false);
       return;

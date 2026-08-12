@@ -245,6 +245,7 @@ export function App() {
     setupMode,
     hasAdvancedInCreateProfileFlow,
     hasUnsavedChanges,
+    hasShortcutValidationError: Boolean(profileHotkeyValidationError || profileControllerValidationError),
     isLastStep,
     canSelectSidebarStep,
     currentStepId: currentStep.id,
@@ -302,4 +303,3 @@ export function App() {
     setup={setupPage}
   />;
 }
-

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ControllerFamily, detectControllerFamily } from '../controllerDisplayMapper';
 import type { ControllerShortcutSettings, ControllerStatusInfo, DisplayLayoutProfile } from '../types/bridge';
@@ -18,10 +18,13 @@ export function ControllerStep({
   isWorkMode = false,
   hotkeys,
   hotkeyValidationError,
+  onHotkeyValidationErrorChange,
   controllerShortcut,
   controllerValidationError,
   controllerStatus,
   captureSuccessButtons,
+  rejectedControllerButtons,
+  onControllerValidationErrorChange,
   controllerNotice,
   onStartControllerCapture,
   onCancelControllerCapture,
@@ -35,25 +38,32 @@ export function ControllerStep({
   isWorkMode?: boolean;
   hotkeys: HotkeySettingsState;
   hotkeyValidationError: string | null;
+  onHotkeyValidationErrorChange: (value: string | null) => void;
   controllerShortcut: ControllerShortcutSettings | null;
   controllerValidationError: string | null;
   controllerStatus: ControllerStatusInfo;
   captureSuccessButtons: string[] | null;
+  rejectedControllerButtons: string[] | null;
+  onControllerValidationErrorChange: (value: string | null) => void;
   controllerNotice: 'missing' | 'disconnected' | null;
   onStartControllerCapture: () => void;
   onCancelControllerCapture: () => void;
   onRemoveControllerShortcut: () => void;
   onRemoveHotkey: () => void;
-  onChangeHotkey: (key: 'enterProfile' | 'workMode', value: string) => void;
+  onChangeHotkey: (key: 'enterProfile' | 'workMode', value: string) => boolean;
 }) {
   const { t } = useTranslation();
-  const [showHotkeySaved, setShowHotkeySaved] = useState(false);
-  const hotkeySavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingHotkeyCandidate, setPendingHotkeyCandidate] = useState<string | null>(null);
+  const [visibleHotkeyValidationError, setVisibleHotkeyValidationError] = useState<string | null>(null);
+  const [visibleControllerValidationError, setVisibleControllerValidationError] = useState<string | null>(null);
   const hasWorkingProfile = selectedProfileName.trim().length > 0;
   const selectedProfileLabel = isWorkMode ? t('setup.workMode') : (selectedProfileName || t('profile.noProfileSelected'));
   const currentHotkey = isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode;
+  const displayedHotkey = pendingHotkeyCandidate ?? currentHotkey;
   const selectedControllerButtons = controllerShortcut?.buttons ?? [];
   const hasControllerShortcut = selectedControllerButtons.length > 0;
+  const hasControllerValidationError = Boolean(visibleControllerValidationError);
+  const hasRejectedControllerCandidate = hasControllerValidationError && rejectedControllerButtons !== null;
   const isCapturePhase = controllerStatus.capturePhase === 'WaitingForRelease'
     || controllerStatus.capturePhase === 'WaitingForFirstPress'
     || controllerStatus.capturePhase === 'Recording'
@@ -64,6 +74,7 @@ export function ControllerStep({
   const displayControllerButtons = controllerStatus.capturedButtons.length > 0
     ? controllerStatus.capturedButtons
     : selectedControllerButtons;
+  const displayedControllerButtons = rejectedControllerButtons ?? displayControllerButtons;
   const controllerFamily = detectControllerFamily(controllerStatus.deviceName);
   const controllerDeviceLabel = controllerStatus.isConnected
     ? controllerFamily === ControllerFamily.PlayStation
@@ -77,36 +88,48 @@ export function ControllerStep({
   const controllerDeviceDescription = controllerStatus.deviceName || t('shortcut.controllerMissing');
 
   useEffect(() => {
-    return () => {
-      if (hotkeySavedTimerRef.current) {
-        clearTimeout(hotkeySavedTimerRef.current);
-      }
-    };
-  }, []);
-
-  function showHotkeySavedFeedback() {
-    if (hotkeySavedTimerRef.current) {
-      clearTimeout(hotkeySavedTimerRef.current);
+    if (!hotkeyValidationError) {
+      setVisibleHotkeyValidationError(null);
+      return;
     }
 
-    setShowHotkeySaved(true);
-    hotkeySavedTimerRef.current = setTimeout(() => {
-      setShowHotkeySaved(false);
-      hotkeySavedTimerRef.current = null;
-    }, 1800);
-  }
+    setVisibleHotkeyValidationError(hotkeyValidationError);
+    const timeoutId = setTimeout(() => {
+      setPendingHotkeyCandidate(null);
+      setVisibleHotkeyValidationError(null);
+      onHotkeyValidationErrorChange(null);
+    }, 2800);
+
+    return () => clearTimeout(timeoutId);
+  }, [hotkeyValidationError, onHotkeyValidationErrorChange]);
+
+  useEffect(() => {
+    if (!controllerValidationError) {
+      setVisibleControllerValidationError(null);
+      return;
+    }
+
+    setVisibleControllerValidationError(controllerValidationError);
+    const timeoutId = setTimeout(() => {
+      setVisibleControllerValidationError(null);
+      onControllerValidationErrorChange(null);
+    }, 2800);
+
+    return () => clearTimeout(timeoutId);
+  }, [controllerValidationError, onControllerValidationErrorChange]);
 
   function handleHotkeyChange(value: string) {
-    onChangeHotkey(isWorkMode ? 'workMode' : 'enterProfile', value);
-    if (value.trim()) {
-      showHotkeySavedFeedback();
-    } else {
-      setShowHotkeySaved(false);
+    setPendingHotkeyCandidate(value);
+    const saved = onChangeHotkey(isWorkMode ? 'workMode' : 'enterProfile', value);
+    if (saved && value.trim()) {
+      setPendingHotkeyCandidate(null);
+    } else if (saved) {
+      setPendingHotkeyCandidate(null);
     }
   }
 
   function handleHotkeyRemove() {
-    setShowHotkeySaved(false);
+    setPendingHotkeyCandidate(null);
     onRemoveHotkey();
   }
 
@@ -132,20 +155,20 @@ export function ControllerStep({
             <div className="keyboard-shortcut-row">
               <label className="keyboard-shortcut-field">
                 <HotkeyField
-                  value={currentHotkey}
+                  value={displayedHotkey}
                   onChange={handleHotkeyChange}
                   placeholder={isWorkMode ? 'np. Ctrl+Alt+W' : 'np. Ctrl+Alt+P'}
                   disabled={!isWorkMode && !hasWorkingProfile}
-                  error={hotkeyValidationError}
+                  error={visibleHotkeyValidationError}
                 />
               </label>
-              {showHotkeySaved ? (
-                <span className="shortcut-saved-status is-saved">{t('shortcut.save')}</span>
-              ) : currentHotkey ? (
-                <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={handleHotkeyRemove}>
-                  {t('shortcut.remove')}
-                </button>
-              ) : null}
+              <div className="shortcut-action-slot">
+                {currentHotkey ? (
+                  <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={handleHotkeyRemove}>
+                    {t('shortcut.remove')}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -176,8 +199,7 @@ export function ControllerStep({
             <div className="controller-capture-panel" aria-live="polite">
               {isCaptureSuccess ? (
                 <>
-                  <span className="capture-mode-label capture-success-label">{t('shortcut.save')}</span>
-                  <ControllerKeycaps buttons={captureSuccessButtons ?? controllerStatus.completedCapture?.buttons ?? []} family={controllerFamily} />
+                  <ControllerKeycaps buttons={captureSuccessButtons ?? controllerStatus.completedCapture?.buttons ?? []} family={controllerFamily} hasError={hasRejectedControllerCandidate} />
                 </>
               ) : null}
               {controllerStatus.capturePhase === 'WaitingForRelease' ? (
@@ -216,7 +238,12 @@ export function ControllerStep({
             </div>
           ) : (
             <>
-              {controllerStatus.capturePhase === 'Completed' && displayControllerButtons.length > 0 ? (
+              {hasRejectedControllerCandidate ? (
+                <div className="controller-capture-completed controller-capture-invalid" aria-live="polite">
+                  <span className="capture-step-label">{t('shortcut.controllerLabel')}</span>
+                  <ControllerKeycaps buttons={displayedControllerButtons} family={controllerFamily} hasError />
+                </div>
+              ) : controllerStatus.capturePhase === 'Completed' && displayControllerButtons.length > 0 ? (
                 <div className="controller-capture-completed" aria-live="polite">
                   <span className="capture-step-label">{t('shortcut.captureAssigned')}</span>
                   <ControllerKeycaps buttons={displayControllerButtons} family={controllerFamily} />
@@ -245,7 +272,7 @@ export function ControllerStep({
               </div>
             </>
           )}
-          {controllerValidationError ? <div className="field-validation-error" role="alert">{controllerValidationError}</div> : null}
+          {visibleControllerValidationError ? <div className="field-validation-error" role="alert">{visibleControllerValidationError}</div> : null}
           <details className="controller-diagnostics">
             <summary>{t('shortcut.captureDetails')}</summary>
             <dl>

@@ -14,6 +14,8 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Uzupełniono flow setupu i walidację kolejnych kroków: `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ConsoleBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep` oraz `ControllerStep` są spójne pod względem lokalnych błędów, deterministycznego zapisu draftu oraz bezpieczniejszej nawigacji po pierwszej konfiguracji.
 - Draft konfiguracji ekranów jest teraz commitowany przed przejściem dalej i przed zapisaniem profilu, co zapobiega sytuacjom, w których UI zapisuje stale snapshot bez pełnej, znormalizowanej geometrii.
 - Hotkeyi profili są normalizowane i weryfikowane lokalnie; podczas `NASLUCHIWANIE` aplikacja chwilowo wyrejestrowuje globalne skróty, aby poprawnie przechwycić i zwalidować kombinację bez konfliktów.
+- Zajęta kombinacja klawiatury lub kontrolera pozostaje tymczasowo widoczna na czerwono wraz z komunikatem walidacyjnym przez `2,8 s`; następnie pole wraca do poprzednio zapisanego skrótu albo pozostaje puste. Błąd blokuje zapis oraz wyjście do dashboardu i może pojawić się ponownie przy kolejnej próbie.
+- Końcowy przycisk flow dodawania profilu ma etykietę `Zapisz zmiany`; jego działanie zapisuje nowy profil i dopiero potem wraca do dashboardu.
 - Zachowanie startu i autostartu jest spójne w zwykłym starcie i scenariuszach fallbackowych: `Start with Windows` i `Start minimized to tray` są zastosowane w ścieżce runtime, a nie tylko w dekoracji UI.
 - Aktualna dokumentacja UI jest utrzymywana w `docs/ui.md` jako aktywny standard zgodny z obecnym green-v2 theme, motion systemem i zasadami dla sidebaru, profili i walidacji.
 
@@ -109,6 +111,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Gdy wszystkie profile gamingowe zostana usuniete, lista profili pozostaje pusta. Nie jest tworzony profil `Domyslny`.
 - Boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne przy pustej liscie, ale akcje profilu sa wyszarzone. Dostepne pozostaja `+ Dodaj profil` i ustawienia globalne.
 - Dodawanie profilu prowadzi przez flow profilowe: `Ekrany -> Launcher -> Zachowanie profilu -> Skroty profilu -> Zakonczenie`.
+- Na ostatnim kroku dodawania profilu główny przycisk ma napis `Zapisz zmiany`, a nie `Panel główny`; po zapisie następuje powrót do dashboardu.
 - Nazwy profili gamingowych sa uppercase-only: UI konwertuje wpis podczas edycji, a `AppSettingsValidator` normalizuje takze starsze ustawienia i konfiguracje przy zapisie/odczycie.
 - Krok `Ekrany`:
   - wymaga nazwy profilu,
@@ -129,6 +132,8 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Kombinacje sa normalizowane do kanonicznej postaci, bez polskich znakow diakrytycznych.
 - Ta sama kombinacja nie moze byc przypisana do dwoch roznych profili.
 - Podczas `NASLUCHIWANIE` globalne hotkeye aplikacji sa chwilowo wyrejestrowane, aby UI moglo przechwycic klawisze i pokazac lokalna walidacje duplikatu.
+- Odrzucony duplikat nie nadpisuje draftu ani zapisanego skrótu. Przez `2,8 s` kandydat jest pokazany na czerwono wraz z błędem, po czym znika i wraca poprzednia wartość; dla pola bez wcześniejszego skrótu pozostaje pusto.
+- Aktywny błąd skrótu blokuje przycisk `Zapisz zmiany`, zapis z modala niezapisanych zmian oraz próbę wyjścia do `Panel główny`.
 
 ## Zachowanie zapisu
 

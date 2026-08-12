@@ -15,13 +15,15 @@ export function AppBehaviourStep({
   finishOptions,
   setFinishOptions,
   language,
-  setLanguage
+  setLanguage,
+  showLanguageSelector = true
 }: {
   stepNumber: number;
   finishOptions: FinishOptions;
   setFinishOptions: (options: FinishOptions) => void;
   language: SupportedLanguage;
   setLanguage: (value: SupportedLanguage) => void;
+  showLanguageSelector?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -29,26 +31,33 @@ export function AppBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
       <h2>{t('behaviour.appTitle')}</h2>
-      <p>{t('behaviour.appDescription')}</p>
-      <div className="settings-group">
-        <label className="field-label" htmlFor="app-language-select">{t('language.selectorLabel')}</label>
-        <select
-          id="app-language-select"
-          className="text-input"
-          value={language}
-          onChange={(event) => {
-            const nextLanguage = event.target.value as SupportedLanguage;
-            setLanguage(nextLanguage);
-            setI18nLanguage(nextLanguage);
-          }}
-        >
-          {SUPPORTED_LANGUAGES.map((code) => (
-            <option key={code} value={code}>
-              {LANGUAGE_LABELS[code]}
-            </option>
-          ))}
-        </select>
+      <div className="settings-intro">
+        <p>{t('behaviour.appDescription')}</p>
+      </div>
 
+      {showLanguageSelector ? (
+        <div className="language-panel">
+          <label className="field-label" htmlFor="app-language-select">{t('language.selectorLabel')}</label>
+          <select
+            id="app-language-select"
+            className="language-select"
+            value={language}
+            onChange={(event) => {
+              const nextLanguage = event.target.value as SupportedLanguage;
+              setLanguage(nextLanguage);
+              setI18nLanguage(nextLanguage);
+            }}
+          >
+            {SUPPORTED_LANGUAGES.map((code) => (
+              <option key={code} value={code}>
+                {LANGUAGE_LABELS[code]}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      <div className="settings-group">
         <SettingRow
           title={t('behaviour.startWithWindows')}
           checked={finishOptions.startWithWindows}
