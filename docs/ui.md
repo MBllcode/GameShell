@@ -8,6 +8,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Nie zmieniamy logiki biznesowej podczas prac stricte wizualnych.
 - Potwierdzenia wymagajace decyzji uzytkownika realizujemy modalami aplikacji, nie `window.confirm`.
 - UI pokazuje tylko stabilne funkcje GameShell: profile ekranów, lifecycle sesji, launcher/recovery, zachowanie pulpitu i skróty kontrolera. Nie pokazuje opcji korekcji fullscreen, borderless ani rozdzielczości gry.
+- Aktualny zakres prac koncentruje się na spójności setupu i profili: Welcome setup, walidacja display step, hotkeys, launcher/work behavior, oraz start runtime z autostartem/minimalizacją.
 
 ## Struktura frontendu
 

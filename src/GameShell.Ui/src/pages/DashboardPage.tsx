@@ -75,7 +75,7 @@ export function DashboardPage({
   const selectedProfile = pcGamingProfiles.find((profile) => profile.name === dashboardSelectedProfileName) ?? null;
   const canRunSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
   const canDeleteSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
-  const profileCountLabel = pcGamingProfiles.length === 1 ? 'profil' : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4 ? 'profile' : 'profili';
+  const profileCountLabel = pcGamingProfiles.length === 0 ? 'PROFILI' : pcGamingProfiles.length === 1 ? 'profil' : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4 ? 'profile' : 'profili';
 
   useEffect(() => {
     console.info('[DASHBOARD RUNTIME STATE]', {
@@ -90,13 +90,13 @@ export function DashboardPage({
   return (
     <main className="app-shell">
       <section className="setup-window" aria-labelledby="app-title">
-        <aside className="brand-panel dashboard-sidebar" aria-label="Nawigacja aplikacji">
-          <section className="sidebar-state-block" aria-label="Stan aplikacji">
+        <aside className="brand-panel dashboard-sidebar" aria-label="System GameShell">
+          <section className="sidebar-state-block" aria-label="Stan">
             <div className="sidebar-section-label">Stan</div>
             {isWorkModeActive ? (
               <div className="sidebar-state-content">
                 <div className="status-row"><strong>Work Mode</strong><span className="work-return-status">AKTYWNY</span></div>
-                <p>Układ roboczy</p><small>{globalWorkModeHotkey || 'Brak skrótu'}</small>
+                <p>Tryb pracy</p><small>{globalWorkModeHotkey || 'Brak skrótu'}</small>
               </div>
             ) : (
               <div className="sidebar-state-content">
@@ -106,11 +106,11 @@ export function DashboardPage({
                 <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
                 {shouldShowLauncherFact ? <small>{visibleLauncher}</small> : null}
                 {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || 'Brak skrótu'}</small> : null}
-                {!isWorkModeActive ? <button className="sidebar-state-action" type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode')}>Wróć do Work Mode</button> : null}
+                {!isWorkModeActive ? <button className="sidebar-state-action" type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode')}>Przełącz na Work Mode</button> : null}
               </div>
             )}
           </section>
-          <section className="sidebar-global-settings" aria-label="Globalne ustawienia">
+          <section className="sidebar-global-settings" aria-label="Ustawienia globalne">
             <div className="sidebar-section-label">Ustawienia globalne</div>
             <div className="sidebar-global-links">
               <button type="button" onClick={() => editSettings('work-behaviour')}><span>Zachowanie Work Mode</span></button>
@@ -156,15 +156,15 @@ export function DashboardPage({
                 </section>
                 {pcGamingProfiles.length === 0 ? <p className="hint-line">Nie masz jeszcze profilu. Dodaj go w sekcji Ekrany.</p> : null}
               </section>
-              <section className="dashboard-band dashboard-config-section" aria-label="Ustawienia profilu">
+              <section className="dashboard-band dashboard-config-section" aria-label="Konfiguracja profilu">
                 <div className="dashboard-shortcut-groups" aria-label="Edycja ustawień">
                   <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
-                    <div className="profile-settings-heading"><h3 id="profile-settings-title">USTAWIENIA PROFILU</h3><span className="profile-context">{dashboardSelectedProfileName || 'PC'}</span></div>
+                    <div className="profile-settings-heading"><h3 id="profile-settings-title">Konfiguracja profilu</h3><span className="profile-context">{dashboardSelectedProfileName || 'PC'}</span></div>
                     <div className="section-shortcuts">
-                      <button type="button" onClick={() => editSettings('gaming-display')}><span>Ekrany</span><small>Wybierz ekrany używane przez profil.</small></button>
-                      <button type="button" onClick={() => editSettings('launcher')}><span>Launcher profilu</span><small>Wybierz aplikację uruchamianą z profilem.</small></button>
-                      <button type="button" onClick={() => editSettings('console-behaviour')}><span>Zachowanie profilu</span><small>Ustaw zachowanie pulpitu po uruchomieniu profilu.</small></button>
-                      <button type="button" onClick={() => editSettings('controller')}><span>Skróty profilu</span><small>Ustaw skróty uruchamiające profil.</small></button>
+                      <button type="button" onClick={() => editSettings('gaming-display')}><span>Ekrany</span><small>Dobierz układ wyświetlaczy dla profilu.</small></button>
+                      <button type="button" onClick={() => editSettings('launcher')}><span>Launcher profilu</span><small>Wybierz aplikację aktywowaną razem z profilem.</small></button>
+                      <button type="button" onClick={() => editSettings('console-behaviour')}><span>Zachowanie profilu</span><small>Kontroluj pulpit po aktywacji profilu.</small></button>
+                      <button type="button" onClick={() => editSettings('controller')}><span>Skróty profilu</span><small>Skonfiguruj wejście i aktywację profilu.</small></button>
                     </div>
                   </section>
                 </div>

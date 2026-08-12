@@ -20,7 +20,7 @@ export function AppBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie aplikacji</h2>
-      <p>Ustaw uruchamianie GameShell i skróty systemowe.</p>
+      <p>Ustaw sposób uruchamiania GameShell oraz integrację z systemem Windows. Te opcje dotyczą automatycznego startu i dostępności aplikacji po restarcie systemu.</p>
       <div className="settings-group">
         <SettingRow
           title="Uruchamiaj z Windows"

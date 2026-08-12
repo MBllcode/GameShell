@@ -113,7 +113,7 @@ export function ControllerStep({
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>{isWorkMode ? 'Skrót Work Mode' : 'Skróty profilu'}</h2>
       <div className="profile-shortcuts-intro">
-        <p>{isWorkMode ? 'Ustaw skrót powrotu do Work Mode.' : `Ustaw skrót uruchamiający profil ${selectedProfileLabel}.`}</p>
+        <p>{isWorkMode ? 'Ustaw skrót powrotu do Work Mode. To pozwala szybko przełączać pracę i sesje gamingowe bez ręcznego otwierania menu.' : `Ustaw skrót uruchamiający profil ${selectedProfileLabel}. Ten skrót pozwala aktywować profil z dowolnego miejsca w systemie.`}</p>
         <span className="profile-shortcuts-profile-label">{isWorkMode ? 'CEL: WORK MODE' : `PROFIL: ${selectedProfileLabel.toUpperCase()}`}</span>
       </div>
 

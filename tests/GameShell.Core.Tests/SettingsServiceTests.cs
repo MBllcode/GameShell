@@ -141,6 +141,26 @@ public sealed class SettingsServiceTests
         Assert.Equal("SALON", validated.Display.ActivePcGamingProfileName);
     }
 
+    [Fact]
+    public void Validate_DoesNotCreateDefaultProfileWhenAllProfilesAreRemoved()
+    {
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                ActivePcGamingProfileName = "DOMYSLNY",
+                PcGamingLayout = new DisplayLayoutSnapshot(),
+                PcGamingProfiles = []
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        Assert.Empty(validated.Display.PcGamingProfiles);
+        Assert.Null(validated.Display.ActivePcGamingProfileName);
+        Assert.Null(validated.Display.PcGamingLayout);
+    }
+
     [Theory]
     [InlineData(100, 300)]
     [InlineData(700, 700)]

@@ -95,7 +95,7 @@ export function LauncherStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Launcher profilu</h2>
-      <p>Wybierz aplikację uruchamianą z tym profilem.</p>
+      <p>Wybierz aplikację aktywowaną wraz z tym profilem. Po pierwszej konfiguracji będzie można zmieniać launcher i dodawać kolejne profile bez utraty istniejących ustawień.</p>
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
           <span>Aktywny profil</span>

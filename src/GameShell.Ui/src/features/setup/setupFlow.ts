@@ -14,15 +14,15 @@ export type SetupMode = 'None' | 'FirstRun' | 'CreateProfile' | 'EditProfile' | 
 export type SetupStep = { id: StepId; title: string; subtitle: string };
 
 export const FIRST_RUN_STEPS: SetupStep[] = [
-  { id: 'welcome', title: 'Start', subtitle: 'Najważniejsze ustawienia' },
-  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Ekrany używane przez profil' },
-  { id: 'launcher', title: 'Launcher profilu', subtitle: 'Aplikacja uruchamiana z profilem' },
-  { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Pulpit po uruchomieniu profilu' },
-  { id: 'controller', title: 'Skróty profilu', subtitle: 'Skróty uruchamiające profil' },
-  { id: 'work-behaviour', title: 'Zachowanie Work Mode', subtitle: 'Pulpit po powrocie do pracy' },
-  { id: 'work-shortcuts', title: 'Skróty Work Mode', subtitle: 'Skróty powrotu do pracy' },
-  { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Uruchamianie i skróty systemowe' },
-  { id: 'finish', title: 'Zakończenie', subtitle: 'Sprawdź ustawienia profilu' },
+  { id: 'welcome', title: 'Start', subtitle: 'Pierwsza konfiguracja' },
+  { id: 'gaming-display', title: 'Ekrany', subtitle: 'Ustawienie profilu' },
+  { id: 'launcher', title: 'Launcher profilu', subtitle: 'Aktywacja aplikacji' },
+  { id: 'console-behaviour', title: 'Zachowanie profilu', subtitle: 'Przygotowanie pulpitu' },
+  { id: 'controller', title: 'Skróty profilu', subtitle: 'Wejście i aktywacja' },
+  { id: 'work-behaviour', title: 'Work Mode', subtitle: 'Przywrócenie środowiska' },
+  { id: 'work-shortcuts', title: 'Skróty Work Mode', subtitle: 'Powrót do pracy' },
+  { id: 'app-behaviour', title: 'Zachowanie aplikacji', subtitle: 'Uruchamianie i integracja' },
+  { id: 'finish', title: 'Podsumowanie', subtitle: 'Sprawdź i zapisz' },
 ];
 
 export const PROFILE_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['gaming-display', 'launcher', 'console-behaviour', 'controller'].includes(step.id));

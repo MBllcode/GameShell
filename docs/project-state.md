@@ -9,6 +9,14 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Monitor sesji Windows jest teraz bardziej ostrożny: filtruje procesy launchera/systemowe, czeka na stabilizację kandydata przed `GameActive`, i loguje realne przejścia `candidate observed -> stabilized -> exited`.
 - Recovery Playnite nie jest zbyt agresywnie rozbudowywany: loguje stan aktywacji i działa tylko po potwierdzeniu prawdziwego cyklu `GameExited`/`ReturningToLauncher`, bez dodatkowych mechanizmów focus bez dowodu runtime.
 
+## Ostatnia iteracja zmian
+
+- Uzupełniono flow setupu i walidację kolejnych kroków: `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ConsoleBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep` oraz `ControllerStep` są spójne pod względem lokalnych błędów, deterministycznego zapisu draftu oraz bezpieczniejszej nawigacji po pierwszej konfiguracji.
+- Draft konfiguracji ekranów jest teraz commitowany przed przejściem dalej i przed zapisaniem profilu, co zapobiega sytuacjom, w których UI zapisuje stale snapshot bez pełnej, znormalizowanej geometrii.
+- Hotkeyi profili są normalizowane i weryfikowane lokalnie; podczas `NASLUCHIWANIE` aplikacja chwilowo wyrejestrowuje globalne skróty, aby poprawnie przechwycić i zwalidować kombinację bez konfliktów.
+- Zachowanie startu i autostartu jest spójne w zwykłym starcie i scenariuszach fallbackowych: `Start with Windows` i `Start minimized to tray` są zastosowane w ścieżce runtime, a nie tylko w dekoracji UI.
+- Aktualna dokumentacja UI jest utrzymywana w `docs/ui.md` jako aktywny standard zgodny z obecnym green-v2 theme, motion systemem i zasadami dla sidebaru, profili i walidacji.
+
 ## Stack i architektura
 
 - .NET 9 + WPF (`GameShell.Desktop`) jako host UI.

@@ -46,7 +46,7 @@ export function ConsoleBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie profilu</h2>
-      <p>Ustaw wygląd pulpitu po uruchomieniu profilu.</p>
+      <p>Zdefiniuj, jak GameShell ma przygotować pulpit po aktywacji profilu. Te ustawienia będą stosowane podczas przechodzenia do trybu gamingowego.</p>
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
           <span>Aktywny profil</span>

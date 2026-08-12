@@ -134,15 +134,6 @@ public static class AppSettingsValidator
             });
         }
 
-        if (normalizedProfiles.Count == 0 && display.PcGamingLayout is not null)
-        {
-            normalizedProfiles.Add(new DisplayLayoutProfile
-            {
-                Name = "DOMYSLNY",
-                Layout = display.PcGamingLayout
-            });
-        }
-
         display.PcGamingProfiles = normalizedProfiles;
 
         if (display.PcGamingProfiles.Count == 0)

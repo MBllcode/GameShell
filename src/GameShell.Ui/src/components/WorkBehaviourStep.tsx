@@ -21,7 +21,7 @@ export function WorkBehaviourStep({
     <div className="wizard-copy">
       <p className="eyebrow">Krok {stepNumber}</p>
       <h2>Zachowanie Work Mode</h2>
-      <p>Ustaw wygląd pulpitu po powrocie do Work Mode.</p>
+      <p>Ustaw, jak ma wyglądać środowisko pracy po powrocie do trybu roboczego. Te ustawienia pomagają przywrócić wygodny stan systemu po sesji gamingowej.</p>
       <div className="settings-category-list">
         <SettingsSection title="LAUNCHER">
           <SettingRow title="Zamknij launcher" checked={behaviour.closeLauncher} onChange={(value) => setBehaviour({ ...behaviour, closeLauncher: value })} />
