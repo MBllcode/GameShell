@@ -145,7 +145,13 @@ export function DisplaysStep({
         </div>
         {topology.displays.length > 0 ? <DisplayTopologyValidation errors={topologyErrors} showSelectionError={validationState.showSelectionError} /> : null}
         <section className="display-inventory" aria-label="Wykryte ekrany dostępne do dodania">
-          <div className="display-module-header"><div><strong>Wykryte ekrany <span className="display-inventory-count">{availableDisplays.length}</span></strong><p>Kliknij kafelek, aby dodać ekran do układu profilu.</p></div></div>
+          <div className="display-module-header">
+            <div className="display-inventory-header">
+              <strong>Wykryte ekrany</strong>
+              <span className="display-inventory-count">{availableDisplays.length}</span>
+            </div>
+            <p>Kliknij kafelek, aby dodać ekran do układu profilu.</p>
+          </div>
           <div className="display-inventory-list">
             {availableDisplays.map((display) => <button className="display-inventory-item" type="button" key={identityKey(display.identity)} onClick={() => void addDisplay(display)}><span className="display-inventory-icon">+</span><strong>{display.name || 'Nieznany ekran'}</strong><span>{display.width || display.preferredWidth} × {display.height || display.preferredHeight} · {display.isEnabled ? 'aktywny' : 'nieaktywny'}</span><em>Dodaj do układu</em></button>)}
             {availableDisplays.length === 0 ? <p className="hint-line">Brak dodatkowych wykrytych ekranów.</p> : null}
@@ -164,22 +170,18 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove
   const rects = topology.displays.map(display => rectFromPosition(display.positionX, display.positionY, display.width, display.height));
   const bounds = getBounds(topology.displays);
   const largestDisplayDimension = rects.reduce((largest, rect) => Math.max(largest, rect.width, rect.height), 0);
+  const fixedCanvasHeight = 360;
   const transform = createCanvasTransform(bounds, viewport.width, viewport.height, 24, largestDisplayDimension);
-  const canvasHeight = topology.displays.length === 0
-    ? 144
-    : topology.displays.length === 1
-    ? 320
-    : Math.max(320, Math.min(520, viewport.width / bounds.width * bounds.height + 72));
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const updateViewport = () => setViewport({ width: canvas.clientWidth, height: canvasHeight });
+    const updateViewport = () => setViewport({ width: canvas.clientWidth, height: fixedCanvasHeight });
     updateViewport();
     const observer = new ResizeObserver(updateViewport);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [canvasHeight]);
+  }, []);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -205,7 +207,7 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove
   }
 
   const previewRect = dragPreview ? rectToCanvas(dragPreview.rect, transform) : null;
-  return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''} ${topology.displays.length === 1 ? 'is-compact' : ''}`} style={{ height: `${canvasHeight}px` }} aria-label="Podgląd układu ekranów">
+  return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''}`} style={{ height: `${fixedCanvasHeight}px` }} aria-label="Podgląd układu ekranów">
     {topology.displays.map((display, index) => {
       const key = identityKey(display.identity);
       const topologyRect = dragPreview?.identityKey === key ? dragPreview.rect : rects[index];
@@ -318,7 +320,7 @@ function formatRefresh(refreshRate: number) {
 }
 
 function DisplayTopologyValidation({ errors, showSelectionError }: { errors: string[]; showSelectionError: boolean }) {
-  if (!showSelectionError && errors.length === 0) return <p className="display-topology-ready">Topology gotowa do zapisania.</p>;
+  if (!showSelectionError && errors.length === 0) return null;
   return <div className="display-topology-validation" role="alert">{(showSelectionError ? ['Dodaj co najmniej jeden ekran.', ...errors] : errors).filter((error, index, all) => all.indexOf(error) === index).map((error) => <span key={error}>{error}</span>)}</div>;
 }
 

@@ -107,6 +107,8 @@ Aktualne, robocze podsumowanie stanu projektu.
   - wymaga wyboru co najmniej jednego ekranu,
   - pokazuje te bledy lokalnie i niezaleznie (osobne komunikaty),
   - nie ma sztucznego limitu liczby ekranow w profilu; walidowane sa tylko wymagania topology i poprawnosc danych.
+- Canvas profilu ma teraz stała wysokosc `360px` na calej zakladce, z fitowaniem topology do srodka i wyrównanym panelem po prawej; layout nie skacze pomiedzy profilami.
+- Panel profilu i przyciski akcji maja odswiezony, bardziej wylozany wyglad z subtelna ramka, chip-count i spójna hierarchia akcji, bez zmiany logiki workflow.
 - Draft konfiguracji ekranow jest commitowany deterministycznie przed zapisem i przy kluczowej nawigacji.
 - Przy tworzeniu nowego profilu hotkey profilu startuje zawsze jako pusty.
 - Cofanie `Wroc` w flow tworzenia profilu nie pokazuje modala o niezapisanych zmianach.

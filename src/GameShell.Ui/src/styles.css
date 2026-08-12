@@ -1,4 +1,5 @@
 :root {
+  --display-canvas-height: 360px;
   --bg-root: #0D1110;
   --bg-sidebar: #151A17;
   --bg-panel: #151A17;
@@ -2184,63 +2185,65 @@ h1 {
   animation: display-limit-hit 300ms ease;
 }
 
-.display-topology-editor { display: grid; gap: 8px; padding: 11px; background: var(--bg-root); border: 1px solid var(--border-default); }
-.display-topology-toolbar, .display-properties-title, .display-inventory .display-module-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
-.display-topology-toolbar .display-diagnostics-actions { margin-left: auto; }
-.display-profile-row { align-items: end; gap: 18px; }
-.display-profile-field { display: grid; gap: 5px; width: min(100%, 520px); }
-.display-topology-toolbar p, .display-inventory p { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
-.display-topology-count, .display-properties-title span { display: block; margin-top: 4px; color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.68rem; }
-.display-inventory-count { color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.62rem; text-transform: uppercase; }
-.display-topology-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(250px, 0.8fr); gap: 12px; }
-.display-topology-canvas { position: relative; min-height: 320px; overflow: hidden; touch-action: none; user-select: none; border: 1px solid var(--border-default); background-color: var(--bg-panel); background-image: linear-gradient(rgba(116, 154, 105, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(116, 154, 105, 0.045) 1px, transparent 1px); background-size: 24px 24px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 5%, transparent); }
-.display-topology-layout.is-empty { align-items: start; }
-.display-topology-canvas.is-empty { min-height: 0; }
-.display-topology-canvas.is-compact { background-size: 28px 28px; }
-.display-topology-node { position: absolute; z-index: 1; min-width: 0; min-height: 0; display: grid; align-content: center; justify-items: center; gap: 3px; padding: 8px; overflow: hidden; border: 1px solid var(--border-active); background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated)); color: var(--text-primary); cursor: grab; transition: border-color 140ms ease, background-color 140ms ease, opacity 140ms ease, box-shadow 140ms ease; }
+.display-topology-editor { display: grid; gap: 6px; padding: 8px 10px 10px; background: var(--bg-root); border: 1px solid var(--border-default); }
+.display-topology-toolbar, .display-properties-title, .display-inventory .display-module-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.display-topology-toolbar .display-diagnostics-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.display-profile-row { align-items: end; gap: 12px; }
+.display-profile-field { display: grid; gap: 4px; width: min(100%, 440px); }
+.display-profile-field .text-input { width: 100%; }
+.display-topology-toolbar p, .display-inventory p { margin: 0; color: var(--text-muted); font-size: 0.76rem; }
+.display-topology-count, .display-properties-title span { display: block; margin-top: 3px; color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.64rem; }
+.display-inventory-header { display: inline-flex; align-items: center; gap: 8px; }
+.display-inventory-count { display: inline-flex; align-items: center; justify-content: center; min-width: 1.8em; height: 1.8em; padding: 0 0.42em; border: 1px solid color-mix(in srgb, var(--accent-strong) 32%, var(--border-default)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel)); color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.66rem; line-height: 1; text-transform: uppercase; }
+.display-topology-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(220px, 0.72fr); gap: 10px; height: var(--display-canvas-height); align-items: stretch; }
+.display-topology-canvas { position: relative; height: var(--display-canvas-height); min-height: var(--display-canvas-height); overflow: hidden; touch-action: none; user-select: none; border: 1px solid var(--border-default); background-color: var(--bg-panel); background-image: linear-gradient(rgba(116, 154, 105, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(116, 154, 105, 0.045) 1px, transparent 1px); background-size: 22px 22px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 5%, transparent); }
+.display-topology-layout.is-empty { align-items: stretch; }
+.display-topology-canvas.is-empty { min-height: var(--display-canvas-height); height: var(--display-canvas-height); }
+.display-topology-canvas.is-compact { background-size: 20px 20px; }
+.display-topology-node { position: absolute; z-index: 1; min-width: 0; min-height: 0; display: grid; align-content: center; justify-items: center; gap: 2px; padding: 6px 7px; overflow: hidden; border: 1px solid var(--border-active); background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated)); color: var(--text-primary); cursor: grab; transition: border-color 140ms ease, background-color 140ms ease, opacity 140ms ease, box-shadow 140ms ease; }
 .display-topology-node:active { cursor: grabbing; }
 .display-topology-node:hover { border-color: var(--accent-strong); }
 .display-topology-node.is-selected { box-shadow: 0 0 0 2px var(--accent-strong), inset 0 0 0 1px var(--bg-root); }
 .display-topology-node.is-disabled { opacity: 0.42; background: var(--bg-elevated); border-style: dashed; }
 .display-topology-node.is-primary { border-color: var(--accent-strong); }
 .display-topology-node.is-dragging { cursor: grabbing; opacity: 0.92; }
-.display-topology-node strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.72rem; }
-.display-topology-node small { color: var(--text-muted); font-size: 0.62rem; }
-.display-topology-node em { color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.56rem; font-style: normal; font-weight: 800; }
-.display-topology-node-number { position: absolute; top: 5px; left: 6px; color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.66rem; font-weight: 800; }
-.display-topology-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--text-muted); font-size: 0.78rem; }
+.display-topology-node strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.68rem; }
+.display-topology-node small { color: var(--text-muted); font-size: 0.6rem; }
+.display-topology-node em { color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.54rem; font-style: normal; font-weight: 800; }
+.display-topology-node-number { position: absolute; top: 5px; left: 6px; color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.6rem; font-weight: 800; }
+.display-topology-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--text-muted); font-size: 0.74rem; }
 .display-topology-preview { position: absolute; z-index: 0; pointer-events: none; border: 1px dashed color-mix(in srgb, var(--accent-strong) 72%, transparent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .display-topology-guide { position: absolute; z-index: 0; pointer-events: none; border-color: color-mix(in srgb, var(--accent-strong) 48%, transparent); border-style: dashed; opacity: 0.75; }
 .display-topology-guide.is-vertical { top: 0; bottom: 0; border-left-width: 1px; }
 .display-topology-guide.is-horizontal { left: 0; right: 0; border-top-width: 1px; }
-.display-properties-panel { display: grid; align-content: start; gap: 10px; padding: 13px; border: 1px solid var(--border-default); background: var(--bg-panel); }
-.display-properties-panel.is-empty { align-content: center; min-height: 98px; padding: 12px; color: var(--text-muted); }
-.display-properties-panel.is-empty span { font-size: 0.78rem; }
-.display-properties-title strong { color: var(--text-primary); font-size: 0.86rem; }
-.display-property-section { display: grid; gap: 8px; padding-top: 9px; border-top: 1px solid var(--border-subtle); }
-.display-property-heading { color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-.text-action { border: 0; padding: 0; background: transparent; color: var(--danger); cursor: pointer; font-size: 0.7rem; }
-.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 0.78rem; }
+.display-properties-panel { display: grid; align-content: start; gap: 8px; height: 100%; padding: 10px 11px; border: 1px solid var(--border-default); background: var(--bg-panel); overflow-y: auto; }
+.display-properties-panel.is-empty { align-content: center; min-height: 90px; padding: 10px; color: var(--text-muted); }
+.display-properties-panel.is-empty span { font-size: 0.76rem; }
+.display-properties-title strong { color: var(--text-primary); font-size: 0.8rem; }
+.display-property-section { display: grid; gap: 6px; padding-top: 7px; border-top: 1px solid var(--border-subtle); }
+.display-property-heading { color: var(--accent-soft); font-family: var(--font-technical); font-size: 0.56rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.text-action { border: 0; padding: 0; background: transparent; color: var(--danger); cursor: pointer; font-size: 0.68rem; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text-secondary); font-size: 0.74rem; }
 .toggle-row input { accent-color: var(--accent-strong); }
-.display-properties-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.display-properties-grid label { display: grid; gap: 4px; color: var(--text-muted); font-size: 0.68rem; }
+.display-properties-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.display-properties-grid label { display: grid; gap: 3px; color: var(--text-muted); font-size: 0.62rem; }
 .display-properties-grid .text-input { width: 100%; min-width: 0; }
-.display-properties-grid .display-refresh-field { grid-column: 1 / -1; margin-top: 3px; margin-bottom: 2px; }
+.display-properties-grid .display-refresh-field { grid-column: 1 / -1; margin-top: 2px; margin-bottom: 1px; }
 .display-refresh-select { position: relative; width: 100%; }
-.display-refresh-select select { appearance: none; -webkit-appearance: none; padding-right: 38px; }
-.display-refresh-chevron { position: absolute; top: 50%; right: 13px; width: 6px; height: 6px; border-right: 1px solid var(--text-muted); border-bottom: 1px solid var(--text-muted); transform: translateY(-50%) rotate(45deg); pointer-events: none; }
-.display-topology-validation, .display-topology-ready { margin: 2px 0 0; padding: 7px 10px; border-left: 2px solid var(--warning); background: color-mix(in srgb, var(--bg-panel) 88%, var(--warning) 12%); color: var(--warning); font-size: 0.72rem; }
-.display-topology-validation { display: grid; gap: 3px; }
-.display-topology-ready { border-left-color: var(--accent); color: var(--accent-soft); }
-.display-inventory { border-top: 1px solid var(--border-subtle); padding-top: 10px; margin-top: 1px; }
-.display-inventory-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
-.display-inventory-item { position: relative; display: grid; gap: 3px; min-width: 190px; padding: 11px 32px 11px 12px; border: 1px solid var(--border-default); background: var(--bg-panel); color: var(--text-primary); text-align: left; cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease; }
+.display-refresh-select select { appearance: none; -webkit-appearance: none; padding-right: 32px; }
+.display-refresh-chevron { position: absolute; top: 50%; right: 11px; width: 6px; height: 6px; border-right: 1px solid var(--text-muted); border-bottom: 1px solid var(--text-muted); transform: translateY(-50%) rotate(45deg); pointer-events: none; }
+.display-topology-validation, .display-topology-ready { margin: 0; padding: 5px 8px; border-left: 2px solid var(--warning); background: color-mix(in srgb, var(--bg-panel) 90%, var(--warning) 10%); color: var(--warning); font-size: 0.66rem; }
+.display-topology-validation { display: grid; gap: 2px; }
+.display-topology-ready { border-left-color: var(--accent); color: var(--accent-soft); background: color-mix(in srgb, var(--bg-panel) 90%, var(--accent) 10%); }
+.display-inventory { border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: 1px; }
+.display-inventory-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.display-inventory-item { position: relative; display: grid; gap: 2px; min-width: 162px; padding: 9px 28px 9px 10px; border: 1px solid var(--border-default); background: var(--bg-panel); color: var(--text-primary); text-align: left; cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease; }
 .display-inventory-item:hover:not(:disabled) { border-color: var(--border-active); background: var(--bg-elevated); transform: translateY(-1px); }
 .display-inventory-item:disabled { cursor: not-allowed; opacity: 0.5; }
-.display-inventory-item strong { font-size: 0.74rem; }
-.display-inventory-item span { color: var(--text-muted); font-size: 0.66rem; }
-.display-inventory-item em { color: var(--accent-soft); font-size: 0.62rem; font-style: normal; }
-.display-inventory-icon { position: absolute; top: 10px; right: 11px; color: var(--accent-strong); font-family: var(--font-technical); font-size: 1rem; line-height: 1; }
+.display-inventory-item strong { font-size: 0.7rem; }
+.display-inventory-item span { color: var(--text-muted); font-size: 0.62rem; }
+.display-inventory-item em { color: var(--accent-soft); font-size: 0.58rem; font-style: normal; }
+.display-inventory-icon { position: absolute; top: 9px; right: 10px; color: var(--accent-strong); font-family: var(--font-technical); font-size: 0.92rem; line-height: 1; }
 @media (max-width: 820px) { .display-topology-layout { grid-template-columns: 1fr; } .display-topology-toolbar { flex-direction: column; } .display-topology-toolbar .display-diagnostics-actions { align-self: flex-end; } .display-profile-field { width: 100%; } }
 
 @keyframes display-limit-hit {

@@ -64,6 +64,8 @@ If the destination EXE is locked (running process), script writes a timestamped 
 - Work Mode is moved out of quick-switch cards into the sidebar profile module.
 - Step `Ekrany` validates profile name and display selection as separate local errors.
 - Profile display drafts are committed deterministically before save/navigation.
+- The display-profile editor now uses a fixed-height canvas for a stable visual layout, with the topology scaled to fit inside the same viewport while the right-hand properties panel aligns to the same height.
+- The profile toolbar and action buttons use a more refined card-like treatment, improving visual cohesion without altering backend or display logic.
 - Profile hotkeys are per-profile, normalized to canonical keys, and must remain unique across profiles.
 - During hotkey capture (`NASLUCHIWANIE`), registered global hotkeys are temporarily disabled so the UI can validate duplicate combinations locally.
 - `Start with Windows` writes Windows autostart integration, and `Start minimized to tray` now applies on normal app startup.
