@@ -8,7 +8,6 @@ public sealed class AppSettings
     public GameShellSettings GameShell { get; set; } = new();
     public GamingSettings Gaming { get; set; } = new();
     public WorkModeSettings WorkMode { get; set; } = new();
-    public AudioSettings Audio { get; set; } = new();
     public ControllerSettings Controller { get; set; } = new();
     public HotkeySettings Hotkeys { get; set; } = new();
     public StartupSettings Startup { get; set; } = new();
@@ -164,14 +163,6 @@ public sealed class WorkModeSettings
     public int DesktopIconsDelaySeconds { get; set; } = 5;
     public bool DoNotMinimizeWindows { get; set; } = true;
     public int CompletionDelaySeconds { get; set; }
-}
-
-public sealed class AudioSettings
-{
-    public bool SwitchAudioInConsoleMode { get; set; } = true;
-    public bool RestoreAudioInWorkMode { get; set; } = true;
-    public string? ConsoleAudioDeviceId { get; set; }
-    public string? ConsoleAudioDeviceName { get; set; }
 }
 
 public sealed class HotkeySettings

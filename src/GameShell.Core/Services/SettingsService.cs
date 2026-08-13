@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
@@ -21,10 +20,14 @@ public sealed class SettingsService : ISettingsService
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
     private readonly string _backupPath;
     private readonly string _tempPath;
+    private readonly LegacySettingsPropertyMigrator _legacySettingsPropertyMigrator;
     private AppSettings? _cachedSettings;
     private DateTime _cachedLastWriteTimeUtc;
 
-    public SettingsService(ILogger<SettingsService> logger, string? settingsPath = null)
+    public SettingsService(
+        ILogger<SettingsService> logger,
+        string? settingsPath = null,
+        LegacySettingsPropertyMigrator? legacySettingsPropertyMigrator = null)
     {
         _logger = logger;
         SettingsPath = settingsPath ?? Path.Combine(
@@ -33,6 +36,7 @@ public sealed class SettingsService : ISettingsService
             "settings.json");
         _backupPath = $"{SettingsPath}.bak";
         _tempPath = $"{SettingsPath}.tmp";
+        _legacySettingsPropertyMigrator = legacySettingsPropertyMigrator ?? new LegacySettingsPropertyMigrator();
     }
 
     public string SettingsPath { get; }
@@ -239,7 +243,7 @@ public sealed class SettingsService : ISettingsService
             await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             var json = await reader.ReadToEndAsync(cancellationToken);
-            json = MigrateLegacyPropertyNames(json);
+            json = _legacySettingsPropertyMigrator.Migrate(json);
             using var document = JsonDocument.Parse(json);
             var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? new AppSettings();
@@ -253,53 +257,6 @@ public sealed class SettingsService : ISettingsService
     }
 
     private static AppSettings CreateDefaultSettings() => new();
-
-    private static string MigrateLegacyPropertyNames(string json)
-    {
-        var root = JsonNode.Parse(json) as JsonObject;
-        if (root is null)
-        {
-            return json;
-        }
-
-        Rename(root, "pcGaming", "gaming");
-
-        if (root["display"] is JsonObject display)
-        {
-            Rename(display, "pcGamingLayout", "gamingLayout");
-            Rename(display, "pcGamingProfiles", "gamingProfiles");
-            Rename(display, "activePcGamingProfileName", "activeGamingProfileName");
-            Rename(display, "pcGamingProfileConfigurations", "gamingProfileConfigurations");
-            Rename(display, "pcGamingProfileBehaviours", "gamingProfileBehaviours");
-        }
-
-        if (root["hotkeys"] is JsonObject hotkeys)
-        {
-            Rename(hotkeys, "pcGamingMode", "gamingMode");
-        }
-
-        if (root["controller"] is JsonObject controller)
-        {
-            Rename(controller, "pcGamingMode", "gamingMode");
-        }
-
-        return root.ToJsonString(JsonOptions);
-    }
-
-    private static void Rename(JsonObject source, string legacyName, string currentName)
-    {
-        if (!source.TryGetPropertyValue(legacyName, out var value))
-        {
-            return;
-        }
-
-        if (!source.ContainsKey(currentName))
-        {
-            source[currentName] = value?.DeepClone();
-        }
-
-        source.Remove(legacyName);
-    }
 
     private void LogRefreshPolicyHydration(AppSettings? persisted, AppSettings resolved)
     {

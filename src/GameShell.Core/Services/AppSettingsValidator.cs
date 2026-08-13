@@ -1,6 +1,5 @@
 using GameShell.Core.Models;
 using System.Globalization;
-using System.Text;
 
 namespace GameShell.Core.Services;
 
@@ -19,7 +18,6 @@ public static class AppSettingsValidator
         settings.GameShell ??= new GameShellSettings();
         settings.Gaming ??= new GamingSettings();
         settings.WorkMode ??= new WorkModeSettings();
-        settings.Audio ??= new AudioSettings();
         settings.Controller ??= new ControllerSettings();
         settings.Hotkeys ??= new HotkeySettings();
         settings.Startup ??= new StartupSettings();
@@ -40,19 +38,13 @@ public static class AppSettingsValidator
         settings.Ui.WindowHeight = ValidateWindowDimension(settings.Ui.WindowHeight, 720, 10000);
         settings.Ui.WindowLeft = ValidateWindowCoordinate(settings.Ui.WindowLeft);
         settings.Ui.WindowTop = ValidateWindowCoordinate(settings.Ui.WindowTop);
-        if (string.IsNullOrWhiteSpace(settings.Audio.ConsoleAudioDeviceId))
-        {
-            settings.Audio.ConsoleAudioDeviceId = null;
-            settings.Audio.ConsoleAudioDeviceName = null;
-        }
-
         ValidateControllerShortcut(settings.Controller.ConsoleMode);
         ValidateControllerShortcut(settings.Controller.GamingMode);
         ValidateControllerShortcut(settings.Controller.WorkMode);
 
         NormalizeGamingProfiles(settings.Display);
         NormalizeGamingProfileConfigurations(settings.Display, settings.Gaming, settings.Launcher, settings.Hotkeys);
-        EnsureGlobalWorkModeShortcutUniqueness(settings);
+        new ShortcutConflictNormalizer().Normalize(settings);
 
         return settings;
     }
@@ -265,8 +257,6 @@ public static class AppSettingsValidator
         }
 
         display.GamingProfileConfigurations = normalized;
-        EnsureUniqueProfileEnterHotkeys(display.GamingProfileConfigurations);
-        EnsureUniqueProfileControllerShortcuts(display.GamingProfileConfigurations);
         display.GamingProfileBehaviours = normalized
             .Select(configuration => new GamingProfileBehaviour
             {
@@ -274,164 +264,6 @@ public static class AppSettingsValidator
                 Behaviour = configuration.Behaviour
             })
             .ToList();
-    }
-
-    private static void EnsureUniqueProfileEnterHotkeys(IReadOnlyList<GamingProfileConfiguration> configurations)
-    {
-        var usedHotkeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var configuration in configurations)
-        {
-            var normalized = NormalizeHotkey(configuration.Hotkeys.EnterProfile);
-            if (string.IsNullOrEmpty(normalized))
-            {
-                continue;
-            }
-
-            if (!usedHotkeys.Add(normalized))
-            {
-                configuration.Hotkeys.EnterProfile = "";
-            }
-        }
-    }
-
-    private static void EnsureUniqueProfileControllerShortcuts(IReadOnlyList<GamingProfileConfiguration> configurations)
-    {
-        var usedShortcuts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var configuration in configurations)
-        {
-            if (configuration.ControllerShortcut is null || configuration.ControllerShortcut.Buttons.Count == 0)
-            {
-                continue;
-            }
-
-            var normalized = string.Join('+', configuration.ControllerShortcut.Buttons
-                .Select(button => button.ToString())
-                .OrderBy(button => button, StringComparer.OrdinalIgnoreCase));
-
-            if (!usedShortcuts.Add(normalized))
-            {
-                configuration.ControllerShortcut = null;
-            }
-        }
-    }
-
-    private static void EnsureGlobalWorkModeShortcutUniqueness(AppSettings settings)
-    {
-        var workModeHotkey = NormalizeHotkey(settings.Hotkeys.WorkMode);
-        if (!string.IsNullOrEmpty(workModeHotkey))
-        {
-            foreach (var configuration in settings.Display.GamingProfileConfigurations)
-            {
-                if (NormalizeHotkey(configuration.Hotkeys.EnterProfile) == workModeHotkey)
-                {
-                    configuration.Hotkeys.EnterProfile = "";
-                }
-            }
-        }
-
-        var workModeControllerShortcut = NormalizeControllerShortcut(settings.Controller.WorkMode);
-        if (string.IsNullOrEmpty(workModeControllerShortcut))
-        {
-            return;
-        }
-
-        foreach (var configuration in settings.Display.GamingProfileConfigurations)
-        {
-            if (NormalizeControllerShortcut(configuration.ControllerShortcut) == workModeControllerShortcut)
-            {
-                configuration.ControllerShortcut = null;
-            }
-        }
-    }
-
-    private static string NormalizeControllerShortcut(ControllerShortcutSettings? shortcut)
-    {
-        if (shortcut is null || shortcut.Buttons.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        return string.Join('+', shortcut.Buttons
-            .Select(button => button.ToString())
-            .OrderBy(button => button, StringComparer.OrdinalIgnoreCase));
-    }
-
-    private static string NormalizeHotkey(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        var parts = value
-            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-
-        if (parts.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var keyPart = RemoveDiacritics(parts[^1]).ToUpperInvariant();
-        var modifierParts = parts
-            .Take(parts.Count - 1)
-            .Select(part => RemoveDiacritics(part).ToLowerInvariant())
-            .ToHashSet(StringComparer.Ordinal);
-
-        var normalizedModifiers = new List<string>();
-        if (modifierParts.Contains("ctrl") || modifierParts.Contains("control"))
-        {
-            normalizedModifiers.Add("Ctrl");
-        }
-
-        if (modifierParts.Contains("alt"))
-        {
-            normalizedModifiers.Add("Alt");
-        }
-
-        if (modifierParts.Contains("shift"))
-        {
-            normalizedModifiers.Add("Shift");
-        }
-
-        if (modifierParts.Contains("win") || modifierParts.Contains("windows") || modifierParts.Contains("meta"))
-        {
-            normalizedModifiers.Add("Win");
-        }
-
-        if (normalizedModifiers.Count == 0 || string.IsNullOrWhiteSpace(keyPart))
-        {
-            return string.Empty;
-        }
-
-        normalizedModifiers.Add(keyPart);
-        return string.Join('+', normalizedModifiers);
-    }
-
-    private static string RemoveDiacritics(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return value;
-        }
-
-        var normalized = value.Normalize(NormalizationForm.FormD);
-        var filtered = new char[normalized.Length];
-        var index = 0;
-
-        foreach (var character in normalized)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
-            {
-                continue;
-            }
-
-            filtered[index++] = character;
-        }
-
-        return new string(filtered, 0, index).Normalize(NormalizationForm.FormC);
     }
 
     private static GamingProfileConfiguration? ResolveProfileConfiguration(IEnumerable<GamingProfileConfiguration> candidates, string profileName)

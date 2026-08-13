@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace GameShell.Core.Services;
 
-public sealed class GamingProfileTopologyReadinessEvaluator
+public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopologyReadinessEvaluator
 {
     private const double RefreshToleranceHz = 0.25;
     private readonly IDisplayQueryService _displayQueryService;

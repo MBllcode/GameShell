@@ -14,8 +14,7 @@ public sealed class SdlControllerShortcutService : IDisposable
     private readonly ILogger<SdlControllerShortcutService> _logger;
     private readonly Lock _syncRoot = new();
     private readonly HashSet<ControllerButton> _lastPressedButtons = [];
-    private readonly Dictionary<string, DateTimeOffset> _pressedSince = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _triggeredProfiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ControllerShortcutMatcher _shortcutMatcher = new();
     private readonly ControllerCaptureStateMachine _captureMachine = new();
     private readonly ControllerStatusChangeTracker _statusChangeTracker = new();
     private readonly LogRateLimiter _errorLogLimiter = new();
@@ -183,8 +182,7 @@ public sealed class SdlControllerShortcutService : IDisposable
             lock (_syncRoot)
             {
                 _settings = settings;
-                _pressedSince.Clear();
-                _triggeredProfiles.Clear();
+                _shortcutMatcher.Reset();
             }
             _logger.LogInformation(
                 "Controller shortcut settings refreshed. ProfilesWithShortcuts={Profiles}.",
@@ -453,81 +451,36 @@ public sealed class SdlControllerShortcutService : IDisposable
 
     private async Task HandleShortcutsAsync(string controllerId, HashSet<ControllerButton> pressed, CancellationToken cancellationToken)
     {
-        List<(string ProfileName, ControllerShortcutSettings Shortcut)> shortcuts;
-        ControllerShortcutSettings? workModeShortcut;
+        IReadOnlyList<ControllerShortcutTrigger> triggers;
         lock (_syncRoot)
         {
-            shortcuts = _settings.Display.GamingProfileConfigurations
-                .Where(configuration => !string.IsNullOrWhiteSpace(configuration.ProfileName) && configuration.ControllerShortcut is not null)
-                .Select(configuration => (configuration.ProfileName, configuration.ControllerShortcut!))
-                .Where(entry => entry.Item2.Buttons.Count > 0).ToList();
-            workModeShortcut = _settings.Controller.WorkMode is { Buttons.Count: > 0 }
-                ? _settings.Controller.WorkMode
-                : null;
+            triggers = _shortcutMatcher.Match(
+                _settings,
+                controllerId,
+                pressed,
+                DateTimeOffset.UtcNow);
         }
-        foreach (var (profileName, shortcut) in shortcuts)
+
+        foreach (var trigger in triggers)
         {
-            var key = $"{controllerId}:{profileName}";
-            if (!pressed.SetEquals(shortcut.Buttons))
-            {
-                lock (_syncRoot) { _pressedSince.Remove(key); _triggeredProfiles.Remove(key); }
-                continue;
-            }
-            var shouldTrigger = false;
-            var now = DateTimeOffset.UtcNow;
-            lock (_syncRoot)
-            {
-                if (!_pressedSince.TryGetValue(key, out var startedAt)) _pressedSince[key] = now;
-                else if (!_triggeredProfiles.Contains(key) && now - startedAt >= TimeSpan.FromMilliseconds(Math.Clamp(shortcut.HoldDurationMs, 300, 3000)))
-                {
-                    _triggeredProfiles.Add(key);
-                    shouldTrigger = true;
-                }
-            }
-            if (shouldTrigger)
+            if (trigger.IsWorkMode)
             {
                 _logger.LogInformation(
-                    "Controller shortcut matched. Profile={ProfileName}, ControllerId={ControllerId}, Buttons=[{Buttons}], HoldDurationMs={HoldDurationMs}.",
-                    profileName,
+                    "Controller shortcut matched. Mode=WorkMode, ControllerId={ControllerId}, Buttons=[{Buttons}], HoldDurationMs={HoldDurationMs}.",
                     controllerId,
-                    string.Join(',', shortcut.Buttons),
-                    shortcut.HoldDurationMs);
-                await TriggerProfileAsync(profileName, cancellationToken);
+                    string.Join(',', trigger.Shortcut.Buttons),
+                    trigger.Shortcut.HoldDurationMs);
+                await TriggerWorkModeAsync(cancellationToken);
+                continue;
             }
-        }
 
-        if (workModeShortcut is null)
-        {
-            return;
-        }
-
-        const string workModeKey = "WorkMode";
-        if (!pressed.SetEquals(workModeShortcut.Buttons))
-        {
-            lock (_syncRoot) { _pressedSince.Remove(workModeKey); _triggeredProfiles.Remove(workModeKey); }
-            return;
-        }
-
-        var shouldTriggerWorkMode = false;
-        var currentTime = DateTimeOffset.UtcNow;
-        lock (_syncRoot)
-        {
-            if (!_pressedSince.TryGetValue(workModeKey, out var startedAt)) _pressedSince[workModeKey] = currentTime;
-            else if (!_triggeredProfiles.Contains(workModeKey) && currentTime - startedAt >= TimeSpan.FromMilliseconds(Math.Clamp(workModeShortcut.HoldDurationMs, 300, 3000)))
-            {
-                _triggeredProfiles.Add(workModeKey);
-                shouldTriggerWorkMode = true;
-            }
-        }
-
-        if (shouldTriggerWorkMode)
-        {
             _logger.LogInformation(
-                "Controller shortcut matched. Mode=WorkMode, ControllerId={ControllerId}, Buttons=[{Buttons}], HoldDurationMs={HoldDurationMs}.",
+                "Controller shortcut matched. Profile={ProfileName}, ControllerId={ControllerId}, Buttons=[{Buttons}], HoldDurationMs={HoldDurationMs}.",
+                trigger.ProfileName,
                 controllerId,
-                string.Join(',', workModeShortcut.Buttons),
-                workModeShortcut.HoldDurationMs);
-            await TriggerWorkModeAsync(cancellationToken);
+                string.Join(',', trigger.Shortcut.Buttons),
+                trigger.Shortcut.HoldDurationMs);
+            await TriggerProfileAsync(trigger.ProfileName!, cancellationToken);
         }
     }
 
@@ -578,8 +531,7 @@ public sealed class SdlControllerShortcutService : IDisposable
             _lastPressedButtons.Clear();
             _lastReadingAt = DateTimeOffset.MinValue;
             _diagnosticStatus = reason;
-            _pressedSince.Clear();
-            _triggeredProfiles.Clear();
+            _shortcutMatcher.Reset();
             _captureMachine.Cancel();
             _captureMachine.Reset();
             _isCaptureActive = false;

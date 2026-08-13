@@ -11,6 +11,19 @@ Aktualne, robocze podsumowanie stanu projektu.
 
 ## Ostatnia iteracja zmian
 
+- Rozpoczeto etapowy refactor architektoniczny: audyt zapisano w `docs/architecture-audit.md`; wydzielono resolver profili gamingowych, koordynator readiness/recovery, router komend WebView, migrator starego JSON, parser hotkeyow oraz serwisy Windows integration/cursor. Zachowanie DisplayConfig/CCD pozostalo bez zmian.
+- Po kolejnych slice'ach `ModeOrchestrator` ma 477 linii zamiast 808, `WebViewBridge` 915 zamiast 1154, `WindowsDisplayConfigurationService` 871 zamiast 1249, `App` 795 zamiast 864, a `SettingsService` 290 zamiast 333; testy .NET obejmuja `140/140` przypadkow.
+- `WindowsDisplayTopologyReader` odpowiada za odczyt/retry/mapowanie topologii DisplayConfig, a `WebViewPayloadReader` za stateless parsing payloadow WebView. Zadna produkcyjna klasa C# nie przekracza obecnie 1000 linii.
+- `SingleInstanceCommandHost` przejal rejestracje named events, marshalowanie callbackow do WPF Dispatcher oraz cleanup z `App`; `App` nadal wybiera komendy i zachowuje polityke lifecycle.
+- `WebViewDisplayCommandHandler` przejal inventory ekranow, capture layoutu, zapisy profili ekranow, display testy i walidacje wyboru ekranow z `WebViewBridge`; bridge pozostaje granica transportu WebView2.
+- `GlobalHotkeyHost` przejal rejestracje Win32 hotkeyow, mapowanie skrotow profili, reload po zapisie, stan nasluchiwania i cleanup z `App`; `App` pozostaje kompozycja lifecycle i runnerem tray.
+- `TrayHost` przejal lifetime `NotifyIcon`, budowanie menu, odswiezanie stanu i callbacki akcji z `App`; `App` pozostaje koordynatorem lifecycle oraz polityki shutdown.
+- Wykonano cleanup statyczny: brak nieuzywanych `using`ow wedlug `IDE0005`; usunieto potwierdzony, nieosiagalny prywatny helper `SelectBestCandidate` z DisplayConfig. Publiczne entry pointy zachowano, gdy sa uzywane przez DI, bridge lub testy.
+- Przejrzano sugestie `LibraryImport` dla P/Invoke. `DllImport` pozostaje celowo w aktualnej warstwie DisplayConfig/Win32: struktury maja wrazliwy layout ABI, fixed native buffers i tablice o rozmiarze runtime. Migracja nie jest bledem do naprawy; ewentualna migracja prostych wywolan wymaga osobnego testowanego slice'a.
+- `ShortcutConflictNormalizer` przejal normalizacje i usuwanie konfliktow skrotow z `AppSettingsValidator`, a `ControllerShortcutMatcher` przejal czyste dopasowanie kombinacji i hold duration z pollingu SDL.
+- Audio nie jest obecnie obslugiwane przez produkt i zostalo usuniete z kontraktow, persistence, DI, WebView oraz UI (`IAudioDeviceService`, `WindowsAudioDeviceService`, audio DTO/commands). Windows domyslnie zarzadza audio niezaleznie od GameShell; stare pola audio w JSON sa ignorowane przy odczycie.
+- Po tych slice'ach `App` ma 459 linii, `TrayHost` 213, `WebViewBridge` 485, `WebViewDisplayCommandHandler` 449, `SdlControllerShortcutService` 655, a najwieksza produkcyjna klasa ma 871 linii. Testy .NET: `142/142`.
+- `WindowsWindowManagementService` przejal operacje Win32 dla ikon pulpitu, taskbarow, okien Explorera, minimalizacji i foreground launchera. `NativeModeWorkflowService` zachowuje kolejnosc krokow, cancellation, warning aggregation i polityke procesow launchera; ma teraz 506 linii zamiast 808.
 - Uzupełniono flow setupu i walidację kolejnych kroków: `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ProfileBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep` oraz `ControllerStep` są spójne pod względem lokalnych błędów, deterministycznego zapisu draftu oraz bezpieczniejszej nawigacji po pierwszej konfiguracji.
 - Draft konfiguracji ekranów jest teraz commitowany przed przejściem dalej i przed zapisaniem profilu, co zapobiega sytuacjom, w których UI zapisuje stale snapshot bez pełnej, znormalizowanej geometrii.
 - Hotkeyi profili są normalizowane i weryfikowane lokalnie; podczas `NASLUCHIWANIE` aplikacja chwilowo wyrejestrowuje globalne skróty, aby poprawnie przechwycić i zwalidować kombinację bez konfliktów.
@@ -150,7 +163,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - `SettingsService` zapisuje ustawienia atomowo: serializacja i walidacja odbywaja sie przed otwarciem pliku docelowego, nastepnie tworzony jest plik `.tmp`, flush do dysku i `File.Move` na miejsce `settings.json`.
 - Backup `.bak` jest aktualizowany w bezpiecznej sekwencji; przy niepoprawnym albo uszkodzonym `settings.json` loader preferuje poprawny backup zamiast resetu do pierwszego uruchomienia.
 - Pliki z uszkodzeniem sa zachowywane jako kopie `.corrupt-<timestamp>` z zachowaniem diagnostyki, a w przypadku braku poprawnego glownego pliku i backupu system tworzy domyslne ustawienia dopiero po potwierdzeniu, ze brak bezpiecznego odzyskania.
-- Weryfikacja: `SettingsServiceTests` obejmuje migracje i zapis nazw kanonicznych; `dotnet test GameShell.sln` 124/124, 0 failed.
+- Weryfikacja: `SettingsServiceTests` obejmuje migracje i zapis nazw kanonicznych; `dotnet test GameShell.sln` 140/140, 0 failed.
 
 ## Desktop host i runtime
 
@@ -171,7 +184,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja tego etapu: `dotnet test GameShell.sln` -> `124/124` passed, testy UI refaktoryzowanych obszarow -> `37/37` passed, `npm run test:encoding`, `npm run build` oraz build .NET wykonane bez bledow; bundle UI skopiowano do WPF `wwwroot` przez `build.ps1`.
+- Ostatnia walidacja tego etapu: `dotnet test GameShell.sln` -> `140/140` passed, testy UI refaktoryzowanych obszarow -> `37/37` passed, `npm run test:encoding`, `npm run build` oraz build .NET wykonane bez bledow; bundle UI skopiowano do WPF `wwwroot` przez `build.ps1`.
 
 ## Utrzymanie repo
 

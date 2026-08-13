@@ -52,9 +52,6 @@ public sealed class SettingsServiceTests
         Assert.Equal("Ctrl+Alt+W", settings.Hotkeys.WorkMode);
         Assert.Null(settings.Display.ConsoleDisplay);
         Assert.Null(settings.Display.GamingLayout);
-        Assert.True(settings.Audio.SwitchAudioInConsoleMode);
-        Assert.True(settings.Audio.RestoreAudioInWorkMode);
-        Assert.Null(settings.Audio.ConsoleAudioDeviceId);
     }
 
     [Fact]
@@ -92,17 +89,6 @@ public sealed class SettingsServiceTests
         Assert.Null(settings.Controller.ConsoleMode);
         Assert.Null(settings.Controller.GamingMode);
         Assert.Null(settings.Controller.WorkMode);
-    }
-
-    [Fact]
-    public void NewSettings_EnableAutomaticConsoleAudioByDefault()
-    {
-        var settings = AppSettingsValidator.Validate(new AppSettings());
-
-        Assert.True(settings.Audio.SwitchAudioInConsoleMode);
-        Assert.True(settings.Audio.RestoreAudioInWorkMode);
-        Assert.Null(settings.Audio.ConsoleAudioDeviceId);
-        Assert.Null(settings.Audio.ConsoleAudioDeviceName);
     }
 
     [Fact]

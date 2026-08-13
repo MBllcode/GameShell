@@ -3,14 +3,12 @@ export type BridgeCommand =
   | 'getSettings'
   | 'saveSettings'
   | 'getDependencies'
-  | 'getAudioDevices'
   | 'getDisplays'
   | 'getDisplayModes'
   | 'captureDisplayLayout'
   | 'saveConsoleDisplay'
   | 'saveConsoleDisplays'
   | 'saveGamingDisplays'
-  | 'saveConsoleAudioDevice'
   | 'captureGamingLayout'
   | 'capturePrimaryGamingLayout'
   | 'setActiveGamingProfile'
@@ -195,13 +193,6 @@ export interface DependencyStatus {
   downloadUrl: string | null;
 }
 
-export interface AudioDeviceSnapshot {
-  id: string;
-  name: string;
-  state: string;
-  isActive: boolean;
-}
-
 export interface ModeResult {
   status: string;
   currentState: ModeState;
@@ -267,12 +258,6 @@ export interface AppSettings {
     desktopIconsDelaySeconds: number;
     doNotMinimizeWindows: boolean;
     completionDelaySeconds: number;
-  };
-  audio: {
-    switchAudioInConsoleMode: boolean;
-    restoreAudioInWorkMode: boolean;
-    consoleAudioDeviceId: string | null;
-    consoleAudioDeviceName: string | null;
   };
   controller: ControllerSettings;
   hotkeys: {
