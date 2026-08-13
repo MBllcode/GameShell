@@ -9,14 +9,14 @@ export type BridgeCommand =
   | 'captureDisplayLayout'
   | 'saveConsoleDisplay'
   | 'saveConsoleDisplays'
-  | 'savePcGamingDisplays'
+  | 'saveGamingDisplays'
   | 'saveConsoleAudioDevice'
-  | 'capturePcGamingLayout'
-  | 'capturePrimaryPcGamingLayout'
-  | 'setActivePcGamingProfile'
-  | 'clearPcGamingLayout'
+  | 'captureGamingLayout'
+  | 'capturePrimaryGamingLayout'
+  | 'setActiveGamingProfile'
+  | 'clearGamingLayout'
   | 'testConsoleDisplay'
-  | 'testPcGamingLayout'
+  | 'testGamingLayout'
   | 'confirmDisplayTest'
   | 'restoreDisplayTest'
   | 'restorePreviousDisplayLayout'
@@ -40,7 +40,7 @@ export interface AppStatus {
   isBusy: boolean;
   displayMode: string;
   selectedConsoleDisplay: string | null;
-  hasPcGamingLayout: boolean;
+  hasGamingProfiles: boolean;
   activeProfileName: string | null;
   activeLauncher: string | null;
   lastOperation: string | null;
@@ -53,6 +53,7 @@ export interface DisplayIdentity {
   monitorDevicePath: string;
   friendlyName: string;
   lastKnownFriendlyName: string;
+  edidIdsValid?: boolean;
   edidManufacturerId: number;
   edidProductCodeId: number;
   connectorInstance: number;
@@ -143,6 +144,7 @@ export type RefreshPolicy = 'AutoHighest' | 'Fixed';
 
 export interface ProfileDisplayTarget {
   identity: DisplayIdentity;
+  capabilityExpectation?: DisplayCapabilityExpectation | null;
   enabled: boolean;
   isPrimary: boolean;
   positionX: number;
@@ -158,21 +160,28 @@ export interface ProfileDisplayTarget {
   orientation: string;
 }
 
-export interface PcGamingProfileBehaviour {
-  profileName: string;
-  behaviour: Partial<AppSettings['pcGaming']>;
+export interface DisplayCapabilityExpectation {
+  width: number;
+  height: number;
+  lastKnownGoodMaxRefreshNumerator: number;
+  lastKnownGoodMaxRefreshDenominator: number;
 }
 
-export interface PcGamingProfileHotkeys {
+export interface GamingProfileBehaviour {
+  profileName: string;
+  behaviour: Partial<AppSettings['gaming']>;
+}
+
+export interface GamingProfileHotkeys {
   enterProfile: string;
   enterWorkMode: string;
 }
 
-export interface PcGamingProfileConfiguration {
+export interface GamingProfileConfiguration {
   profileName: string;
-  behaviour: Partial<AppSettings['pcGaming']>;
+  behaviour: Partial<AppSettings['gaming']>;
   launcher: AppSettings['launcher'];
-  hotkeys: PcGamingProfileHotkeys;
+  hotkeys: GamingProfileHotkeys;
   controllerShortcut: ControllerShortcutSettings | null;
 }
 
@@ -212,11 +221,11 @@ export interface AppSettings {
   display: {
     consoleDisplay: DisplayIdentity | null;
     consoleDisplays?: DisplayIdentity[];
-    pcGamingLayout: DisplayLayoutSnapshot | null;
-    pcGamingProfiles?: DisplayLayoutProfile[];
-    activePcGamingProfileName?: string | null;
-    pcGamingProfileConfigurations?: PcGamingProfileConfiguration[];
-    pcGamingProfileBehaviours?: PcGamingProfileBehaviour[];
+    gamingLayout: DisplayLayoutSnapshot | null;
+    gamingProfiles?: DisplayLayoutProfile[];
+    activeGamingProfileName?: string | null;
+    gamingProfileConfigurations?: GamingProfileConfiguration[];
+    gamingProfileBehaviours?: GamingProfileBehaviour[];
   };
   launcher: {
     type: string;
@@ -237,7 +246,7 @@ export interface AppSettings {
     closeOnlyProcessNames?: string[];
     completionDelaySeconds: number;
   };
-  pcGaming: {
+  gaming: {
     hideDesktopIcons: boolean;
     hideTaskbar: boolean;
     closeVisibleWindows: boolean;
@@ -268,7 +277,7 @@ export interface AppSettings {
   controller: ControllerSettings;
   hotkeys: {
     consoleMode: string;
-    pcGamingMode: string;
+    gamingMode: string;
     workMode: string;
   };
   startup: {
@@ -326,7 +335,7 @@ export interface CompletedControllerCapture {
 export interface ControllerSettings {
   enabled: boolean;
   consoleMode: ControllerShortcutSettings | null;
-  pcGamingMode: ControllerShortcutSettings | null;
+  gamingMode: ControllerShortcutSettings | null;
   workMode: ControllerShortcutSettings | null;
 }
 

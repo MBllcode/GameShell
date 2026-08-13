@@ -6,18 +6,18 @@ import { formatCurrentMode, formatSessionState } from '../utils/status';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 type ModeCommand = 'enterGameShell' | 'enterGameShellWithProfile' | 'enterWorkMode';
-type StepId = 'gaming-display' | 'launcher' | 'console-behaviour' | 'controller' | 'work-behaviour' | 'work-shortcuts' | 'app-behaviour';
+type StepId = 'gaming-display' | 'launcher' | 'profile-behaviour' | 'controller' | 'work-behaviour' | 'work-shortcuts' | 'app-behaviour';
 type ProfileHotkeysState = { enterProfile: string };
-type PcGamingProfileLauncherMap = Record<string, LauncherType>;
-type PcGamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
+type GamingProfileLauncherMap = Record<string, LauncherType>;
+type GamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
 
 export type DashboardPageProps = {
   status: AppStatus;
   launcher: LauncherType;
-  pcGamingLayout: DisplayLayoutSnapshot | null;
-  pcGamingProfiles: DisplayLayoutProfile[];
-  pcGamingProfileLaunchers: PcGamingProfileLauncherMap;
-  pcGamingProfileHotkeys: PcGamingProfileHotkeysMap;
+  gamingLayout: DisplayLayoutSnapshot | null;
+  gamingProfiles: DisplayLayoutProfile[];
+  gamingProfileLaunchers: GamingProfileLauncherMap;
+  gamingProfileHotkeys: GamingProfileHotkeysMap;
   activeProfileName: string | null;
   selectedProfileName: string;
   globalWorkModeHotkey: string;
@@ -36,10 +36,10 @@ export type DashboardPageProps = {
 export function DashboardPage({
   status,
   launcher,
-  pcGamingLayout,
-  pcGamingProfiles,
-  pcGamingProfileLaunchers,
-  pcGamingProfileHotkeys,
+  gamingLayout,
+  gamingProfiles,
+  gamingProfileLaunchers,
+  gamingProfileHotkeys,
   activeProfileName,
   selectedProfileName,
   globalWorkModeHotkey,
@@ -56,32 +56,32 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const { t } = useTranslation();
   const [showDeleteProfileDialog, setShowDeleteProfileDialog] = useState(false);
-  const dashboardSelectedProfileName = selectedProfileName || activeProfileName || pcGamingProfiles[0]?.name || '';
+  const dashboardSelectedProfileName = selectedProfileName || activeProfileName || gamingProfiles[0]?.name || '';
   const runtimeActiveProfileName = status.activeProfileName;
   const isWorkModeActive = status.currentMode === 'Work';
-  const isPcGamingActive = status.currentMode === 'PcGaming';
+  const isGamingActive = status.currentMode === 'GamingProfile';
   const isConsoleModeActive = status.currentMode === 'Console';
   const activeGamingProfileLayout = runtimeActiveProfileName
-    ? pcGamingProfiles.find((profile) => profile.name === runtimeActiveProfileName)?.layout ?? null
+    ? gamingProfiles.find((profile) => profile.name === runtimeActiveProfileName)?.layout ?? null
     : null;
-  const resolvedGamingLayout = activeGamingProfileLayout ?? pcGamingLayout;
+  const resolvedGamingLayout = activeGamingProfileLayout ?? gamingLayout;
   const visibleLayoutSummary = isWorkModeActive
     ? t('dashboard.workModeLayout')
-    : isPcGamingActive
+    : isGamingActive
       ? resolvedGamingLayout ? summarizeLayout(resolvedGamingLayout, t) : t('summary.layoutMissing')
       : isConsoleModeActive
         ? status.selectedConsoleDisplay ?? t('dashboard.consoleDisplayMissing')
-        : pcGamingLayout ? summarizeLayout(pcGamingLayout, t) : t('summary.layoutMissing');
+        : gamingLayout ? summarizeLayout(gamingLayout, t) : t('summary.layoutMissing');
   const shouldShowLauncherFact = !isWorkModeActive;
   const visibleLauncher = status.activeLauncher ?? t('dashboard.noActiveLauncher');
-  const selectedProfile = pcGamingProfiles.find((profile) => profile.name === dashboardSelectedProfileName) ?? null;
+  const selectedProfile = gamingProfiles.find((profile) => profile.name === dashboardSelectedProfileName) ?? null;
   const canRunSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
   const canDeleteSelectedProfile = Boolean(dashboardSelectedProfileName) && !isModeSwitching && !isRemovingProfile;
-  const profileCountLabel = pcGamingProfiles.length === 0
+  const profileCountLabel = gamingProfiles.length === 0
     ? t('dashboard.profileCount.zero')
-    : pcGamingProfiles.length === 1
+    : gamingProfiles.length === 1
       ? t('dashboard.profileCount.one')
-      : pcGamingProfiles.length >= 2 && pcGamingProfiles.length <= 4
+      : gamingProfiles.length >= 2 && gamingProfiles.length <= 4
         ? t('dashboard.profileCount.few')
         : t('dashboard.profileCount.many');
 
@@ -109,12 +109,12 @@ export function DashboardPage({
               </div>
             ) : (
               <div className="sidebar-state-content">
-                <div className="status-row"><strong>{formatCurrentMode(status, t)}</strong>{isPcGamingActive ? <span className="work-return-status">{t('app.active')}</span> : null}</div>
-                {isPcGamingActive ? <p>{t('profile.activeProfile')}: {runtimeActiveProfileName || t('summary.activeProfileNone')}</p> : null}
+                <div className="status-row"><strong>{formatCurrentMode(status, t)}</strong>{isGamingActive ? <span className="work-return-status">{t('app.active')}</span> : null}</div>
+                {isGamingActive ? <p>{t('profile.activeProfile')}: {runtimeActiveProfileName || t('summary.activeProfileNone')}</p> : null}
                 {status.sessionState && status.sessionState !== 'Idle' ? <p className="sidebar-session-state">{t('app.sessionState', { state: formatSessionState(status.sessionState, t) })}</p> : null}
                 <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
                 {shouldShowLauncherFact ? <small>{visibleLauncher}</small> : null}
-                {!isConsoleModeActive && !isPcGamingActive ? <small>{globalWorkModeHotkey || t('app.missingHotkey')}</small> : null}
+                {!isConsoleModeActive && !isGamingActive ? <small>{globalWorkModeHotkey || t('app.missingHotkey')}</small> : null}
                 {!isWorkModeActive ? <button className="sidebar-state-action" type="button" disabled={isModeSwitching} onClick={() => runModeCommand('enterWorkMode')}>{t('dashboard.switchToWorkMode')}</button> : null}
               </div>
             )}
@@ -137,20 +137,20 @@ export function DashboardPage({
                   <div className="profile-module-header">
                     <div className="profile-module-title-wrap"><h1 id="app-title" className="profile-module-title">{t('dashboard.profiles')}</h1></div>
                     <div className="profile-module-header-actions">
-                      <small className="profile-module-count">{pcGamingProfiles.length} {profileCountLabel}</small>
+                      <small className="profile-module-count">{gamingProfiles.length} {profileCountLabel}</small>
                       <button className="secondary-button compact add-profile-head-button" type="button" onClick={createProfile} disabled={isRemovingProfile}>+ {t('dashboard.addProfile')}</button>
                     </div>
                   </div>
                   <div className="profile-list-shell">
                     <div className="profile-quick-list" role="listbox" aria-label={t('dashboard.profiles')}>
-                      {pcGamingProfiles.map((profile) => {
-                        const profileLauncher = pcGamingProfileLaunchers[profile.name] ?? launcher;
+                      {gamingProfiles.map((profile) => {
+                        const profileLauncher = gamingProfileLaunchers[profile.name] ?? launcher;
                         const isProfileConfiguredAsActive = runtimeActiveProfileName === profile.name;
                         const isProfileSelectedForEditing = dashboardSelectedProfileName === profile.name;
-                        const isPcGamingNow = status.currentMode === 'PcGaming';
-                        const stateLabel = isPcGamingNow && isProfileConfiguredAsActive ? t('app.active') : isProfileSelectedForEditing ? t('app.selected') : t('app.ready');
+                        const isGamingNow = status.currentMode === 'GamingProfile';
+                        const stateLabel = isGamingNow && isProfileConfiguredAsActive ? t('app.active') : isProfileSelectedForEditing ? t('app.selected') : t('app.ready');
                         return (
-                          <button className={`profile-quick-row ${isProfileSelectedForEditing ? 'selected' : ''} ${isPcGamingNow && isProfileConfiguredAsActive ? 'active' : ''}`} type="button" key={profile.name} disabled={isModeSwitching || isRemovingProfile} onClick={() => selectProfile(profile.name)} role="option" aria-selected={isProfileSelectedForEditing}>
+                          <button className={`profile-quick-row ${isProfileSelectedForEditing ? 'selected' : ''} ${isGamingNow && isProfileConfiguredAsActive ? 'active' : ''}`} type="button" key={profile.name} disabled={isModeSwitching || isRemovingProfile} onClick={() => selectProfile(profile.name)} role="option" aria-selected={isProfileSelectedForEditing}>
                             <div className="profile-quick-main"><strong>{profile.name}</strong><small>{summarizeLayout(profile.layout, t)} · {profileLauncher}</small></div>
                             <div className="profile-quick-meta"><span className="profile-quick-state">{stateLabel}</span></div>
                           </button>
@@ -163,7 +163,7 @@ export function DashboardPage({
                     <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: dashboardSelectedProfileName })}><span>{t('dashboard.runProfile')}{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
                   </div>
                 </section>
-                {pcGamingProfiles.length === 0 ? <p className="hint-line">{t('dashboard.noProfile')}</p> : null}
+                {gamingProfiles.length === 0 ? <p className="hint-line">{t('dashboard.noProfile')}</p> : null}
               </section>
               <section className="dashboard-band dashboard-config-section" aria-label={t('dashboard.profileSettings')}>
                 <div className="dashboard-shortcut-groups" aria-label={t('dashboard.profileSettings')}>
@@ -172,7 +172,7 @@ export function DashboardPage({
                     <div className="section-shortcuts">
                       <button type="button" onClick={() => editSettings('gaming-display')}><span>{t('dashboard.summaryScreen')}</span><small>{t('dashboard.summaryScreenHint')}</small></button>
                       <button type="button" onClick={() => editSettings('launcher')}><span>{t('dashboard.summaryLauncher')}</span><small>{t('dashboard.summaryLauncherHint')}</small></button>
-                      <button type="button" onClick={() => editSettings('console-behaviour')}><span>{t('dashboard.summaryBehaviour')}</span><small>{t('dashboard.summaryBehaviourHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('profile-behaviour')}><span>{t('dashboard.summaryBehaviour')}</span><small>{t('dashboard.summaryBehaviourHint')}</small></button>
                       <button type="button" onClick={() => editSettings('controller')}><span>{t('dashboard.summaryShortcuts')}</span><small>{t('dashboard.summaryShortcutsHint')}</small></button>
                     </div>
                   </section>

@@ -3,7 +3,7 @@ import type { DisplayLayoutProfile } from '../types/bridge';
 import { SettingRow } from './SettingRow';
 import { SettingsSection } from './SettingsSection';
 
-type PcGamingBehaviour = {
+type GamingBehaviour = {
   hideDesktopIcons: boolean;
   hideTaskbar: boolean;
   closeVisibleWindows: boolean;
@@ -14,9 +14,9 @@ type PcGamingBehaviour = {
   bringLauncherToForeground: boolean;
 };
 
-type PcGamingBehaviourKey = keyof PcGamingBehaviour;
+type GamingBehaviourKey = keyof GamingBehaviour;
 
-const pcGamingBehaviourOptions: Array<{ key: PcGamingBehaviourKey; labelKey: string; description?: string }> = [
+const gamingBehaviourOptions: Array<{ key: GamingBehaviourKey; labelKey: string; description?: string }> = [
   { key: 'hideDesktopIcons', labelKey: 'behaviour.hideDesktopIcons' },
   { key: 'hideTaskbar', labelKey: 'behaviour.hideTaskbar' },
   { key: 'closeVisibleWindows', labelKey: 'behaviour.closeVisibleWindows' },
@@ -27,18 +27,18 @@ const pcGamingBehaviourOptions: Array<{ key: PcGamingBehaviourKey; labelKey: str
   { key: 'bringLauncherToForeground', labelKey: 'behaviour.bringLauncherToForeground' }
 ];
 
-export function ConsoleBehaviourStep({
+export function ProfileBehaviourStep({
   stepNumber,
-  pcGamingProfiles,
+  gamingProfiles,
   selectedProfileName,
-  pcGamingBehaviour,
+  gamingBehaviour,
   onChangeBehaviourFlag
 }: {
   stepNumber: number;
-  pcGamingProfiles: DisplayLayoutProfile[];
+  gamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
-  pcGamingBehaviour: PcGamingBehaviour;
-  onChangeBehaviourFlag: (key: PcGamingBehaviourKey, value: boolean) => void;
+  gamingBehaviour: GamingBehaviour;
+  onChangeBehaviourFlag: (key: GamingBehaviourKey, value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const hasWorkingProfile = selectedProfileName.trim().length > 0;
@@ -57,46 +57,46 @@ export function ConsoleBehaviourStep({
       </div>
       <div className="settings-category-list">
         <SettingsSection title={t('behaviour.desktop')}>
-          {pcGamingBehaviourOptions.slice(0, 2).map((option) => (
+          {gamingBehaviourOptions.slice(0, 2).map((option) => (
             <SettingRow
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
-              checked={pcGamingBehaviour[option.key]}
+              checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
             />
           ))}
-          {pcGamingBehaviourOptions.slice(4, 6).map((option) => (
+          {gamingBehaviourOptions.slice(4, 6).map((option) => (
             <SettingRow
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
-              checked={pcGamingBehaviour[option.key]}
+              checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
             />
           ))}
         </SettingsSection>
         <SettingsSection title={t('behaviour.windows')}>
-          {pcGamingBehaviourOptions.slice(2, 4).map((option) => (
+          {gamingBehaviourOptions.slice(2, 4).map((option) => (
             <SettingRow
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
-              checked={pcGamingBehaviour[option.key]}
+              checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
             />
           ))}
         </SettingsSection>
         <SettingsSection title={t('behaviour.launcher')}>
-          {pcGamingBehaviourOptions.slice(6).map((option) => (
+          {gamingBehaviourOptions.slice(6).map((option) => (
             <SettingRow
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
-              checked={pcGamingBehaviour[option.key]}
+              checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
             />

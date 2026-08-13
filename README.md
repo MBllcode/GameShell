@@ -12,22 +12,34 @@ artifacts\installer\GameShell.exe
 
 ## Core capabilities
 
-- `Console Mode`: activates only the selected console display.
-- `PC Gaming`: applies a saved gaming display profile (falls back to Console Mode if not configured).
+- `Console Mode`: compatibility path that activates only the selected display.
+- `Gaming profiles`: apply user-defined display, launcher and desktop settings for any gaming setup (PC, projector, TV or another display combination).
 - `Work Mode`: restores the desktop layout captured before the gaming session.
 - Native display control through Windows DisplayConfig APIs (`QueryDisplayConfig`, `SetDisplayConfig`).
 - Tray menu + global hotkeys + single-instance command forwarding.
 - Per-profile launcher, mode behavior, and shortcut configuration in the UI wizard/dashboard.
 
+## Domain naming and compatibility
+
+The product model has two user-facing areas: `Work Mode` and configurable `Gaming profiles`.
+The canonical code and settings names are `GamingSettings`, `GamingProfile`, and `GamingProfiles`.
+`Console Mode` is retained as a compatibility path for activating one selected display; it is not a
+second gaming-profile category. Friendly display names are diagnostic only and are never used as
+Samsung-specific or model-specific aliases.
+
+Existing settings using `pcGaming*` property names are migrated when loaded. New settings are always
+written with the canonical `gaming*` names. The old `--gaming` and `--pcgaming` command-line switches
+remain accepted as compatibility aliases.
+
 ## Command-line modes
 
 ```powershell
-GameShell.exe --gaming
-GameShell.exe --pcgaming
+GameShell.exe --console
+GameShell.exe --profile
 GameShell.exe --work
 ```
 
-When GameShell is already running in tray, a second process forwards the mode command to the existing instance.
+`--gaming` and `--pcgaming` remain accepted as legacy aliases. When GameShell is already running in tray, a second process forwards the mode command to the existing instance.
 
 ## Build
 
@@ -80,7 +92,7 @@ If the destination EXE is locked (running process), script writes a timestamped 
 - Settings persistence is now crash-safe and atomic: writes go through `.tmp` + backup recovery and avoid in-place corruption of `settings.json`.
 - The Windows session monitor now filters launcher/system processes, requires a short stabilization window before declaring a game active, and logs the real candidate/exit transitions for debug validation.
 - Playnite return diagnostics remain intentionally narrow: the code logs the full recovery state and invokes the existing bounded focus restore path only after the lifecycle transition is confirmed in runtime.
-- The setup flow and profile editor were tightened up across `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ConsoleBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep`, and `ControllerStep`: validation is local and deterministic, draft display topology is committed before save/navigation, and the profile wizard now follows a consistent navigation and save path.
+- The setup flow and profile editor were tightened up across `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ProfileBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep`, and `ControllerStep`: validation is local and deterministic, draft display topology is committed before save/navigation, and the profile wizard now follows a consistent navigation and save path.
 - Windows startup behavior is now applied on normal app startup as well as fallback scenarios, and profile hotkeys are normalized/validated per profile with duplicate detection kept local to the UI while app hotkeys are temporarily disabled during capture.
 
 ## Project layout

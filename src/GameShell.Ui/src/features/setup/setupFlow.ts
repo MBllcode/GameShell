@@ -2,7 +2,7 @@ export type StepId =
   | 'welcome'
   | 'gaming-display'
   | 'launcher'
-  | 'console-behaviour'
+  | 'profile-behaviour'
   | 'work-behaviour'
   | 'work-shortcuts'
   | 'controller'
@@ -17,7 +17,7 @@ export const FIRST_RUN_STEPS: SetupStep[] = [
   { id: 'welcome', titleKey: 'setup.start', subtitleKey: 'setup.firstRun' },
   { id: 'gaming-display', titleKey: 'setup.displays', subtitleKey: 'setup.profileSetup' },
   { id: 'launcher', titleKey: 'setup.launcherProfile', subtitleKey: 'setup.launcherActivation' },
-  { id: 'console-behaviour', titleKey: 'setup.profileBehaviour', subtitleKey: 'setup.desktopSetup' },
+  { id: 'profile-behaviour', titleKey: 'setup.profileBehaviour', subtitleKey: 'setup.desktopSetup' },
   { id: 'controller', titleKey: 'setup.profileShortcuts', subtitleKey: 'setup.inputActivation' },
   { id: 'work-behaviour', titleKey: 'setup.workMode', subtitleKey: 'setup.environmentRestore' },
   { id: 'work-shortcuts', titleKey: 'setup.workModeShortcuts', subtitleKey: 'setup.returnToWork' },
@@ -25,7 +25,7 @@ export const FIRST_RUN_STEPS: SetupStep[] = [
   { id: 'finish', titleKey: 'setup.summary', subtitleKey: 'setup.reviewAndSave' },
 ];
 
-export const PROFILE_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['gaming-display', 'launcher', 'console-behaviour', 'controller'].includes(step.id));
+export const PROFILE_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['gaming-display', 'launcher', 'profile-behaviour', 'controller'].includes(step.id));
 export const GLOBAL_STEPS: SetupStep[] = FIRST_RUN_STEPS.filter((step) => ['work-behaviour', 'work-shortcuts', 'app-behaviour'].includes(step.id));
 export const steps = FIRST_RUN_STEPS;
 

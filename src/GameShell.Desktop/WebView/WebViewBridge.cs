@@ -36,14 +36,14 @@ public sealed class WebViewBridge
         "captureDisplayLayout",
         "saveConsoleDisplay",
         "saveConsoleDisplays",
-        "savePcGamingDisplays",
+        "saveGamingDisplays",
         "saveConsoleAudioDevice",
-        "capturePcGamingLayout",
-        "capturePrimaryPcGamingLayout",
-        "setActivePcGamingProfile",
-        "clearPcGamingLayout",
+        "captureGamingLayout",
+        "capturePrimaryGamingLayout",
+        "setActiveGamingProfile",
+        "clearGamingLayout",
         "testConsoleDisplay",
-        "testPcGamingLayout",
+        "testGamingLayout",
         "confirmDisplayTest",
         "restoreDisplayTest",
         "restorePreviousDisplayLayout",
@@ -239,14 +239,14 @@ public sealed class WebViewBridge
                 "captureDisplayLayout" => await CaptureDisplayLayoutAsync(),
                 "saveConsoleDisplay" => await SaveConsoleDisplayAsync(message.Payload),
                 "saveConsoleDisplays" => await SaveConsoleDisplaysAsync(message.Payload),
-                "savePcGamingDisplays" => await SavePcGamingDisplaysAsync(message.Payload),
+                "saveGamingDisplays" => await SaveGamingDisplaysAsync(message.Payload),
                 "saveConsoleAudioDevice" => await SaveConsoleAudioDeviceAsync(message.Payload),
-                "capturePcGamingLayout" => await CapturePcGamingLayoutAsync(message.Payload),
-                "capturePrimaryPcGamingLayout" => await CapturePrimaryPcGamingLayoutAsync(message.Payload),
-                "setActivePcGamingProfile" => await SetActivePcGamingProfileAsync(message.Payload),
-                "clearPcGamingLayout" => await ClearPcGamingLayoutAsync(message.Payload),
+                "captureGamingLayout" => await CaptureGamingLayoutAsync(message.Payload),
+                "capturePrimaryGamingLayout" => await CapturePrimaryGamingLayoutAsync(message.Payload),
+                "setActiveGamingProfile" => await SetActiveGamingProfileAsync(message.Payload),
+                "clearGamingLayout" => await ClearGamingLayoutAsync(message.Payload),
                 "testConsoleDisplay" => await TestConsoleDisplayAsync(),
-                "testPcGamingLayout" => await TestPcGamingLayoutAsync(),
+                "testGamingLayout" => await TestGamingLayoutAsync(),
                 "confirmDisplayTest" => await _displayTransitionService.ConfirmPendingTestAsync(),
                 "restoreDisplayTest" => await _displayTransitionService.RestorePendingTestAsync(),
                 "restorePreviousDisplayLayout" => await _displayTransitionService.RestorePreviousLayoutAsync(),
@@ -258,7 +258,7 @@ public sealed class WebViewBridge
                 "acknowledgeControllerShortcutCapture" => AcknowledgeControllerShortcutCapture(message.Payload),
                 "getControllerStatus" => GetControllerStatus(),
                 "enterGameShell" => await _modeCommandService.EnterGameShellAsync(),
-                "enterGameShellWithProfile" => await _modeCommandService.EnterGameShellWithDisplayProfileAsync(ReadOptionalProfileName(message.Payload) ?? "PcGaming"),
+            "enterGameShellWithProfile" => await _modeCommandService.EnterGameShellWithDisplayProfileAsync(ReadOptionalProfileName(message.Payload) ?? string.Empty),
                 "enterWorkMode" => await _modeCommandService.EnterWorkModeAsync(),
                 _ => throw new InvalidOperationException("Unsupported command.")
             };
@@ -335,7 +335,7 @@ public sealed class WebViewBridge
 
     private void LogGamingProfileTopologies(AppSettings settings)
     {
-        foreach (var profile in settings.Display.PcGamingProfiles.Where(profile => profile.DisplayTopology is not null))
+        foreach (var profile in settings.Display.GamingProfiles.Where(profile => profile.DisplayTopology is not null))
         {
             var topology = profile.DisplayTopology!;
             _logger.LogInformation(
@@ -485,7 +485,7 @@ public sealed class WebViewBridge
         return settings;
     }
 
-    private async Task<AppSettings> SavePcGamingDisplaysAsync(JsonElement? payload)
+    private async Task<AppSettings> SaveGamingDisplaysAsync(JsonElement? payload)
     {
         var identities = ReadDisplayIdentities(payload);
         var profileName = ReadOptionalProfileName(payload);
@@ -497,12 +497,12 @@ public sealed class WebViewBridge
             var match = available.FirstOrDefault(display => MatchesSelectedDisplay(identity, display));
             if (match is null)
             {
-                throw new InvalidOperationException("Nie wszystkie wybrane ekrany PC Gaming są obecnie dostępne.");
+            throw new InvalidOperationException("Nie wszystkie wybrane ekrany profilu gamingowego są obecnie dostępne.");
             }
 
             if (selected.Any(existing => IsSameDisplay(existing, match)))
             {
-                throw new InvalidOperationException("Wybrano ten sam ekran PC Gaming więcej niż raz.");
+            throw new InvalidOperationException("Wybrano ten sam ekran profilu gamingowego więcej niż raz.");
             }
 
             selected.Add(match);
@@ -510,7 +510,7 @@ public sealed class WebViewBridge
 
         if (selected.Count == 0)
         {
-            throw new InvalidOperationException("Wybierz co najmniej jeden ekran PC Gaming.");
+            throw new InvalidOperationException("Wybierz co najmniej jeden ekran profilu gamingowego.");
         }
 
         var settings = await _settingsService.LoadAsync();
@@ -528,7 +528,7 @@ public sealed class WebViewBridge
 
         if (placement.Any(item => !item.Display.IsEnabled))
         {
-            _logger.LogInformation("PC Gaming selection contains inactive displays. Assigning deterministic fallback positions for inactive screens.");
+            _logger.LogInformation("Gaming profile selection contains inactive displays. Assigning deterministic fallback positions for inactive screens.");
 
             var rightEdge = placement
                 .Where(item => item.Display.IsEnabled)
@@ -567,7 +567,7 @@ public sealed class WebViewBridge
                 ConnectionTechnology = item.Display.ConnectionTechnology
             }).ToList()
         };
-        UpsertPcGamingProfile(settings.Display, profileName, layout, maxProfileCount);
+        UpsertGamingProfile(settings.Display, profileName, layout, maxProfileCount);
         await SaveAndApplySettingsAsync(settings);
         return settings;
     }
@@ -640,19 +640,19 @@ public sealed class WebViewBridge
         return settings;
     }
 
-    private async Task<AppSettings> CapturePcGamingLayoutAsync(JsonElement? payload)
+    private async Task<AppSettings> CaptureGamingLayoutAsync(JsonElement? payload)
     {
         var profileName = ReadOptionalProfileName(payload);
         var available = await _displayQueryService.GetAvailableDisplaysAsync();
         var maxProfileCount = CalculateMaxProfileCount(available.Count);
         var settings = await _settingsService.LoadAsync();
         var layout = await CaptureDisplayLayoutAsync();
-        UpsertPcGamingProfile(settings.Display, profileName, layout, maxProfileCount);
+        UpsertGamingProfile(settings.Display, profileName, layout, maxProfileCount);
         await SaveAndApplySettingsAsync(settings);
         return settings;
     }
 
-    private async Task<AppSettings> CapturePrimaryPcGamingLayoutAsync(JsonElement? payload)
+    private async Task<AppSettings> CapturePrimaryGamingLayoutAsync(JsonElement? payload)
     {
         var profileName = ReadOptionalProfileName(payload);
         var available = await _displayQueryService.GetAvailableDisplaysAsync();
@@ -688,56 +688,56 @@ public sealed class WebViewBridge
                 }
             ]
         };
-        UpsertPcGamingProfile(settings.Display, profileName, layout, maxProfileCount);
+        UpsertGamingProfile(settings.Display, profileName, layout, maxProfileCount);
         await SaveAndApplySettingsAsync(settings);
         return settings;
     }
 
-    private async Task<AppSettings> SetActivePcGamingProfileAsync(JsonElement? payload)
+    private async Task<AppSettings> SetActiveGamingProfileAsync(JsonElement? payload)
     {
         var profileName = ReadRequiredProfileName(payload);
         var settings = await _settingsService.LoadAsync();
-        var profile = settings.Display.PcGamingProfiles.FirstOrDefault(candidate => string.Equals(candidate.Name, profileName, StringComparison.OrdinalIgnoreCase));
+        var profile = settings.Display.GamingProfiles.FirstOrDefault(candidate => string.Equals(candidate.Name, profileName, StringComparison.OrdinalIgnoreCase));
         if (profile is null)
         {
-            throw new InvalidOperationException("Wybrany profil PC Gaming nie istnieje.");
+            throw new InvalidOperationException("Wybrany profil gamingowy nie istnieje.");
         }
 
-        settings.Display.ActivePcGamingProfileName = profile.Name;
-        settings.Display.PcGamingLayout = profile.Layout;
+        settings.Display.ActiveGamingProfileName = profile.Name;
+        settings.Display.GamingLayout = profile.Layout;
         await SaveAndApplySettingsAsync(settings);
         return settings;
     }
 
-    private async Task<AppSettings> ClearPcGamingLayoutAsync(JsonElement? payload)
+    private async Task<AppSettings> ClearGamingLayoutAsync(JsonElement? payload)
     {
         var settings = await _settingsService.LoadAsync();
         var profileName = ReadOptionalProfileName(payload);
 
         if (string.IsNullOrWhiteSpace(profileName))
         {
-            settings.Display.PcGamingLayout = null;
-            settings.Display.ActivePcGamingProfileName = null;
-            settings.Display.PcGamingProfiles.Clear();
+            settings.Display.GamingLayout = null;
+            settings.Display.ActiveGamingProfileName = null;
+            settings.Display.GamingProfiles.Clear();
             await SaveAndApplySettingsAsync(settings);
             return settings;
         }
 
-        var index = settings.Display.PcGamingProfiles.FindIndex(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
+        var index = settings.Display.GamingProfiles.FindIndex(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
         if (index < 0)
         {
-            throw new InvalidOperationException("Wybrany profil PC Gaming nie istnieje.");
+            throw new InvalidOperationException("Wybrany profil gamingowy nie istnieje.");
         }
 
-        settings.Display.PcGamingProfiles.RemoveAt(index);
-        var active = settings.Display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, settings.Display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
+        settings.Display.GamingProfiles.RemoveAt(index);
+        var active = settings.Display.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, settings.Display.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase));
         if (active is null)
         {
-            active = settings.Display.PcGamingProfiles.FirstOrDefault();
+            active = settings.Display.GamingProfiles.FirstOrDefault();
         }
 
-        settings.Display.ActivePcGamingProfileName = active?.Name;
-        settings.Display.PcGamingLayout = active?.Layout;
+        settings.Display.ActiveGamingProfileName = active?.Name;
+        settings.Display.GamingLayout = active?.Layout;
         await SaveAndApplySettingsAsync(settings);
         return settings;
     }
@@ -748,10 +748,10 @@ public sealed class WebViewBridge
         return await _displayTransitionService.TestConsoleDisplayAsync(GetConsoleDisplays(settings));
     }
 
-    private async Task<DisplayTransitionResult> TestPcGamingLayoutAsync()
+    private async Task<DisplayTransitionResult> TestGamingLayoutAsync()
     {
         var settings = await _settingsService.LoadAsync();
-        return await _displayTransitionService.TestPcGamingLayoutAsync(settings.Display.PcGamingLayout);
+        return await _displayTransitionService.TestGamingLayoutAsync(settings.Display.GamingLayout);
     }
 
     private async Task SaveAndApplySettingsAsync(AppSettings settings)
@@ -1030,18 +1030,18 @@ public sealed class WebViewBridge
             : profileId.Trim();
     }
 
-    private static void UpsertPcGamingProfile(DisplaySettings displaySettings, string? profileName, DisplayLayoutSnapshot layout, int maxProfileCount)
+    private static void UpsertGamingProfile(DisplaySettings displaySettings, string? profileName, DisplayLayoutSnapshot layout, int maxProfileCount)
     {
-        displaySettings.PcGamingLayout = layout;
+        displaySettings.GamingLayout = layout;
 
         if (string.IsNullOrWhiteSpace(profileName))
         {
-            if (string.IsNullOrWhiteSpace(displaySettings.ActivePcGamingProfileName))
+            if (string.IsNullOrWhiteSpace(displaySettings.ActiveGamingProfileName))
             {
                 return;
             }
 
-            var activeProfile = displaySettings.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, displaySettings.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
+            var activeProfile = displaySettings.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, displaySettings.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase));
             if (activeProfile is not null)
             {
                 activeProfile.Layout = layout;
@@ -1050,8 +1050,8 @@ public sealed class WebViewBridge
             return;
         }
 
-        var existingProfile = displaySettings.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
-        if (displaySettings.PcGamingProfiles.Any(profile => !string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase) && IsSameProfileCombination(profile.Layout, layout)))
+        var existingProfile = displaySettings.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
+        if (displaySettings.GamingProfiles.Any(profile => !string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase) && IsSameProfileCombination(profile.Layout, layout)))
         {
             throw new InvalidOperationException("Profil z taką samą kombinacją ekranów już istnieje.");
         }
@@ -1059,21 +1059,21 @@ public sealed class WebViewBridge
         if (existingProfile is not null)
         {
             existingProfile.Layout = layout;
-            displaySettings.ActivePcGamingProfileName = existingProfile.Name;
+            displaySettings.ActiveGamingProfileName = existingProfile.Name;
             return;
         }
 
-        if (maxProfileCount > 0 && displaySettings.PcGamingProfiles.Count >= maxProfileCount)
+        if (maxProfileCount > 0 && displaySettings.GamingProfiles.Count >= maxProfileCount)
         {
             throw new InvalidOperationException($"Osiągnięto limit profili ({maxProfileCount}) wynikający z liczby kombinacji wykrytych monitorów.");
         }
 
-        displaySettings.PcGamingProfiles.Add(new DisplayLayoutProfile
+        displaySettings.GamingProfiles.Add(new DisplayLayoutProfile
         {
             Name = profileName,
             Layout = layout
         });
-        displaySettings.ActivePcGamingProfileName = profileName;
+        displaySettings.ActiveGamingProfileName = profileName;
     }
 
     private static bool IsSameProfileCombination(DisplayLayoutSnapshot left, DisplayLayoutSnapshot right)

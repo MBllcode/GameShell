@@ -9,10 +9,21 @@ public enum DisplayOrientation
     Unknown = 255
 }
 
+public enum DisplayIdentityMatchConfidence
+{
+    None,
+    WeakFriendlyName,
+    EdidProduct,
+    EdidProductAndConnector,
+    AdapterAndTargetRoute,
+    ExactMonitorDevicePath
+}
+
 public sealed record DisplayIdentity
 {
     public string MonitorDevicePath { get; init; } = string.Empty;
     public string FriendlyName { get; init; } = string.Empty;
+    public bool EdidIdsValid { get; init; }
     public uint EdidManufacturerId { get; init; }
     public uint EdidProductCodeId { get; init; }
     public uint ConnectorInstance { get; init; }

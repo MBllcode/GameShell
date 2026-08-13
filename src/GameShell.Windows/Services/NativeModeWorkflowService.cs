@@ -64,7 +64,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         CancellationToken cancellationToken = default)
     {
         var warnings = new List<string>();
-        var behaviour = mode == GameShellMode.PcGaming ? settings.PcGaming : settings.GameShell;
+        var behaviour = mode == GameShellMode.GamingProfile ? settings.Gaming : settings.GameShell;
 
         await TryStepAsync("hide desktop icons", warnings, async () =>
         {
@@ -135,7 +135,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         CancellationToken cancellationToken = default)
     {
         var warnings = new List<string>();
-        var behaviour = mode == GameShellMode.PcGaming ? settings.PcGaming : settings.GameShell;
+        var behaviour = mode == GameShellMode.GamingProfile ? settings.Gaming : settings.GameShell;
         Process? launcherProcess = null;
 
         await TryStepAsync("minimize remaining windows after display transition", warnings, async () =>

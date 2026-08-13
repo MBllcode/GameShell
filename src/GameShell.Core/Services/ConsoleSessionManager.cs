@@ -69,7 +69,7 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         {
             var current = GetSnapshot();
             var settings = await _settingsService.LoadAsync(cancellationToken);
-            var activeLauncher = settings.Display.PcGamingProfileConfigurations
+            var activeLauncher = settings.Display.GamingProfileConfigurations
                 .FirstOrDefault(configuration => string.Equals(configuration.ProfileName, current.ProfileName, StringComparison.OrdinalIgnoreCase))?.Launcher.Type
                 ?? settings.Launcher.Type;
             _logger.LogInformation(
@@ -200,10 +200,10 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
 
             var settings = await _settingsService.LoadAsync(cancellationToken);
             var behaviour = string.IsNullOrWhiteSpace(profileName)
-                ? settings.PcGaming
-                : settings.Display.PcGamingProfileConfigurations
+                ? settings.Gaming
+                : settings.Display.GamingProfileConfigurations
                     .FirstOrDefault(configuration => string.Equals(configuration.ProfileName, profileName, StringComparison.OrdinalIgnoreCase))?.Behaviour
-                    ?? settings.PcGaming;
+                    ?? settings.Gaming;
             var processNames = behaviour.GameProcessNames
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)

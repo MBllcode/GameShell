@@ -10,7 +10,7 @@ const workModeStatus: AppStatus = {
   isBusy: false,
   displayMode: 'NativeDisplayConfig',
   selectedConsoleDisplay: null,
-  hasPcGamingLayout: true,
+  hasGamingProfiles: true,
   activeProfileName: null,
   activeLauncher: null,
   lastOperation: 'Enter Work Mode',

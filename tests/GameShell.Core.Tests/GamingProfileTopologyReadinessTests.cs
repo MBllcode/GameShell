@@ -172,6 +172,53 @@ public sealed class GamingProfileTopologyReadinessTests
     }
 
     [Fact]
+    public async Task SamePhysicalRouteWithDifferentFriendlyNameAndCapabilityRegression_IsDegradedNotMissing()
+    {
+        var target = Target("Model X", 10);
+        target.RefreshPolicy = RefreshPolicy.AutoHighest;
+        target.RefreshRateNumerator = 0;
+        target.RefreshRateDenominator = 0;
+        target.CapabilityExpectation = new DisplayCapabilityExpectation
+        {
+            Width = 3840,
+            Height = 2160,
+            LastKnownGoodMaxRefreshNumerator = 144,
+            LastKnownGoodMaxRefreshDenominator = 1
+        };
+        var query = new FakeDisplayQuery([Device("Generic Manufacturer", 10)], _ => [Mode(3840, 2160, 60, 1)]);
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("PROFILE", "PROFILE", new GamingProfileDisplayTopology { Displays = [target] });
+
+        Assert.True(result.Targets[0].ResolvedTarget is not null);
+        Assert.Equal(ProfileDisplayReadiness.Degraded, result.Targets[0].Result);
+        Assert.Equal(ProfileDisplayReadinessReason.CapabilityRegression, result.Targets[0].Reason);
+        Assert.Equal("Generic Manufacturer", result.Targets[0].ResolvedTarget!.Name);
+    }
+
+    [Fact]
+    public async Task SamePhysicalRouteAfterCapabilityRecovery_IsReady()
+    {
+        var target = Target("Model X", 10);
+        target.RefreshPolicy = RefreshPolicy.AutoHighest;
+        target.RefreshRateNumerator = 0;
+        target.RefreshRateDenominator = 0;
+        target.CapabilityExpectation = new DisplayCapabilityExpectation
+        {
+            Width = 3840,
+            Height = 2160,
+            LastKnownGoodMaxRefreshNumerator = 144,
+            LastKnownGoodMaxRefreshDenominator = 1
+        };
+        var query = new FakeDisplayQuery([Device("Generic Manufacturer", 10)], _ => [Mode(3840, 2160, 144, 1)]);
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("PROFILE", "PROFILE", new GamingProfileDisplayTopology { Displays = [target] });
+
+        AssertTarget(result, ProfileDisplayReadiness.Ready, ProfileDisplayReadinessReason.None);
+    }
+
+    [Fact]
     public async Task EqualStableCandidates_AreAmbiguous()
     {
         var query = new FakeDisplayQuery([Device("A", 7), Device("B", 7)], _ => [Mode(3840, 2160, 144, 1)]);
@@ -250,6 +297,7 @@ public sealed class GamingProfileTopologyReadinessTests
         {
             FriendlyName = name,
             MonitorDevicePath = $"PATH-{name}",
+            EdidIdsValid = true,
             AdapterLuid = 1,
             TargetId = targetId,
             EdidManufacturerId = 123,

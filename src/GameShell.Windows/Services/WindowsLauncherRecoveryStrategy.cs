@@ -133,7 +133,7 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
 
     private static LauncherSettings ResolveLauncher(AppSettings settings, string? profileName)
     {
-        return settings.Display.PcGamingProfileConfigurations.FirstOrDefault(configuration =>
+        return settings.Display.GamingProfileConfigurations.FirstOrDefault(configuration =>
             string.Equals(configuration.ProfileName, profileName, StringComparison.OrdinalIgnoreCase))?.Launcher
             ?? settings.Launcher;
     }

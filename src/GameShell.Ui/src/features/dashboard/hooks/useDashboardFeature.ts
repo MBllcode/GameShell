@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppStatus, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
 import type { DashboardPageProps } from '../../../pages/DashboardPage';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../../profiles/utils';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import { steps } from '../../setup/setupFlow';
 import { useDashboardActions } from './useDashboardActions';
@@ -9,16 +9,16 @@ import { useDashboardPageModel } from './useDashboardPageModel';
 import { useDashboardSetupActions } from './useDashboardSetupActions';
 import type { SetupMode } from '../../setup/setupFlow';
 import type { BootstrapRoute } from '../../setup/setupRouting';
-import type { PcGamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
+import type { GamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
 
 type Options = {
   status: AppStatus;
   launcher: DashboardPageProps['launcher'];
-  pcGamingLayout: DisplayLayoutSnapshot | null;
-  pcGamingProfiles: DisplayLayoutProfile[];
-  pcGamingProfileLaunchers: PcGamingProfileLauncherMap;
-  pcGamingProfileHotkeys: PcGamingProfileHotkeysMap;
-  activePcGamingProfileName: string | null;
+  gamingLayout: DisplayLayoutSnapshot | null;
+  gamingProfiles: DisplayLayoutProfile[];
+  gamingProfileLaunchers: GamingProfileLauncherMap;
+  gamingProfileHotkeys: GamingProfileHotkeysMap;
+  activeGamingProfileName: string | null;
   selectedProfileName: string;
   globalWorkModeHotkey: string;
   isModeSwitching: boolean;
@@ -28,10 +28,10 @@ type Options = {
   hasError: boolean;
   hasUnsavedChanges: boolean;
   isSetupComplete: boolean;
-  profileBehaviours: PcGamingProfileBehaviourMap;
-  profileLaunchers: PcGamingProfileLauncherMap;
-  profileHotkeys: PcGamingProfileHotkeysMap;
-  profileControllerShortcuts: PcGamingProfileControllerShortcutMap;
+  profileBehaviours: GamingProfileBehaviourMap;
+  profileLaunchers: GamingProfileLauncherMap;
+  profileHotkeys: GamingProfileHotkeysMap;
+  profileControllerShortcuts: GamingProfileControllerShortcutMap;
   saveCurrentSettings: (isFirstRunCompleted?: boolean, overrides?: SettingsPayloadOverrides) => Promise<unknown>;
   setStatus: Dispatch<SetStateAction<AppStatus>>;
   setActiveModeAction: (value: string | null) => void;
@@ -50,8 +50,8 @@ type Options = {
   setIsSetupComplete: Dispatch<SetStateAction<boolean>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
-  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
-  setPcGamingBehaviour: Dispatch<SetStateAction<PcGamingBehaviourState>>;
+  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
+  setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
   setShowOverwriteProfileDialog: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -60,8 +60,8 @@ export function useDashboardFeature(options: Options) {
     hasUnsavedChanges: options.hasUnsavedChanges,
     isSetupComplete: options.isSetupComplete,
     selectedProfileName: options.selectedProfileName,
-    profiles: options.pcGamingProfiles,
-    activeProfileName: options.activePcGamingProfileName,
+    profiles: options.gamingProfiles,
+    activeProfileName: options.activeGamingProfileName,
     profileBehaviours: options.profileBehaviours,
     profileLaunchers: options.profileLaunchers,
     profileHotkeys: options.profileHotkeys,
@@ -78,7 +78,7 @@ export function useDashboardFeature(options: Options) {
   });
   const setupActions = useDashboardSetupActions({
     steps,
-    profiles: options.pcGamingProfiles,
+    profiles: options.gamingProfiles,
     selectedProfileName: options.selectedProfileName,
     setStepIndex: options.setStepIndex,
     setSetupMode: options.setSetupMode,
@@ -90,7 +90,7 @@ export function useDashboardFeature(options: Options) {
     setProfileHotkeyValidationError: options.setProfileHotkeyValidationError,
     setProfileControllerValidationError: options.setProfileControllerValidationError,
     setHotkeys: options.setHotkeys,
-    setPcGamingBehaviour: options.setPcGamingBehaviour,
+    setGamingBehaviour: options.setGamingBehaviour,
     setShowOverwriteProfileDialog: options.setShowOverwriteProfileDialog,
     setMessage: options.setMessage
   });
@@ -99,11 +99,11 @@ export function useDashboardFeature(options: Options) {
     state: {
       status: options.status,
       launcher: options.launcher,
-      pcGamingLayout: options.pcGamingLayout,
-      pcGamingProfiles: options.pcGamingProfiles,
-      pcGamingProfileLaunchers: options.pcGamingProfileLaunchers,
-      pcGamingProfileHotkeys: options.pcGamingProfileHotkeys,
-      activeProfileName: options.activePcGamingProfileName,
+      gamingLayout: options.gamingLayout,
+      gamingProfiles: options.gamingProfiles,
+      gamingProfileLaunchers: options.gamingProfileLaunchers,
+      gamingProfileHotkeys: options.gamingProfileHotkeys,
+      activeProfileName: options.activeGamingProfileName,
       selectedProfileName: options.selectedProfileName,
       globalWorkModeHotkey: options.globalWorkModeHotkey,
       isModeSwitching: options.isModeSwitching,

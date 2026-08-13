@@ -8,7 +8,7 @@ public sealed class AppStatus
     public bool IsBusy { get; init; }
     public string DisplayMode { get; init; } = "NativeDisplayConfig";
     public string? SelectedConsoleDisplay { get; init; }
-    public bool HasPcGamingLayout { get; init; }
+    public bool HasGamingProfiles { get; init; }
     public string? ActiveProfileName { get; init; }
     public string? ActiveLauncher { get; init; }
     public string? LastOperation { get; init; }

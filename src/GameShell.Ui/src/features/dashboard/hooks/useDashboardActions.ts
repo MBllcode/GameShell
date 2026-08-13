@@ -3,7 +3,7 @@ import { sendBridgeCommand } from '../../../services/webViewBridge';
 import { formatCommandTargetMode } from '../../../utils/status';
 import { getModeActionKey, type ModeCommand } from '../../../utils/modes';
 import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot, ModeResult } from '../../../types/bridge';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../../profiles/utils';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 
 type Options = {
@@ -12,10 +12,10 @@ type Options = {
   selectedProfileName: string;
   profiles: DisplayLayoutProfile[];
   activeProfileName: string | null;
-  profileBehaviours: PcGamingProfileBehaviourMap;
-  profileLaunchers: PcGamingProfileLauncherMap;
-  profileHotkeys: PcGamingProfileHotkeysMap;
-  profileControllerShortcuts: PcGamingProfileControllerShortcutMap;
+  profileBehaviours: GamingProfileBehaviourMap;
+  profileLaunchers: GamingProfileLauncherMap;
+  profileHotkeys: GamingProfileHotkeysMap;
+  profileControllerShortcuts: GamingProfileControllerShortcutMap;
   saveCurrentSettings: (isFirstRunCompleted?: boolean, overrides?: SettingsPayloadOverrides) => Promise<unknown>;
   setStatus: (value: AppStatus | ((current: AppStatus) => AppStatus)) => void;
   setActiveModeAction: (value: string | null) => void;
@@ -59,7 +59,7 @@ export function useDashboardActions(options: Options) {
         const matched = profiles.find((profile) => profile.name.toLowerCase() === requestedName.toLowerCase());
         if (matched) {
           setActiveProfileName(matched.name); setSelectedProfileName(matched.name); setLayout(matched.layout);
-          await saveCurrentSettings(isSetupComplete, { activePcGamingProfileName: matched.name, pcGamingLayout: matched.layout });
+          await saveCurrentSettings(isSetupComplete, { activeGamingProfileName: matched.name, gamingLayout: matched.layout });
         }
       }
       setMessage(command === 'enterWorkMode' && result.message === 'Enter Work Mode completed.' ? t('dashboard.switchComplete') : result.message);
@@ -78,7 +78,7 @@ export function useDashboardActions(options: Options) {
     const nextLayout = nextActiveProfileName ? nextProfiles.find((profile) => profile.name === nextActiveProfileName)?.layout ?? null : null;
     setError(null); setIsRemovingProfile(true); setMessage(t('dashboard.deleteInProgress', { name: profileName }));
     try {
-      await saveCurrentSettings(true, { pcGamingProfiles: nextProfiles, activePcGamingProfileName: nextActiveProfileName, pcGamingLayout: nextLayout, pcGamingProfileBehaviours: nextProfileBehaviours, pcGamingProfileLaunchers: nextProfileLaunchers, pcGamingProfileHotkeys: nextProfileHotkeys, pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts });
+      await saveCurrentSettings(true, { gamingProfiles: nextProfiles, activeGamingProfileName: nextActiveProfileName, gamingLayout: nextLayout, gamingProfileBehaviours: nextProfileBehaviours, gamingProfileLaunchers: nextProfileLaunchers, gamingProfileHotkeys: nextProfileHotkeys, gamingProfileControllerShortcuts: nextProfileControllerShortcuts });
       setMessage(t('dashboard.deleteSuccess', { name: profileName }));
     } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : t('dashboard.deleteError')); }
     finally { setIsRemovingProfile(false); }

@@ -37,7 +37,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
   const { setupState, displayState, formState, profileFeature, setupPageActions, displayWorkflow, navigation, flow } = options;
   const { mutations: profileMutations, controllerCapture } = profileFeature;
   const { setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog } = setupState;
-  const { launcher, language, setLanguage, pcGamingBehaviour, workBehaviour, hotkeys, finishOptions } = formState;
+  const { launcher, language, setLanguage, gamingBehaviour, workBehaviour, hotkeys, finishOptions } = formState;
 
   useEffect(() => {
     if (setupState.setupMode === 'None') {
@@ -73,7 +73,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
     },
     displays: {
       displays: displayState.displays,
-      profiles: displayState.pcGamingProfiles,
+      profiles: displayState.gamingProfiles,
       selectedProfileName: options.selectedProfileName,
       displayValidationState: setupState.displayValidationState,
       displayDraftChange: setupState.handleDisplayDraftChange,
@@ -81,27 +81,27 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
       isRefreshingDisplays: displayState.isRefreshingDisplays,
       displayListError: displayState.displayListError,
       refreshDisplays: displayWorkflow.refreshDisplays,
-      pcGamingLayout: displayState.pcGamingLayout
+      gamingLayout: displayState.gamingLayout
     },
     profile: {
       launcher,
       setLauncher: setupPageActions.updateProfileLauncher,
       language,
       setLanguage,
-      pcGamingBehaviour,
-      onChangePcGamingBehaviour: profileMutations.updatePcGamingBehaviourFlag,
+      gamingBehaviour,
+      onChangeGamingBehaviour: profileMutations.updateGamingBehaviourFlag,
       workBehaviour,
       setWorkBehaviour: setupPageActions.setWorkBehaviour,
       hotkeys,
       profileHotkeyValidationError: displayState.profileHotkeyValidationError,
       profileControllerValidationError: displayState.profileControllerValidationError,
-      profileLaunchers: displayState.pcGamingProfileLaunchers,
-      profileHotkeys: displayState.pcGamingProfileHotkeys,
-      activeProfileName: options.selectedProfileName || displayState.activePcGamingProfileName
+      profileLaunchers: displayState.gamingProfileLaunchers,
+      profileHotkeys: displayState.gamingProfileHotkeys,
+      activeProfileName: options.selectedProfileName || displayState.activeGamingProfileName
     },
     controller: {
       workModeControllerShortcut: displayState.workModeControllerShortcut,
-      profileControllerShortcut: displayState.pcGamingProfileControllerShortcuts[options.selectedProfileName] ?? null,
+      profileControllerShortcut: displayState.gamingProfileControllerShortcuts[options.selectedProfileName] ?? null,
       controllerStatus: controllerCapture.status,
       captureSuccessButtons: controllerCapture.captureSuccessButtons,
       rejectedControllerButtons: controllerCapture.rejectedCaptureButtons,

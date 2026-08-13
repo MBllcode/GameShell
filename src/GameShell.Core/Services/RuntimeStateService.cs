@@ -45,8 +45,10 @@ public sealed class RuntimeStateService : IRuntimeStateService
 
         try
         {
-            await using var stream = File.OpenRead(StatePath);
-            return await JsonSerializer.DeserializeAsync<RuntimeState>(stream, JsonOptions, cancellationToken)
+            var json = await File.ReadAllTextAsync(StatePath, cancellationToken);
+            // Keep state.json readable after the runtime enum was renamed from PcGaming to GamingProfile.
+            json = json.Replace("\"PcGaming\"", "\"GamingProfile\"", StringComparison.Ordinal);
+            return JsonSerializer.Deserialize<RuntimeState>(json, JsonOptions)
                 ?? new RuntimeState();
         }
         catch (Exception ex) when (ex is JsonException or IOException)
@@ -63,4 +65,3 @@ public sealed class RuntimeStateService : IRuntimeStateService
         await JsonSerializer.SerializeAsync(stream, state, JsonOptions, cancellationToken);
     }
 }
-

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, DisplayModeQueryResult, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../types/bridge';
-import { normalizePcGamingProfileName } from '../features/profiles/utils';
+import { normalizeGamingProfileName } from '../features/profiles/utils';
 import { computeTopologyBounds, createCanvasTransform, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
 import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, hasValidFixedRefresh, normalizeTopologyPrimary, profileTargetForAddition, sameIdentity, topologyFromLegacy } from '../utils/displays';
 import { sendBridgeCommand } from '../services/webViewBridge';
@@ -12,7 +12,7 @@ type DragState = { identityKey: string; startX: number; startY: number; startRec
 type DisplaysStepProps = {
   stepNumber: number;
   displays: DisplayDeviceInfo[];
-  pcGamingProfiles: DisplayLayoutProfile[];
+  gamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   prefillFromSelectedProfile: boolean;
   onDraftChange: (profileName: string, topology: GamingProfileDisplayTopology) => void;
@@ -26,7 +26,7 @@ type DisplaysStepProps = {
 export function DisplaysStep({
   stepNumber,
   displays,
-  pcGamingProfiles,
+  gamingProfiles,
   selectedProfileName,
   prefillFromSelectedProfile,
   onDraftChange,
@@ -37,7 +37,7 @@ export function DisplaysStep({
   refreshDisplays
 }: DisplaysStepProps) {
   const { t } = useTranslation();
-  const selectedProfile = pcGamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
+  const selectedProfile = gamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
   const [profileName, setProfileName] = useState('');
   const [topology, setTopology] = useState<GamingProfileDisplayTopology>({ displays: [] });
   const [selectedIdentityKey, setSelectedIdentityKey] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export function DisplaysStep({
   }
 
   function updateProfileName(value: string) {
-    const normalized = normalizePcGamingProfileName(value);
+    const normalized = normalizeGamingProfileName(value);
     setProfileName(normalized);
     onDraftChange(normalized, topology);
     if (normalized && validationState.showNameError) onValidationStateChange({ ...validationState, showNameError: false });

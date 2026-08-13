@@ -34,7 +34,7 @@ public sealed class ModeCommandService : IModeCommandService
             IsBusy = status.IsBusy,
             DisplayMode = status.DisplayMode,
             SelectedConsoleDisplay = status.SelectedConsoleDisplay,
-            HasPcGamingLayout = status.HasPcGamingLayout,
+            HasGamingProfiles = status.HasGamingProfiles,
             ActiveLauncher = string.Equals(status.CurrentMode, GameShellMode.Work.ToString(), StringComparison.Ordinal) ? null : status.ActiveLauncher,
             LastOperation = status.LastOperation,
             LastOperationDurationMs = status.LastOperationDurationMs,

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '../../../i18n/language';
 import type { LauncherType } from '../../../utils/modes';
 
-export type HotkeySettingsState = { consoleMode: string; pcGamingMode: string; workMode: string };
+export type HotkeySettingsState = { consoleMode: string; gamingMode: string; workMode: string };
 
 export type ConsoleBehaviourState = {
   hideDesktopIcons: boolean;
@@ -15,7 +15,7 @@ export type ConsoleBehaviourState = {
   bringLauncherToForeground: boolean;
 };
 
-export type PcGamingBehaviourState = ConsoleBehaviourState;
+export type GamingBehaviourState = ConsoleBehaviourState;
 
 export type WorkBehaviourState = {
   closeLauncher: boolean;
@@ -44,7 +44,7 @@ export const defaultConsoleBehaviour: ConsoleBehaviourState = {
   bringLauncherToForeground: true
 };
 
-export const defaultPcGamingBehaviour: PcGamingBehaviourState = {
+export const defaultGamingBehaviour: GamingBehaviourState = {
   ...defaultConsoleBehaviour
 };
 
@@ -63,11 +63,11 @@ export const defaultFinishOptions: FinishOptions = {
 };
 
 export function useSettingsFormState() {
-  const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', pcGamingMode: '', workMode: '' });
+  const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', gamingMode: '', workMode: '' });
   const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
   const [language, setLanguage] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
   const [consoleBehaviour, setConsoleBehaviour] = useState<ConsoleBehaviourState>({ ...defaultConsoleBehaviour });
-  const [pcGamingBehaviour, setPcGamingBehaviour] = useState<PcGamingBehaviourState>({ ...defaultPcGamingBehaviour });
+  const [gamingBehaviour, setGamingBehaviour] = useState<GamingBehaviourState>({ ...defaultGamingBehaviour });
   const [workBehaviour, setWorkBehaviour] = useState<WorkBehaviourState>({ ...defaultWorkBehaviour });
   const [finishOptions, setFinishOptions] = useState<FinishOptions>({ ...defaultFinishOptions });
 
@@ -80,8 +80,8 @@ export function useSettingsFormState() {
     setLanguage,
     consoleBehaviour,
     setConsoleBehaviour,
-    pcGamingBehaviour,
-    setPcGamingBehaviour,
+    gamingBehaviour,
+    setGamingBehaviour,
     workBehaviour,
     setWorkBehaviour,
     finishOptions,

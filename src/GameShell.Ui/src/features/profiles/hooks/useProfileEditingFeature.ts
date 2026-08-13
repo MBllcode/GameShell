@@ -3,7 +3,7 @@ import { useControllerCapture } from '../../controller/hooks/useControllerCaptur
 import { useProfileMutations } from './useProfileMutations';
 import type { ControllerShortcutSettings } from '../../../types/bridge';
 import type { LauncherType } from '../../../utils/modes';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../utils';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../utils';
 
 type BehaviourState = {
   hideDesktopIcons: boolean;
@@ -18,21 +18,21 @@ type BehaviourState = {
 
 type Options = {
   workingProfileName: string;
-  pcGamingBehaviour: BehaviourState;
-  profileBehaviours: PcGamingProfileBehaviourMap;
-  profileLaunchers: PcGamingProfileLauncherMap;
-  profileHotkeys: PcGamingProfileHotkeysMap;
-  profileControllerShortcuts: PcGamingProfileControllerShortcutMap;
+  gamingBehaviour: BehaviourState;
+  profileBehaviours: GamingProfileBehaviourMap;
+  profileLaunchers: GamingProfileLauncherMap;
+  profileHotkeys: GamingProfileHotkeysMap;
+  profileControllerShortcuts: GamingProfileControllerShortcutMap;
   workModeControllerShortcut: ControllerShortcutSettings | null;
   workModeHotkey: string;
-  setPcGamingBehaviour: Dispatch<SetStateAction<BehaviourState>>;
-  setProfileBehaviours: Dispatch<SetStateAction<PcGamingProfileBehaviourMap>>;
+  setGamingBehaviour: Dispatch<SetStateAction<BehaviourState>>;
+  setProfileBehaviours: Dispatch<SetStateAction<GamingProfileBehaviourMap>>;
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
-  setProfileLaunchers: Dispatch<SetStateAction<PcGamingProfileLauncherMap>>;
-  setProfileHotkeys: Dispatch<SetStateAction<PcGamingProfileHotkeysMap>>;
-  setProfileControllerShortcuts: Dispatch<SetStateAction<PcGamingProfileControllerShortcutMap>>;
+  setProfileLaunchers: Dispatch<SetStateAction<GamingProfileLauncherMap>>;
+  setProfileHotkeys: Dispatch<SetStateAction<GamingProfileHotkeysMap>>;
+  setProfileControllerShortcuts: Dispatch<SetStateAction<GamingProfileControllerShortcutMap>>;
   setWorkModeControllerShortcut: Dispatch<SetStateAction<ControllerShortcutSettings | null>>;
-  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
+  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setError: Dispatch<SetStateAction<string | null>>;

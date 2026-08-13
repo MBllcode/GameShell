@@ -250,10 +250,10 @@ public sealed class ConsoleSessionManagerTests
         {
             return Task.FromResult(new AppSettings
             {
-                PcGaming = { GameProcessNames = ["game.exe"] },
+                Gaming = { GameProcessNames = ["game.exe"] },
                 Display =
                 {
-                    PcGamingProfiles =
+                    GamingProfiles =
                     [
                         new DisplayLayoutProfile
                         {

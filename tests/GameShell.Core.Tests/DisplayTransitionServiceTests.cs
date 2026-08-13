@@ -69,7 +69,7 @@ public sealed class DisplayTransitionServiceTests
     }
 
     [Fact]
-    public async Task EnterPcGamingMode_FallsBackToConsoleWhenLayoutIsMissing()
+    public async Task EnterGamingMode_FallsBackToConsoleWhenLayoutIsMissing()
     {
         var work = Snapshot(
             Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
@@ -79,7 +79,7 @@ public sealed class DisplayTransitionServiceTests
         var applier = new FakeDisplayLayoutApplicationService(query);
         var service = CreateService(query, applier, runtime);
 
-        var result = await service.EnterPcGamingModeAsync(null, work.Displays[1].Identity);
+        var result = await service.EnterGamingModeAsync(null, work.Displays[1].Identity);
 
         Assert.True(result.Success);
         Assert.Equal(GameShellMode.Console, runtime.State.CurrentMode);
@@ -92,7 +92,7 @@ public sealed class DisplayTransitionServiceTests
         var work = Snapshot(
             Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
             Path("Monitor B", "PATH-B", 1920, 0, 2560, 1440));
-        var pcGaming = Snapshot(
+        var gaming = Snapshot(
             Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
             Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440));
         var query = new FakeDisplayQueryService(work);
@@ -100,7 +100,7 @@ public sealed class DisplayTransitionServiceTests
         var applier = new FakeDisplayLayoutApplicationService(query);
         var service = CreateService(query, applier, runtime);
 
-        Assert.True((await service.EnterPcGamingModeAsync(pcGaming, work.Displays[1].Identity)).Success);
+        Assert.True((await service.EnterGamingModeAsync(gaming, work.Displays[1].Identity)).Success);
         Assert.True((await service.EnterConsoleModeAsync(work.Displays[1].Identity)).Success);
         Assert.True((await service.EnterWorkModeAsync()).Success);
 

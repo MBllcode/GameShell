@@ -48,13 +48,39 @@ public sealed class SettingsServiceTests
         Assert.False(settings.Controller.Enabled);
         Assert.Null(settings.Controller.ConsoleMode);
         Assert.Equal("Ctrl+Alt+G", settings.Hotkeys.ConsoleMode);
-        Assert.Equal("Ctrl+Alt+P", settings.Hotkeys.PcGamingMode);
+        Assert.Equal("Ctrl+Alt+P", settings.Hotkeys.GamingMode);
         Assert.Equal("Ctrl+Alt+W", settings.Hotkeys.WorkMode);
         Assert.Null(settings.Display.ConsoleDisplay);
-        Assert.Null(settings.Display.PcGamingLayout);
+        Assert.Null(settings.Display.GamingLayout);
         Assert.True(settings.Audio.SwitchAudioInConsoleMode);
         Assert.True(settings.Audio.RestoreAudioInWorkMode);
         Assert.Null(settings.Audio.ConsoleAudioDeviceId);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WritesCanonicalGamingPropertyNames()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+
+        await service.SaveAsync(new AppSettings
+        {
+            Gaming = new GamingSettings { GameProcessNames = ["game.exe"] },
+            Display = new DisplaySettings
+            {
+                GamingLayout = new DisplayLayoutSnapshot(),
+                GamingProfiles = [new DisplayLayoutProfile { Name = "SALON" }],
+                ActiveGamingProfileName = "SALON"
+            },
+            Hotkeys = new HotkeySettings { GamingMode = "Ctrl+Alt+P" }
+        });
+
+        var json = await File.ReadAllTextAsync(settingsPath);
+
+        Assert.Contains("\"gaming\"", json);
+        Assert.Contains("\"gamingProfiles\"", json);
+        Assert.Contains("\"gamingMode\"", json);
+        Assert.DoesNotContain("\"pcGaming", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,7 +90,7 @@ public sealed class SettingsServiceTests
 
         Assert.False(settings.Controller.Enabled);
         Assert.Null(settings.Controller.ConsoleMode);
-        Assert.Null(settings.Controller.PcGamingMode);
+        Assert.Null(settings.Controller.GamingMode);
         Assert.Null(settings.Controller.WorkMode);
     }
 
@@ -80,11 +106,11 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
-    public void Validate_MigratesLegacyPcGamingDefaults()
+    public void Validate_MigratesLegacyGamingDefaults()
     {
         var settings = new AppSettings
         {
-            PcGaming = new PcGamingSettings
+            Gaming = new GamingSettings
             {
                 HideDesktopIcons = false,
                 HideTaskbar = false,
@@ -99,25 +125,25 @@ public sealed class SettingsServiceTests
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.True(validated.PcGaming.HideDesktopIcons);
-        Assert.True(validated.PcGaming.HideTaskbar);
-        Assert.False(validated.PcGaming.CloseVisibleWindows);
-        Assert.False(validated.PcGaming.MinimizeRemainingWindows);
-        Assert.True(validated.PcGaming.MoveCursorToCorner);
-        Assert.False(validated.PcGaming.HideCursor);
-        Assert.True(validated.PcGaming.StartLauncher);
-        Assert.True(validated.PcGaming.BringLauncherToForeground);
+        Assert.True(validated.Gaming.HideDesktopIcons);
+        Assert.True(validated.Gaming.HideTaskbar);
+        Assert.False(validated.Gaming.CloseVisibleWindows);
+        Assert.False(validated.Gaming.MinimizeRemainingWindows);
+        Assert.True(validated.Gaming.MoveCursorToCorner);
+        Assert.False(validated.Gaming.HideCursor);
+        Assert.True(validated.Gaming.StartLauncher);
+        Assert.True(validated.Gaming.BringLauncherToForeground);
     }
 
     [Fact]
-    public void Validate_NormalizesPcGamingProfileNamesToUppercase()
+    public void Validate_NormalizesGamingProfileNamesToUppercase()
     {
         var settings = new AppSettings
         {
             Display = new DisplaySettings
             {
-                ActivePcGamingProfileName = "salon",
-                PcGamingProfiles =
+                ActiveGamingProfileName = "salon",
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile
                     {
@@ -125,20 +151,20 @@ public sealed class SettingsServiceTests
                         Layout = new DisplayLayoutSnapshot()
                     }
                 ],
-                PcGamingProfileConfigurations =
+                GamingProfileConfigurations =
                 [
-                    new PcGamingProfileConfiguration { ProfileName = "salon" }
+                    new GamingProfileConfiguration { ProfileName = "salon" }
                 ]
             }
         };
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        var profile = Assert.Single(validated.Display.PcGamingProfiles);
-        var configuration = Assert.Single(validated.Display.PcGamingProfileConfigurations);
+        var profile = Assert.Single(validated.Display.GamingProfiles);
+        var configuration = Assert.Single(validated.Display.GamingProfileConfigurations);
         Assert.Equal("SALON", profile.Name);
         Assert.Equal("SALON", configuration.ProfileName);
-        Assert.Equal("SALON", validated.Display.ActivePcGamingProfileName);
+        Assert.Equal("SALON", validated.Display.ActiveGamingProfileName);
     }
 
     [Fact]
@@ -148,17 +174,17 @@ public sealed class SettingsServiceTests
         {
             Display = new DisplaySettings
             {
-                ActivePcGamingProfileName = "DOMYSLNY",
-                PcGamingLayout = new DisplayLayoutSnapshot(),
-                PcGamingProfiles = []
+                ActiveGamingProfileName = "DOMYSLNY",
+                GamingLayout = new DisplayLayoutSnapshot(),
+                GamingProfiles = []
             }
         };
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.Empty(validated.Display.PcGamingProfiles);
-        Assert.Null(validated.Display.ActivePcGamingProfileName);
-        Assert.Null(validated.Display.PcGamingLayout);
+        Assert.Empty(validated.Display.GamingProfiles);
+        Assert.Null(validated.Display.ActiveGamingProfileName);
+        Assert.Null(validated.Display.GamingLayout);
     }
 
     [Theory]
@@ -211,14 +237,14 @@ public sealed class SettingsServiceTests
         {
             Controller = new ControllerSettings
             {
-                PcGamingMode = new ControllerShortcutSettings()
+                GamingMode = new ControllerShortcutSettings()
             }
         };
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.Empty(validated.Controller.PcGamingMode!.Buttons);
-        Assert.Equal(700, validated.Controller.PcGamingMode.HoldDurationMs);
+        Assert.Empty(validated.Controller.GamingMode!.Buttons);
+        Assert.Equal(700, validated.Controller.GamingMode.HoldDurationMs);
     }
 
     [Fact]
@@ -231,7 +257,7 @@ public sealed class SettingsServiceTests
             Hotkeys = new HotkeySettings
             {
                 ConsoleMode = "Ctrl+Alt+G",
-                PcGamingMode = "Ctrl+Alt+P",
+                GamingMode = "Ctrl+Alt+P",
                 WorkMode = "Ctrl+Alt+W"
             }
         };
@@ -240,7 +266,7 @@ public sealed class SettingsServiceTests
         var loaded = await service.LoadAsync();
 
         Assert.Equal("Ctrl+Alt+G", loaded.Hotkeys.ConsoleMode);
-        Assert.Equal("Ctrl+Alt+P", loaded.Hotkeys.PcGamingMode);
+        Assert.Equal("Ctrl+Alt+P", loaded.Hotkeys.GamingMode);
         Assert.Equal("Ctrl+Alt+W", loaded.Hotkeys.WorkMode);
     }
 
@@ -253,7 +279,7 @@ public sealed class SettingsServiceTests
         {
             Display = new DisplaySettings
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile
                     {
@@ -281,7 +307,7 @@ public sealed class SettingsServiceTests
 
         await service.SaveAsync(settings);
         var loaded = await service.LoadAsync();
-        var target = Assert.Single(Assert.Single(loaded.Display.PcGamingProfiles).DisplayTopology!.Displays);
+        var target = Assert.Single(Assert.Single(loaded.Display.GamingProfiles).DisplayTopology!.Displays);
 
                 Assert.Equal(RefreshPolicy.Fixed, target.RefreshPolicy);
                 Assert.Equal(14398u, target.FixedRefreshRateNumerator);
@@ -313,7 +339,7 @@ public sealed class SettingsServiceTests
 
                 var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
                 var settings = await service.LoadAsync();
-                var target = Assert.Single(Assert.Single(settings.Display.PcGamingProfiles).DisplayTopology!.Displays);
+                var target = Assert.Single(Assert.Single(settings.Display.GamingProfiles).DisplayTopology!.Displays);
 
                 Assert.Equal(RefreshPolicy.AutoHighest, target.RefreshPolicy);
                 Assert.Equal(0u, target.RefreshRateNumerator);
@@ -323,7 +349,7 @@ public sealed class SettingsServiceTests
 
                 await service.SaveAsync(settings);
                 var reloaded = await service.LoadAsync();
-                var savedTarget = Assert.Single(Assert.Single(reloaded.Display.PcGamingProfiles).DisplayTopology!.Displays);
+                var savedTarget = Assert.Single(Assert.Single(reloaded.Display.GamingProfiles).DisplayTopology!.Displays);
 
                 Assert.Equal(RefreshPolicy.AutoHighest, savedTarget.RefreshPolicy);
                 Assert.Equal(0u, savedTarget.RefreshRateNumerator);
@@ -348,7 +374,7 @@ public sealed class SettingsServiceTests
                 {
                         Display = new DisplaySettings
                         {
-                                PcGamingProfiles = [new DisplayLayoutProfile { Name = "KONSOLA", DisplayTopology = new GamingProfileDisplayTopology { Displays = [target] } }]
+                                GamingProfiles = [new DisplayLayoutProfile { Name = "KONSOLA", DisplayTopology = new GamingProfileDisplayTopology { Displays = [target] } }]
                         }
                 });
 
@@ -365,7 +391,7 @@ public sealed class SettingsServiceTests
         {
             Display = new DisplaySettings
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile
                     {
@@ -391,7 +417,7 @@ public sealed class SettingsServiceTests
 
         await service.SaveAsync(settings);
         var loaded = await service.LoadAsync();
-        var target = Assert.Single(Assert.Single(loaded.Display.PcGamingProfiles).DisplayTopology!.Displays);
+        var target = Assert.Single(Assert.Single(loaded.Display.GamingProfiles).DisplayTopology!.Displays);
 
         Assert.Equal(RefreshPolicy.AutoHighest, target.RefreshPolicy);
         Assert.Equal(0u, target.FixedRefreshRateNumerator);
@@ -405,7 +431,7 @@ public sealed class SettingsServiceTests
         {
             Display = new DisplaySettings
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile
                     {
@@ -416,7 +442,7 @@ public sealed class SettingsServiceTests
             },
             Controller = new ControllerSettings
             {
-                PcGamingMode = new ControllerShortcutSettings
+                GamingMode = new ControllerShortcutSettings
                 {
                     Buttons = [ControllerButton.Back, ControllerButton.South],
                     HoldDurationMs = 900
@@ -425,7 +451,7 @@ public sealed class SettingsServiceTests
         };
 
         var validated = AppSettingsValidator.Validate(settings);
-        var configuration = Assert.Single(validated.Display.PcGamingProfileConfigurations);
+        var configuration = Assert.Single(validated.Display.GamingProfileConfigurations);
 
         Assert.Null(configuration.ControllerShortcut);
     }
@@ -443,14 +469,14 @@ public sealed class SettingsServiceTests
         {
             Display = new DisplaySettings
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() },
                     new DisplayLayoutProfile { Name = "Biurko", Layout = new DisplayLayoutSnapshot() }
                 ],
-                PcGamingProfileConfigurations =
+                GamingProfileConfigurations =
                 [
-                    new PcGamingProfileConfiguration
+                    new GamingProfileConfiguration
                     {
                         ProfileName = "Salon",
                         ControllerShortcut = new ControllerShortcutSettings
@@ -459,7 +485,7 @@ public sealed class SettingsServiceTests
                             HoldDurationMs = 700
                         }
                     },
-                    new PcGamingProfileConfiguration
+                    new GamingProfileConfiguration
                     {
                         ProfileName = "Biurko",
                         ControllerShortcut = new ControllerShortcutSettings
@@ -474,8 +500,8 @@ public sealed class SettingsServiceTests
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.NotNull(validated.Display.PcGamingProfileConfigurations[0].ControllerShortcut);
-        Assert.Null(validated.Display.PcGamingProfileConfigurations[1].ControllerShortcut);
+        Assert.NotNull(validated.Display.GamingProfileConfigurations[0].ControllerShortcut);
+        Assert.Null(validated.Display.GamingProfileConfigurations[1].ControllerShortcut);
     }
 
     [Fact]
@@ -486,16 +512,16 @@ public sealed class SettingsServiceTests
             Hotkeys = new HotkeySettings { WorkMode = "Ctrl+Alt+W" },
             Display = new DisplaySettings
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() }
                 ],
-                PcGamingProfileConfigurations =
+                GamingProfileConfigurations =
                 [
-                    new PcGamingProfileConfiguration
+                    new GamingProfileConfiguration
                     {
                         ProfileName = "Salon",
-                        Hotkeys = new PcGamingProfileHotkeys { EnterProfile = "Alt+Ctrl+W" }
+                        Hotkeys = new GamingProfileHotkeys { EnterProfile = "Alt+Ctrl+W" }
                     }
                 ]
             }
@@ -503,7 +529,7 @@ public sealed class SettingsServiceTests
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.Empty(validated.Display.PcGamingProfileConfigurations[0].Hotkeys.EnterProfile);
+        Assert.Empty(validated.Display.GamingProfileConfigurations[0].Hotkeys.EnterProfile);
     }
 
     [Fact]
@@ -520,13 +546,13 @@ public sealed class SettingsServiceTests
             },
             Display = new DisplaySettings
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() }
                 ],
-                PcGamingProfileConfigurations =
+                GamingProfileConfigurations =
                 [
-                    new PcGamingProfileConfiguration
+                    new GamingProfileConfiguration
                     {
                         ProfileName = "Salon",
                         ControllerShortcut = new ControllerShortcutSettings
@@ -540,7 +566,7 @@ public sealed class SettingsServiceTests
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.Null(validated.Display.PcGamingProfileConfigurations[0].ControllerShortcut);
+        Assert.Null(validated.Display.GamingProfileConfigurations[0].ControllerShortcut);
     }
 
     [Fact]
@@ -589,7 +615,7 @@ public sealed class SettingsServiceTests
         var loaded = await service.LoadAsync();
 
         Assert.True(loaded.Ui.IsFirstRunCompleted);
-        Assert.Equal("ALPHA", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+        Assert.Equal("ALPHA", Assert.Single(loaded.Display.GamingProfiles).Name);
     }
 
     [Fact]
@@ -617,7 +643,7 @@ public sealed class SettingsServiceTests
         var loaded = await service.LoadAsync();
 
         Assert.True(loaded.Ui.IsFirstRunCompleted);
-        Assert.Equal("BETA", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+        Assert.Equal("BETA", Assert.Single(loaded.Display.GamingProfiles).Name);
     }
 
     [Fact]
@@ -625,14 +651,14 @@ public sealed class SettingsServiceTests
     {
         var settingsPath = CreateTempSettingsPath();
         var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
-        var first = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "FIRST", Layout = new DisplayLayoutSnapshot() }] } };
-        var second = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "SECOND", Layout = new DisplayLayoutSnapshot() }] } };
+        var first = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { GamingProfiles = [new DisplayLayoutProfile { Name = "FIRST", Layout = new DisplayLayoutSnapshot() }] } };
+        var second = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { GamingProfiles = [new DisplayLayoutProfile { Name = "SECOND", Layout = new DisplayLayoutSnapshot() }] } };
 
         await Task.WhenAll(service.SaveAsync(first), service.SaveAsync(second));
 
         var loaded = await service.LoadAsync();
         Assert.True(loaded.Ui.IsFirstRunCompleted);
-        Assert.Contains(loaded.Display.PcGamingProfiles, profile => string.Equals(profile.Name, "SECOND", StringComparison.OrdinalIgnoreCase)
+        Assert.Contains(loaded.Display.GamingProfiles, profile => string.Equals(profile.Name, "SECOND", StringComparison.OrdinalIgnoreCase)
             || string.Equals(profile.Name, "FIRST", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -642,7 +668,7 @@ public sealed class SettingsServiceTests
         var settingsPath = CreateTempSettingsPath();
         var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
         var first = new AppSettings { Ui = new UiSettings { CloseToTray = true } };
-        var second = new AppSettings { Ui = new UiSettings { CloseToTray = false, IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "LATEST", Layout = new DisplayLayoutSnapshot() }] } };
+        var second = new AppSettings { Ui = new UiSettings { CloseToTray = false, IsFirstRunCompleted = true }, Display = new DisplaySettings { GamingProfiles = [new DisplayLayoutProfile { Name = "LATEST", Layout = new DisplayLayoutSnapshot() }] } };
 
         await service.SaveAsync(first);
         await service.SaveAsync(second);
@@ -650,7 +676,7 @@ public sealed class SettingsServiceTests
         var loaded = await service.LoadAsync();
         Assert.False(loaded.Ui.CloseToTray);
         Assert.True(loaded.Ui.IsFirstRunCompleted);
-        Assert.Equal("LATEST", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+        Assert.Equal("LATEST", Assert.Single(loaded.Display.GamingProfiles).Name);
     }
 
     [Fact]
@@ -658,7 +684,7 @@ public sealed class SettingsServiceTests
     {
         var settingsPath = CreateTempSettingsPath();
         var tempPath = settingsPath + ".tmp";
-        var primary = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { PcGamingProfiles = [new DisplayLayoutProfile { Name = "PRIMARY", Layout = new DisplayLayoutSnapshot() }] } };
+        var primary = new AppSettings { Ui = new UiSettings { IsFirstRunCompleted = true }, Display = new DisplaySettings { GamingProfiles = [new DisplayLayoutProfile { Name = "PRIMARY", Layout = new DisplayLayoutSnapshot() }] } };
         var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
         await service.SaveAsync(primary);
         await File.WriteAllTextAsync(tempPath, "{\"ui\":{\"isFirstRunCompleted\":false}}"
@@ -666,7 +692,7 @@ public sealed class SettingsServiceTests
 
         var loaded = await service.LoadAsync();
 
-        Assert.Equal("PRIMARY", Assert.Single(loaded.Display.PcGamingProfiles).Name);
+        Assert.Equal("PRIMARY", Assert.Single(loaded.Display.GamingProfiles).Name);
         Assert.True(loaded.Ui.IsFirstRunCompleted);
     }
 

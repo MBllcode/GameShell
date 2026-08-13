@@ -6,7 +6,6 @@ namespace GameShell.Core.Services;
 
 public sealed class GamingProfileTopologyReadinessEvaluator
 {
-    private const int MinimumStableIdentityScore = 35;
     private const double RefreshToleranceHz = 0.25;
     private readonly IDisplayQueryService _displayQueryService;
     private readonly ILogger<GamingProfileTopologyReadinessEvaluator> _logger;
@@ -33,6 +32,25 @@ public sealed class GamingProfileTopologyReadinessEvaluator
         {
             var readiness = await EvaluateTargetAsync(savedTarget, inventory, cancellationToken, deferInactiveModeValidation);
             targets.Add(readiness);
+            _logger.LogInformation(
+                "[DISPLAY PHYSICAL MATCH] SavedName={SavedName} CurrentName={CurrentName} SavedAdapterLuid={SavedAdapterLuid} CurrentAdapterLuid={CurrentAdapterLuid} SavedTargetId={SavedTargetId} CurrentTargetId={CurrentTargetId} Connector={Connector} EdidIdsValid={EdidIdsValid} PhysicalMatch={PhysicalMatch} MatchConfidence={MatchConfidence} ResolvedSource={ResolvedSource}",
+                savedTarget.Identity.FriendlyName,
+                readiness.ResolvedTarget?.Name ?? readiness.ResolvedTarget?.Identity.FriendlyName ?? "-",
+                savedTarget.Identity.AdapterLuid,
+                readiness.ResolvedTarget?.Identity.AdapterLuid ?? 0,
+                savedTarget.Identity.TargetId,
+                readiness.ResolvedTarget?.Identity.TargetId ?? 0,
+                FormatConnector(savedTarget.Identity, readiness.ResolvedTarget?.Identity),
+                FormatEdidValidity(savedTarget.Identity, readiness.ResolvedTarget?.Identity),
+                readiness.ResolvedTarget is not null,
+                readiness.PhysicalMatchConfidence,
+                readiness.ResolvedTarget?.SourceDeviceName ?? "-");
+            _logger.LogInformation(
+                "[DISPLAY CAPABILITY READINESS] SavedCapability={SavedCapability} CurrentCapability={CurrentCapability} Result={Result} Reason={Reason}",
+                FormatCapability(savedTarget.CapabilityExpectation),
+                FormatCapability(readiness.CurrentCapability),
+                readiness.Result,
+                readiness.Reason);
             _logger.LogInformation(
                 "[{Phase}] ProfileId={ProfileId} ProfileName={ProfileName} SavedName={SavedName} Enabled={Enabled} ResolvedName={ResolvedName} Active={Active} Available={Available} RequestedMode={RequestedMode} AvailableModesForRequestedResolution={AvailableModesForRequestedResolution} Result={Result} Reason={Reason}",
                 deferInactiveModeValidation ? "PROFILE TOPOLOGY PRECHECK" : "PROFILE TOPOLOGY POSTCHECK",
@@ -127,6 +145,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator
             {
                 SavedTarget = savedTarget,
                 ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
                 Result = ProfileDisplayReadiness.Missing,
                 Reason = ProfileDisplayReadinessReason.PhysicalTargetMissing
             };
@@ -138,6 +157,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator
             {
                 SavedTarget = savedTarget,
                 ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
                 Result = ProfileDisplayReadiness.ResolvableInactive,
                 Reason = ProfileDisplayReadinessReason.TargetInactive
             };
@@ -149,6 +169,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator
             {
                 SavedTarget = savedTarget,
                 ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
                 Result = ProfileDisplayReadiness.Ready,
                 Reason = ProfileDisplayReadinessReason.None
             };
@@ -161,6 +182,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator
             {
                 SavedTarget = savedTarget,
                 ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
                 AvailableModes = modeQuery.Modes,
                 AvailableModesForRequestedResolution = modeQuery.Modes.Count(mode => mode.Width == savedTarget.Width && mode.Height == savedTarget.Height),
                 Result = ProfileDisplayReadiness.InvalidConfiguration,
@@ -173,6 +195,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator
             {
                 SavedTarget = savedTarget,
                 ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
                 AvailableModes = [],
                 Result = ProfileDisplayReadiness.Degraded,
                 Reason = ProfileDisplayReadinessReason.ModeInformationUnavailable
@@ -182,6 +205,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator
         var matchingResolutionModes = modeQuery.Modes
             .Where(mode => mode.Width == savedTarget.Width && mode.Height == savedTarget.Height)
             .ToList();
+        var currentCapability = CreateCapability(matchingResolutionModes);
         var hasRequestedMode = savedTarget.EffectiveRefreshPolicy == RefreshPolicy.AutoHighest
             ? matchingResolutionModes.Count > 0
             : IsValidFixedRefresh(savedTarget)
@@ -190,16 +214,26 @@ public sealed class GamingProfileTopologyReadinessEvaluator
                     mode.RefreshRateDenominator,
                     savedTarget.EffectiveFixedRefreshRateNumerator,
                     savedTarget.EffectiveFixedRefreshRateDenominator));
+        var capabilityRegression = savedTarget.EffectiveRefreshPolicy == RefreshPolicy.AutoHighest
+            && HasValidCapabilityExpectation(savedTarget.CapabilityExpectation)
+            && savedTarget.CapabilityExpectation!.Width == savedTarget.Width
+            && savedTarget.CapabilityExpectation.Height == savedTarget.Height
+            && currentCapability is not null
+            && currentCapability.MaxRefreshRateHz + RefreshToleranceHz < savedTarget.CapabilityExpectation!.MaxRefreshRateHz;
 
         return new ProfileDisplayTargetReadiness
         {
             SavedTarget = savedTarget,
             ResolvedTarget = resolution.Target,
+            PhysicalMatchConfidence = resolution.Confidence,
             AvailableModes = matchingResolutionModes,
+            CurrentCapability = currentCapability,
             AvailableModesForRequestedResolution = matchingResolutionModes.Count,
-            Result = hasRequestedMode ? ProfileDisplayReadiness.Ready : ProfileDisplayReadiness.Degraded,
+            Result = hasRequestedMode && !capabilityRegression ? ProfileDisplayReadiness.Ready : ProfileDisplayReadiness.Degraded,
             Reason = hasRequestedMode
-                ? ProfileDisplayReadinessReason.None
+                ? capabilityRegression
+                    ? ProfileDisplayReadinessReason.CapabilityRegression
+                    : ProfileDisplayReadinessReason.None
                 : ProfileDisplayReadinessReason.ExpectedModeUnavailable
         };
     }
@@ -209,9 +243,15 @@ public sealed class GamingProfileTopologyReadinessEvaluator
         IReadOnlyList<DisplayDeviceInfo> inventory)
     {
         var candidates = inventory
-            .Select(device => new { Device = device, Score = DisplayIdentityMatcher.GetStableIdentityScore(saved, device.Identity) })
-            .Where(candidate => candidate.Score >= MinimumStableIdentityScore)
-            .OrderByDescending(candidate => candidate.Score)
+            .Select(device => new
+            {
+                Device = device,
+                Confidence = DisplayIdentityMatcher.GetMatchConfidence(saved, device.Identity),
+                Score = DisplayIdentityMatcher.GetStableIdentityScore(saved, device.Identity)
+            })
+            .Where(candidate => DisplayIdentityMatcher.IsReliableMatch(saved, candidate.Device.Identity))
+            .OrderByDescending(candidate => candidate.Confidence)
+            .ThenByDescending(candidate => candidate.Score)
             .ToList();
         if (candidates.Count == 0)
         {
@@ -219,9 +259,12 @@ public sealed class GamingProfileTopologyReadinessEvaluator
         }
 
         var highestScore = candidates[0].Score;
-        var highest = candidates.Where(candidate => candidate.Score == highestScore).ToList();
+        var highestConfidence = candidates[0].Confidence;
+        var highest = candidates
+            .Where(candidate => candidate.Confidence == highestConfidence && candidate.Score == highestScore)
+            .ToList();
         return highest.Count == 1
-            ? new IdentityResolution(highest[0].Device, false)
+            ? new IdentityResolution(highest[0].Device, false, highest[0].Confidence)
             : new IdentityResolution(null, true);
     }
 
@@ -244,6 +287,33 @@ public sealed class GamingProfileTopologyReadinessEvaluator
             && double.IsFinite((double)target.EffectiveFixedRefreshRateNumerator / target.EffectiveFixedRefreshRateDenominator);
     }
 
+    private static bool HasValidCapabilityExpectation(DisplayCapabilityExpectation? capability)
+    {
+        return capability is not null
+            && capability.Width > 0
+            && capability.Height > 0
+            && capability.LastKnownGoodMaxRefreshNumerator > 0
+            && capability.LastKnownGoodMaxRefreshDenominator > 0
+            && double.IsFinite(capability.MaxRefreshRateHz);
+    }
+
+    private static DisplayCapabilityExpectation? CreateCapability(IReadOnlyList<DisplayModeInfo> modes)
+    {
+        var mode = modes
+            .Where(mode => mode.RefreshRateNumerator > 0 && mode.RefreshRateDenominator > 0)
+            .OrderByDescending(mode => mode.RefreshRateHz)
+            .FirstOrDefault();
+        return mode is null
+            ? null
+            : new DisplayCapabilityExpectation
+            {
+                Width = mode.Width,
+                Height = mode.Height,
+                LastKnownGoodMaxRefreshNumerator = mode.RefreshRateNumerator,
+                LastKnownGoodMaxRefreshDenominator = mode.RefreshRateDenominator
+            };
+    }
+
     private static string FormatMode(ProfileDisplayTarget target)
     {
         var numerator = target.EffectiveRefreshPolicy == RefreshPolicy.Fixed ? target.EffectiveFixedRefreshRateNumerator : 0;
@@ -254,5 +324,25 @@ public sealed class GamingProfileTopologyReadinessEvaluator
         return $"{target.Width}x{target.Height}@{refresh} Hz";
     }
 
-    private readonly record struct IdentityResolution(DisplayDeviceInfo? Target = null, bool IsAmbiguous = false);
+    private static string FormatCapability(DisplayCapabilityExpectation? capability)
+    {
+        return capability is null || capability.Width <= 0 || capability.Height <= 0 || capability.MaxRefreshRateHz <= 0
+            ? "none"
+            : $"{capability.Width}x{capability.Height}@{capability.MaxRefreshRateHz:0.##}";
+    }
+
+    private static string FormatConnector(DisplayIdentity saved, DisplayIdentity? detected)
+    {
+        return $"{saved.ConnectorInstance}/{detected?.ConnectorInstance ?? 0}";
+    }
+
+    private static string FormatEdidValidity(DisplayIdentity saved, DisplayIdentity? detected)
+    {
+        return $"{saved.EdidIdsValid}/{detected?.EdidIdsValid ?? false}";
+    }
+
+    private readonly record struct IdentityResolution(
+        DisplayDeviceInfo? Target = null,
+        bool IsAmbiguous = false,
+        DisplayIdentityMatchConfidence Confidence = DisplayIdentityMatchConfidence.None);
 }

@@ -4,13 +4,13 @@ import type { DisplayLayoutProfile, GamingProfileDisplayTopology } from '../../.
 import { getProfileTopology } from '../../../utils/displays';
 import type { SetupMode } from '../../setup/setupFlow';
 import { assertSetupStateInvariants, type BootstrapRoute } from '../../setup/setupRouting';
-import { defaultPcGamingBehaviour, type PcGamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
+import { defaultGamingBehaviour, type GamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
 
 type StepId =
   | 'welcome'
   | 'gaming-display'
   | 'launcher'
-  | 'console-behaviour'
+  | 'profile-behaviour'
   | 'work-behaviour'
   | 'work-shortcuts'
   | 'controller'
@@ -30,8 +30,8 @@ type Options = {
   syncDisplayProfileDraft: (draft: { profileName: string; topology: GamingProfileDisplayTopology }) => void;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
-  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
-  setPcGamingBehaviour: Dispatch<SetStateAction<PcGamingBehaviourState>>;
+  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
+  setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
   setShowOverwriteProfileDialog: Dispatch<SetStateAction<boolean>>;
   setMessage: Dispatch<SetStateAction<string>>;
 };
@@ -47,11 +47,11 @@ export function useDashboardSetupActions(options: Options) {
     options.setEditingProfileId(null);
     options.setHasAdvancedInCreateProfileFlow(false);
     options.setIsSetupComplete(false);
-    options.setPcGamingBehaviour({ ...defaultPcGamingBehaviour });
+    options.setGamingBehaviour({ ...defaultGamingBehaviour });
     options.syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } });
     options.setProfileHotkeyValidationError(null);
     options.setProfileControllerValidationError(null);
-    options.setHotkeys((current) => ({ ...current, pcGamingMode: '' }));
+    options.setHotkeys((current) => ({ ...current, gamingMode: '' }));
     options.setShowOverwriteProfileDialog(false);
     options.setStepIndex(targetIndex >= 0 ? targetIndex : 0);
     options.setMessage(t('dashboard.createProfileHint'));

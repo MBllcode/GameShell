@@ -6,18 +6,18 @@ namespace GameShell.Core.Services;
 
 public static class AppSettingsValidator
 {
-    public const int CurrentSettingsSchemaVersion = 2;
+    public const int CurrentSettingsSchemaVersion = 3;
 
     public static AppSettings Validate(AppSettings settings)
     {
         settings.SettingsSchemaVersion = CurrentSettingsSchemaVersion;
         settings.Display ??= new DisplaySettings();
-        settings.Display.PcGamingProfiles ??= [];
-        settings.Display.PcGamingProfileConfigurations ??= [];
-        settings.Display.PcGamingProfileBehaviours ??= [];
+        settings.Display.GamingProfiles ??= [];
+        settings.Display.GamingProfileConfigurations ??= [];
+        settings.Display.GamingProfileBehaviours ??= [];
         settings.Launcher ??= new LauncherSettings();
         settings.GameShell ??= new GameShellSettings();
-        settings.PcGaming ??= new PcGamingSettings();
+        settings.Gaming ??= new GamingSettings();
         settings.WorkMode ??= new WorkModeSettings();
         settings.Audio ??= new AudioSettings();
         settings.Controller ??= new ControllerSettings();
@@ -29,10 +29,10 @@ public static class AppSettingsValidator
         settings.GameShell.CompletionDelaySeconds = Math.Clamp(settings.GameShell.CompletionDelaySeconds, 0, 600);
         settings.GameShell.ProtectedProcessNames ??= [];
         settings.GameShell.CloseOnlyProcessNames ??= [];
-        MigrateLegacyPcGamingDefaults(settings.PcGaming);
-        settings.PcGaming.CompletionDelaySeconds = Math.Clamp(settings.PcGaming.CompletionDelaySeconds, 0, 600);
-        settings.PcGaming.ProtectedProcessNames ??= [];
-        settings.PcGaming.CloseOnlyProcessNames ??= [];
+        MigrateLegacyGamingDefaults(settings.Gaming);
+        settings.Gaming.CompletionDelaySeconds = Math.Clamp(settings.Gaming.CompletionDelaySeconds, 0, 600);
+        settings.Gaming.ProtectedProcessNames ??= [];
+        settings.Gaming.CloseOnlyProcessNames ??= [];
         settings.WorkMode.TaskbarRestoreDelaySeconds = Math.Clamp(settings.WorkMode.TaskbarRestoreDelaySeconds, 0, 600);
         settings.WorkMode.DesktopIconsDelaySeconds = Math.Clamp(settings.WorkMode.DesktopIconsDelaySeconds, 0, 600);
         settings.WorkMode.CompletionDelaySeconds = Math.Clamp(settings.WorkMode.CompletionDelaySeconds, 0, 600);
@@ -47,11 +47,11 @@ public static class AppSettingsValidator
         }
 
         ValidateControllerShortcut(settings.Controller.ConsoleMode);
-        ValidateControllerShortcut(settings.Controller.PcGamingMode);
+        ValidateControllerShortcut(settings.Controller.GamingMode);
         ValidateControllerShortcut(settings.Controller.WorkMode);
 
-        NormalizePcGamingProfiles(settings.Display);
-        NormalizePcGamingProfileConfigurations(settings.Display, settings.PcGaming, settings.Launcher, settings.Hotkeys);
+        NormalizeGamingProfiles(settings.Display);
+        NormalizeGamingProfileConfigurations(settings.Display, settings.Gaming, settings.Launcher, settings.Hotkeys);
         EnsureGlobalWorkModeShortcutUniqueness(settings);
 
         return settings;
@@ -103,7 +103,7 @@ public static class AppSettingsValidator
         shortcut.Buttons = shortcut.Buttons.Distinct().ToList();
     }
 
-    private static void MigrateLegacyPcGamingDefaults(PcGamingSettings settings)
+    private static void MigrateLegacyGamingDefaults(GamingSettings settings)
     {
         if (settings.HideDesktopIcons
             || settings.HideTaskbar
@@ -126,12 +126,12 @@ public static class AppSettingsValidator
         settings.BringLauncherToForeground = true;
     }
 
-    private static void NormalizePcGamingProfiles(DisplaySettings display)
+    private static void NormalizeGamingProfiles(DisplaySettings display)
     {
         var normalizedProfiles = new List<DisplayLayoutProfile>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var candidate in display.PcGamingProfiles.Where(profile => profile.Layout is not null))
+        foreach (var candidate in display.GamingProfiles.Where(profile => profile.Layout is not null))
         {
             NormalizeRefreshPolicies(candidate.DisplayTopology);
             var baseName = string.IsNullOrWhiteSpace(candidate.Name) ? "PROFIL" : candidate.Name.Trim().ToUpperInvariant();
@@ -151,22 +151,22 @@ public static class AppSettingsValidator
             });
         }
 
-        display.PcGamingProfiles = normalizedProfiles;
+        display.GamingProfiles = normalizedProfiles;
 
-        if (display.PcGamingProfiles.Count == 0)
+        if (display.GamingProfiles.Count == 0)
         {
-            display.ActivePcGamingProfileName = null;
-            display.PcGamingLayout = null;
+            display.ActiveGamingProfileName = null;
+            display.GamingLayout = null;
             return;
         }
 
-        var activeProfile = !string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName)
-            ? display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase))
+        var activeProfile = !string.IsNullOrWhiteSpace(display.ActiveGamingProfileName)
+            ? display.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase))
             : null;
 
-        activeProfile ??= display.PcGamingProfiles[0];
-        display.ActivePcGamingProfileName = activeProfile.Name;
-        display.PcGamingLayout = activeProfile.Layout;
+        activeProfile ??= display.GamingProfiles[0];
+        display.ActiveGamingProfileName = activeProfile.Name;
+        display.GamingLayout = activeProfile.Layout;
     }
 
     private static void NormalizeRefreshPolicies(GamingProfileDisplayTopology? topology)
@@ -206,39 +206,39 @@ public static class AppSettingsValidator
         return numerator > 0 && denominator > 0;
     }
 
-    private static void NormalizePcGamingProfileConfigurations(
+    private static void NormalizeGamingProfileConfigurations(
         DisplaySettings display,
-        PcGamingSettings defaultBehaviour,
+        GamingSettings defaultBehaviour,
         LauncherSettings defaultLauncher,
         HotkeySettings defaultHotkeys)
     {
-        if (display.PcGamingProfiles.Count == 0)
+        if (display.GamingProfiles.Count == 0)
         {
-            display.PcGamingProfileConfigurations = [];
-            display.PcGamingProfileBehaviours = [];
+            display.GamingProfileConfigurations = [];
+            display.GamingProfileBehaviours = [];
             return;
         }
 
-        var normalized = new List<PcGamingProfileConfiguration>();
+        var normalized = new List<GamingProfileConfiguration>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var profile in display.PcGamingProfiles)
+        foreach (var profile in display.GamingProfiles)
         {
-            var existingConfiguration = ResolveProfileConfiguration(display.PcGamingProfileConfigurations, profile.Name);
-            var legacyBehaviour = ResolveProfileBehaviour(display.PcGamingProfileBehaviours, profile.Name);
+            var existingConfiguration = ResolveProfileConfiguration(display.GamingProfileConfigurations, profile.Name);
+            var legacyBehaviour = ResolveProfileBehaviour(display.GamingProfileBehaviours, profile.Name);
 
             var behaviour = existingConfiguration?.Behaviour
                 ?? legacyBehaviour
-                ?? ClonePcGamingSettings(defaultBehaviour);
+                ?? CloneGamingSettings(defaultBehaviour);
             var launcher = existingConfiguration?.Launcher ?? CloneLauncherSettings(defaultLauncher);
-            var hotkeys = existingConfiguration?.Hotkeys ?? new PcGamingProfileHotkeys
+            var hotkeys = existingConfiguration?.Hotkeys ?? new GamingProfileHotkeys
             {
-                EnterProfile = defaultHotkeys.PcGamingMode,
+                EnterProfile = defaultHotkeys.GamingMode,
                 EnterWorkMode = defaultHotkeys.WorkMode
             };
             var controllerShortcut = existingConfiguration?.ControllerShortcut;
 
-            MigrateLegacyPcGamingDefaults(behaviour);
+            MigrateLegacyGamingDefaults(behaviour);
             behaviour.CompletionDelaySeconds = Math.Clamp(behaviour.CompletionDelaySeconds, 0, 600);
             behaviour.ProtectedProcessNames ??= [];
             behaviour.CloseOnlyProcessNames ??= [];
@@ -254,7 +254,7 @@ public static class AppSettingsValidator
                 continue;
             }
 
-            normalized.Add(new PcGamingProfileConfiguration
+            normalized.Add(new GamingProfileConfiguration
             {
                 ProfileName = profile.Name,
                 Behaviour = behaviour,
@@ -264,11 +264,11 @@ public static class AppSettingsValidator
             });
         }
 
-        display.PcGamingProfileConfigurations = normalized;
-        EnsureUniqueProfileEnterHotkeys(display.PcGamingProfileConfigurations);
-        EnsureUniqueProfileControllerShortcuts(display.PcGamingProfileConfigurations);
-        display.PcGamingProfileBehaviours = normalized
-            .Select(configuration => new PcGamingProfileBehaviour
+        display.GamingProfileConfigurations = normalized;
+        EnsureUniqueProfileEnterHotkeys(display.GamingProfileConfigurations);
+        EnsureUniqueProfileControllerShortcuts(display.GamingProfileConfigurations);
+        display.GamingProfileBehaviours = normalized
+            .Select(configuration => new GamingProfileBehaviour
             {
                 ProfileName = configuration.ProfileName,
                 Behaviour = configuration.Behaviour
@@ -276,7 +276,7 @@ public static class AppSettingsValidator
             .ToList();
     }
 
-    private static void EnsureUniqueProfileEnterHotkeys(IReadOnlyList<PcGamingProfileConfiguration> configurations)
+    private static void EnsureUniqueProfileEnterHotkeys(IReadOnlyList<GamingProfileConfiguration> configurations)
     {
         var usedHotkeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -295,7 +295,7 @@ public static class AppSettingsValidator
         }
     }
 
-    private static void EnsureUniqueProfileControllerShortcuts(IReadOnlyList<PcGamingProfileConfiguration> configurations)
+    private static void EnsureUniqueProfileControllerShortcuts(IReadOnlyList<GamingProfileConfiguration> configurations)
     {
         var usedShortcuts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -322,7 +322,7 @@ public static class AppSettingsValidator
         var workModeHotkey = NormalizeHotkey(settings.Hotkeys.WorkMode);
         if (!string.IsNullOrEmpty(workModeHotkey))
         {
-            foreach (var configuration in settings.Display.PcGamingProfileConfigurations)
+            foreach (var configuration in settings.Display.GamingProfileConfigurations)
             {
                 if (NormalizeHotkey(configuration.Hotkeys.EnterProfile) == workModeHotkey)
                 {
@@ -337,7 +337,7 @@ public static class AppSettingsValidator
             return;
         }
 
-        foreach (var configuration in settings.Display.PcGamingProfileConfigurations)
+        foreach (var configuration in settings.Display.GamingProfileConfigurations)
         {
             if (NormalizeControllerShortcut(configuration.ControllerShortcut) == workModeControllerShortcut)
             {
@@ -434,20 +434,20 @@ public static class AppSettingsValidator
         return new string(filtered, 0, index).Normalize(NormalizationForm.FormC);
     }
 
-    private static PcGamingProfileConfiguration? ResolveProfileConfiguration(IEnumerable<PcGamingProfileConfiguration> candidates, string profileName)
+    private static GamingProfileConfiguration? ResolveProfileConfiguration(IEnumerable<GamingProfileConfiguration> candidates, string profileName)
     {
         return candidates.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static PcGamingSettings? ResolveProfileBehaviour(IEnumerable<PcGamingProfileBehaviour> candidates, string profileName)
+    private static GamingSettings? ResolveProfileBehaviour(IEnumerable<GamingProfileBehaviour> candidates, string profileName)
     {
         var matched = candidates.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
         return matched?.Behaviour;
     }
 
-    private static PcGamingSettings ClonePcGamingSettings(PcGamingSettings source)
+    private static GamingSettings CloneGamingSettings(GamingSettings source)
     {
-        return new PcGamingSettings
+        return new GamingSettings
         {
             HideDesktopIcons = source.HideDesktopIcons,
             HideTaskbar = source.HideTaskbar,

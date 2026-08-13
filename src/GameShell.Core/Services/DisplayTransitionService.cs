@@ -74,38 +74,38 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         return DisplayTransitionResult.Ok();
     }
 
-    public async Task<DisplayTransitionResult> EnterPcGamingModeAsync(
-        DisplayLayoutSnapshot? pcGamingLayout,
+    public async Task<DisplayTransitionResult> EnterGamingModeAsync(
+        DisplayLayoutSnapshot? gamingLayout,
         DisplayIdentity? fallbackConsoleDisplay,
         CancellationToken cancellationToken = default)
     {
-        return await EnterPcGamingModeAsync(
-            pcGamingLayout,
+        return await EnterGamingModeAsync(
+            gamingLayout,
             fallbackConsoleDisplay is null ? null : [fallbackConsoleDisplay],
             cancellationToken);
     }
 
-    public async Task<DisplayTransitionResult> EnterPcGamingModeAsync(
-        DisplayLayoutSnapshot? pcGamingLayout,
+    public async Task<DisplayTransitionResult> EnterGamingModeAsync(
+        DisplayLayoutSnapshot? gamingLayout,
         IReadOnlyCollection<DisplayIdentity>? fallbackConsoleDisplays,
         CancellationToken cancellationToken = default)
     {
-        if (pcGamingLayout is null)
+        if (gamingLayout is null)
         {
             return await EnterConsoleModeAsync(fallbackConsoleDisplays, cancellationToken);
         }
 
-        var activeDisplays = pcGamingLayout.Displays.Where(display => display.IsActive).ToList();
+        var activeDisplays = gamingLayout.Displays.Where(display => display.IsActive).ToList();
         if (activeDisplays.Count == 1 && activeDisplays[0].RefreshRateDenominator == 0)
         {
             return await EnterSingleDisplayGamingModeAsync(activeDisplays[0].Identity, cancellationToken);
         }
 
         return await RunModeTransitionAsync(
-            GameShellMode.PcGaming,
-            _ => Task.FromResult(pcGamingLayout),
-            actual => DisplayLayoutVerifier.MatchesSnapshot(pcGamingLayout, actual)
-                || DisplayLayoutVerifier.MatchesActiveDisplaySet(pcGamingLayout, actual),
+            GameShellMode.GamingProfile,
+            _ => Task.FromResult(gamingLayout),
+            actual => DisplayLayoutVerifier.MatchesSnapshot(gamingLayout, actual)
+                || DisplayLayoutVerifier.MatchesActiveDisplaySet(gamingLayout, actual),
             cancellationToken,
             verificationAttempts: MultiDisplayVerificationAttempts,
             allowApplyWhenValidationFails: true);
@@ -128,12 +128,12 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
             return await RollBackAsync(state, "ApplyFailed", apply.Message, cancellationToken);
         }
 
-        if (!await WaitForLayoutAsync(actual => DisplayLayoutVerifier.IsConsoleLayout(actual, [targetDisplay]), "PcGamingSingle", cancellationToken))
+        if (!await WaitForLayoutAsync(actual => DisplayLayoutVerifier.IsConsoleLayout(actual, [targetDisplay]), "GamingSingle", cancellationToken))
         {
             return await RollBackAsync(state, "VerificationFailed", "Nie udało się potwierdzić docelowego układu ekranów.", cancellationToken);
         }
 
-        state.CurrentMode = GameShellMode.PcGaming;
+        state.CurrentMode = GameShellMode.GamingProfile;
         await _runtimeStateService.SaveAsync(state, cancellationToken);
         return DisplayTransitionResult.Ok();
     }
@@ -173,15 +173,15 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         return TestConsoleDisplayAsync(consoleDisplay is null ? null : [consoleDisplay], cancellationToken);
     }
 
-    public async Task<DisplayTransitionResult> TestPcGamingLayoutAsync(DisplayLayoutSnapshot? pcGamingLayout, CancellationToken cancellationToken = default)
+    public async Task<DisplayTransitionResult> TestGamingLayoutAsync(DisplayLayoutSnapshot? gamingLayout, CancellationToken cancellationToken = default)
     {
-        if (pcGamingLayout is null)
+        if (gamingLayout is null)
         {
-            return DisplayTransitionResult.Fail("PcGamingLayoutMissing", "Najpierw zapisz układ PC Gaming.");
+            return DisplayTransitionResult.Fail("GamingLayoutMissing", "Najpierw zapisz układ profilu gamingowego.");
         }
 
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
-        return await StartTestAsync(current, pcGamingLayout, actual => DisplayLayoutVerifier.MatchesSnapshot(pcGamingLayout, actual), cancellationToken);
+        return await StartTestAsync(current, gamingLayout, actual => DisplayLayoutVerifier.MatchesSnapshot(gamingLayout, actual), cancellationToken);
     }
 
     public Task<DisplayTransitionResult> ConfirmPendingTestAsync(CancellationToken cancellationToken = default)
@@ -233,10 +233,10 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         var target = await buildTargetLayout(current);
 
         if (DisplayLayoutVerifier.MatchesSnapshot(target, current)
-            && targetMode is not (GameShellMode.Console or GameShellMode.PcGaming))
+            && targetMode is not (GameShellMode.Console or GameShellMode.GamingProfile))
         {
             state.CurrentMode = targetMode;
-            if (targetMode is GameShellMode.Console or GameShellMode.PcGaming)
+            if (targetMode is GameShellMode.Console or GameShellMode.GamingProfile)
             {
                 EnsureWorkReturnLayout(state, current);
             }
@@ -246,7 +246,7 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         }
 
         state.PreviousDisplayLayout = current;
-        if (captureWorkReturnLayout && targetMode is GameShellMode.Console or GameShellMode.PcGaming)
+        if (captureWorkReturnLayout && targetMode is GameShellMode.Console or GameShellMode.GamingProfile)
         {
             EnsureWorkReturnLayout(state, current);
         }

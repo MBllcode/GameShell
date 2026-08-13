@@ -830,6 +830,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         {
             MonitorDevicePath = path.MonitorDevicePath,
             FriendlyName = path.MonitorFriendlyName,
+            EdidIdsValid = path.HasEdid,
             EdidManufacturerId = path.EdidManufacturerId,
             EdidProductCodeId = path.EdidProductCodeId,
             ConnectorInstance = path.ConnectorInstance,
@@ -984,6 +985,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             SourceDeviceName = sourceName,
             MonitorFriendlyName = targetName.MonitorFriendlyDeviceName,
             MonitorDevicePath = targetName.MonitorDevicePath,
+            HasEdid = hasEdid,
             EdidManufacturerId = targetName.EdidManufactureId,
             EdidProductCodeId = targetName.EdidProductCodeId,
             ConnectorInstance = targetName.ConnectorInstance,
@@ -1000,7 +1002,6 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             ConnectionTechnology = FormatOutputTechnology(path.TargetInfo.OutputTechnology),
             IsActive = isActive,
             IsAvailable = path.TargetInfo.TargetAvailable,
-            HasEdid = hasEdid,
             PathInfo = path,
             SourceMode = sourceMode ?? new DisplayConfigSourceMode
             {

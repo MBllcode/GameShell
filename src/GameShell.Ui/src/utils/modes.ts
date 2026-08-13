@@ -66,6 +66,6 @@ export function getModeCardHint(command: ModeCommand, status: AppStatus, t?: Tra
 
 export function isCurrentMode(command: ModeCommand, status: AppStatus) {
   return (command === 'enterGameShell' && status.currentMode === 'Console')
-    || (command === 'enterGameShellWithProfile' && status.currentMode === 'PcGaming')
+    || (command === 'enterGameShellWithProfile' && status.currentMode === 'GamingProfile')
     || (command === 'enterWorkMode' && status.currentMode === 'Work');
 }

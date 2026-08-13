@@ -12,7 +12,7 @@ type UseSettingsPersistenceOptions = {
   isSetupComplete: boolean;
   setupMode: SetupMode;
   bootstrapRoute: BootstrapRoute;
-  pcGamingProfilesCount: number;
+  gamingProfilesCount: number;
   preferredProfileName: () => string;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
   buildSettingsPayload: (isFirstRunCompleted: boolean, overrides?: SettingsPayloadOverrides) => AppSettings;
@@ -34,7 +34,7 @@ export function useSettingsPersistence({
   isSetupComplete,
   setupMode,
   bootstrapRoute,
-  pcGamingProfilesCount,
+  gamingProfilesCount,
   preferredProfileName,
   pendingSettingsOverrideRef,
   buildSettingsPayload,
@@ -60,7 +60,7 @@ export function useSettingsPersistence({
     setStatus((current) => ({
       ...current,
       selectedConsoleDisplay: savedSettings.display.consoleDisplay?.friendlyName ?? null,
-      hasPcGamingLayout: Boolean(savedSettings.display.pcGamingLayout) || (savedSettings.display.pcGamingProfiles?.length ?? 0) > 0,
+      hasGamingProfiles: Boolean(savedSettings.display.gamingLayout) || (savedSettings.display.gamingProfiles?.length ?? 0) > 0,
       activeLauncher: current.currentMode === 'Work' ? null : savedSettings.launcher.type
     }));
     return savedSettings;
@@ -69,7 +69,7 @@ export function useSettingsPersistence({
   async function persistAndReturnToDashboard() {
     setError(null);
 
-    if (pcGamingProfilesCount === 0) {
+    if (gamingProfilesCount === 0) {
       setError(t('setup.requireProfile'));
       return;
     }
@@ -81,7 +81,7 @@ export function useSettingsPersistence({
       const preferredName = preferredProfileName();
       const savedSettings = await saveCurrentSettings(resolveSaveCompletion(setupMode, isSetupComplete), pendingSettingsOverrideRef.current ?? undefined);
       pendingSettingsOverrideRef.current = null;
-      const savedProfiles = savedSettings.display?.pcGamingProfiles ?? [];
+      const savedProfiles = savedSettings.display?.gamingProfiles ?? [];
       const matchedPreferred = preferredName
         ? savedProfiles.find((profile) => profile.name.toLowerCase() === preferredName.toLowerCase())?.name ?? null
         : null;

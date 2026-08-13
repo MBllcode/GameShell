@@ -1,7 +1,7 @@
 import type { ControllerShortcutSettings } from '../../types/bridge.ts';
 import { isDuplicateProfileControllerShortcut, isDuplicateWorkModeControllerShortcut, isSameControllerShortcut, normalizeControllerButtons } from '../../utils/controllers.ts';
 import { normalizeHotkeyForDisplay } from '../../utils/hotkeys.ts';
-import { isDuplicateProfileEnterHotkey, isDuplicateWorkModeHotkey, type PcGamingProfileControllerShortcutMap, type PcGamingProfileHotkeysMap } from './utils.ts';
+import { isDuplicateProfileEnterHotkey, isDuplicateWorkModeHotkey, type GamingProfileControllerShortcutMap, type GamingProfileHotkeysMap } from './utils.ts';
 
 type HotkeyState = { enterProfile: string };
 
@@ -11,7 +11,7 @@ type AssignmentResult<T> = {
   validationResult: 'Valid' | 'Conflict';
 };
 
-export function tryAssignProfileHotkey(profileName: string, candidate: string, profileHotkeys: PcGamingProfileHotkeysMap, workModeHotkey: string): AssignmentResult<PcGamingProfileHotkeysMap> {
+export function tryAssignProfileHotkey(profileName: string, candidate: string, profileHotkeys: GamingProfileHotkeysMap, workModeHotkey: string): AssignmentResult<GamingProfileHotkeysMap> {
   const normalizedCandidate = normalizeHotkeyForDisplay(candidate);
   const conflict = isDuplicateProfileEnterHotkey(profileName, normalizedCandidate, profileHotkeys)
     || (normalizedCandidate.length > 0 && normalizedCandidate.toUpperCase() === workModeHotkey.trim().toUpperCase());
@@ -24,7 +24,7 @@ export function tryAssignProfileHotkey(profileName: string, candidate: string, p
   };
 }
 
-export function tryAssignWorkModeHotkey(candidate: string, profileHotkeys: PcGamingProfileHotkeysMap): AssignmentResult<string> {
+export function tryAssignWorkModeHotkey(candidate: string, profileHotkeys: GamingProfileHotkeysMap): AssignmentResult<string> {
   const normalizedCandidate = normalizeHotkeyForDisplay(candidate);
   if (isDuplicateWorkModeHotkey(normalizedCandidate, profileHotkeys)) {
     return { accepted: false, value: candidate, validationResult: 'Conflict' };
@@ -32,7 +32,7 @@ export function tryAssignWorkModeHotkey(candidate: string, profileHotkeys: PcGam
   return { accepted: true, value: normalizedCandidate, validationResult: 'Valid' };
 }
 
-export function tryAssignProfileControllerShortcut(profileName: string, candidate: string[], profileShortcuts: PcGamingProfileControllerShortcutMap, workModeShortcut: ControllerShortcutSettings | null): AssignmentResult<PcGamingProfileControllerShortcutMap> {
+export function tryAssignProfileControllerShortcut(profileName: string, candidate: string[], profileShortcuts: GamingProfileControllerShortcutMap, workModeShortcut: ControllerShortcutSettings | null): AssignmentResult<GamingProfileControllerShortcutMap> {
   const normalizedCandidate = normalizeControllerButtons(candidate);
   const conflict = isDuplicateProfileControllerShortcut(profileName, normalizedCandidate, profileShortcuts)
     || isSameControllerShortcut(normalizedCandidate, workModeShortcut?.buttons);
@@ -51,7 +51,7 @@ export function tryAssignProfileControllerShortcut(profileName: string, candidat
   };
 }
 
-export function tryAssignWorkModeControllerShortcut(candidate: string[], profileShortcuts: PcGamingProfileControllerShortcutMap, currentShortcut: ControllerShortcutSettings | null): AssignmentResult<ControllerShortcutSettings | null> {
+export function tryAssignWorkModeControllerShortcut(candidate: string[], profileShortcuts: GamingProfileControllerShortcutMap, currentShortcut: ControllerShortcutSettings | null): AssignmentResult<ControllerShortcutSettings | null> {
   const normalizedCandidate = normalizeControllerButtons(candidate);
   if (isDuplicateWorkModeControllerShortcut(normalizedCandidate, profileShortcuts)) {
     return { accepted: false, value: currentShortcut, validationResult: 'Conflict' };

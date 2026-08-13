@@ -188,7 +188,7 @@ public sealed class SdlControllerShortcutService : IDisposable
             }
             _logger.LogInformation(
                 "Controller shortcut settings refreshed. ProfilesWithShortcuts={Profiles}.",
-                settings.Display.PcGamingProfileConfigurations.Count(configuration => configuration.ControllerShortcut?.Buttons.Count > 0));
+                settings.Display.GamingProfileConfigurations.Count(configuration => configuration.ControllerShortcut?.Buttons.Count > 0));
         }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to refresh controller settings after save."); }
     }
@@ -457,7 +457,7 @@ public sealed class SdlControllerShortcutService : IDisposable
         ControllerShortcutSettings? workModeShortcut;
         lock (_syncRoot)
         {
-            shortcuts = _settings.Display.PcGamingProfileConfigurations
+            shortcuts = _settings.Display.GamingProfileConfigurations
                 .Where(configuration => !string.IsNullOrWhiteSpace(configuration.ProfileName) && configuration.ControllerShortcut is not null)
                 .Select(configuration => (configuration.ProfileName, configuration.ControllerShortcut!))
                 .Where(entry => entry.Item2.Buttons.Count > 0).ToList();

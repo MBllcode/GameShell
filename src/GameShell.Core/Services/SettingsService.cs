@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
@@ -236,7 +237,10 @@ public sealed class SettingsService : ISettingsService
         try
         {
             await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var json = await reader.ReadToEndAsync(cancellationToken);
+            json = MigrateLegacyPropertyNames(json);
+            using var document = JsonDocument.Parse(json);
             var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? new AppSettings();
             var validated = AppSettingsValidator.Validate(settings);
@@ -250,11 +254,58 @@ public sealed class SettingsService : ISettingsService
 
     private static AppSettings CreateDefaultSettings() => new();
 
+    private static string MigrateLegacyPropertyNames(string json)
+    {
+        var root = JsonNode.Parse(json) as JsonObject;
+        if (root is null)
+        {
+            return json;
+        }
+
+        Rename(root, "pcGaming", "gaming");
+
+        if (root["display"] is JsonObject display)
+        {
+            Rename(display, "pcGamingLayout", "gamingLayout");
+            Rename(display, "pcGamingProfiles", "gamingProfiles");
+            Rename(display, "activePcGamingProfileName", "activeGamingProfileName");
+            Rename(display, "pcGamingProfileConfigurations", "gamingProfileConfigurations");
+            Rename(display, "pcGamingProfileBehaviours", "gamingProfileBehaviours");
+        }
+
+        if (root["hotkeys"] is JsonObject hotkeys)
+        {
+            Rename(hotkeys, "pcGamingMode", "gamingMode");
+        }
+
+        if (root["controller"] is JsonObject controller)
+        {
+            Rename(controller, "pcGamingMode", "gamingMode");
+        }
+
+        return root.ToJsonString(JsonOptions);
+    }
+
+    private static void Rename(JsonObject source, string legacyName, string currentName)
+    {
+        if (!source.TryGetPropertyValue(legacyName, out var value))
+        {
+            return;
+        }
+
+        if (!source.ContainsKey(currentName))
+        {
+            source[currentName] = value?.DeepClone();
+        }
+
+        source.Remove(legacyName);
+    }
+
     private void LogRefreshPolicyHydration(AppSettings? persisted, AppSettings resolved)
     {
-        foreach (var profile in resolved.Display.PcGamingProfiles)
+        foreach (var profile in resolved.Display.GamingProfiles)
         {
-            var persistedProfile = persisted?.Display.PcGamingProfiles
+            var persistedProfile = persisted?.Display.GamingProfiles
                 .FirstOrDefault(candidate => string.Equals(candidate.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
             foreach (var target in profile.DisplayTopology?.Displays ?? [])
             {

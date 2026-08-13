@@ -8,28 +8,28 @@ type ProfileHotkeysState = {
   enterProfile: string;
 };
 
-type PcGamingProfileLauncherMap = Record<string, LauncherType>;
-type PcGamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
+type GamingProfileLauncherMap = Record<string, LauncherType>;
+type GamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
 
 export function FinishStep({
   stepNumber,
   launcher,
-  pcGamingLayout,
-  pcGamingProfileLaunchers,
-  pcGamingProfileHotkeys,
+  gamingLayout,
+  gamingProfileLaunchers,
+  gamingProfileHotkeys,
   activeProfileName
 }: {
   stepNumber: number;
   launcher: LauncherType;
-  pcGamingLayout: DisplayLayoutSnapshot | null;
-  pcGamingProfileLaunchers: PcGamingProfileLauncherMap;
-  pcGamingProfileHotkeys: PcGamingProfileHotkeysMap;
+  gamingLayout: DisplayLayoutSnapshot | null;
+  gamingProfileLaunchers: GamingProfileLauncherMap;
+  gamingProfileHotkeys: GamingProfileHotkeysMap;
   activeProfileName: string | null;
 }) {
   const { t } = useTranslation();
-  const activeLauncher = activeProfileName ? pcGamingProfileLaunchers[activeProfileName] ?? launcher : launcher;
+  const activeLauncher = activeProfileName ? gamingProfileLaunchers[activeProfileName] ?? launcher : launcher;
   const activeHotkeys = activeProfileName
-    ? pcGamingProfileHotkeys[activeProfileName] ?? { enterProfile: '' }
+    ? gamingProfileHotkeys[activeProfileName] ?? { enterProfile: '' }
     : { enterProfile: '' };
 
   return (
@@ -43,7 +43,7 @@ export function FinishStep({
         </div>
         <div>
           <dt>{t('summary.layout')}</dt>
-          <dd>{pcGamingLayout ? summarizeLayout(pcGamingLayout, t) : t('summary.layoutMissing')}</dd>
+          <dd>{gamingLayout ? summarizeLayout(gamingLayout, t) : t('summary.layoutMissing')}</dd>
         </div>
         <div>
           <dt>{t('summary.launcher')}</dt>

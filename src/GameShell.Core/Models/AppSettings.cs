@@ -6,7 +6,7 @@ public sealed class AppSettings
     public DisplaySettings Display { get; set; } = new();
     public LauncherSettings Launcher { get; set; } = new();
     public GameShellSettings GameShell { get; set; } = new();
-    public PcGamingSettings PcGaming { get; set; } = new();
+    public GamingSettings Gaming { get; set; } = new();
     public WorkModeSettings WorkMode { get; set; } = new();
     public AudioSettings Audio { get; set; } = new();
     public ControllerSettings Controller { get; set; } = new();
@@ -19,11 +19,11 @@ public sealed class DisplaySettings
 {
     public DisplayIdentity? ConsoleDisplay { get; set; }
     public List<DisplayIdentity> ConsoleDisplays { get; set; } = [];
-    public DisplayLayoutSnapshot? PcGamingLayout { get; set; }
-    public List<DisplayLayoutProfile> PcGamingProfiles { get; set; } = [];
-    public string? ActivePcGamingProfileName { get; set; }
-    public List<PcGamingProfileConfiguration> PcGamingProfileConfigurations { get; set; } = [];
-    public List<PcGamingProfileBehaviour> PcGamingProfileBehaviours { get; set; } = [];
+    public DisplayLayoutSnapshot? GamingLayout { get; set; }
+    public List<DisplayLayoutProfile> GamingProfiles { get; set; } = [];
+    public string? ActiveGamingProfileName { get; set; }
+    public List<GamingProfileConfiguration> GamingProfileConfigurations { get; set; } = [];
+    public List<GamingProfileBehaviour> GamingProfileBehaviours { get; set; } = [];
 }
 
 public sealed class DisplayLayoutProfile
@@ -47,6 +47,7 @@ public enum RefreshPolicy
 public sealed class ProfileDisplayTarget
 {
     public DisplayIdentity Identity { get; set; } = new();
+    public DisplayCapabilityExpectation? CapabilityExpectation { get; set; }
     public bool Enabled { get; set; }
     public bool IsPrimary { get; set; }
     public int PositionX { get; set; }
@@ -70,22 +71,34 @@ public sealed class ProfileDisplayTarget
     public uint EffectiveFixedRefreshRateDenominator => FixedRefreshRateDenominator > 0 ? FixedRefreshRateDenominator : RefreshRateDenominator;
 }
 
-public sealed class PcGamingProfileBehaviour
+public sealed class DisplayCapabilityExpectation
 {
-    public string ProfileName { get; set; } = string.Empty;
-    public PcGamingSettings Behaviour { get; set; } = new();
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public uint LastKnownGoodMaxRefreshNumerator { get; set; }
+    public uint LastKnownGoodMaxRefreshDenominator { get; set; }
+
+    public double MaxRefreshRateHz => LastKnownGoodMaxRefreshDenominator == 0
+        ? 0
+        : (double)LastKnownGoodMaxRefreshNumerator / LastKnownGoodMaxRefreshDenominator;
 }
 
-public sealed class PcGamingProfileConfiguration
+public sealed class GamingProfileBehaviour
 {
     public string ProfileName { get; set; } = string.Empty;
-    public PcGamingSettings Behaviour { get; set; } = new();
+    public GamingSettings Behaviour { get; set; } = new();
+}
+
+public sealed class GamingProfileConfiguration
+{
+    public string ProfileName { get; set; } = string.Empty;
+    public GamingSettings Behaviour { get; set; } = new();
     public LauncherSettings Launcher { get; set; } = new();
-    public PcGamingProfileHotkeys Hotkeys { get; set; } = new();
+    public GamingProfileHotkeys Hotkeys { get; set; } = new();
     public ControllerShortcutSettings? ControllerShortcut { get; set; }
 }
 
-public sealed class PcGamingProfileHotkeys
+public sealed class GamingProfileHotkeys
 {
     public string EnterProfile { get; set; } = "";
     public string EnterWorkMode { get; set; } = "";
@@ -125,11 +138,11 @@ public class GameShellSettings
     public int CompletionDelaySeconds { get; set; } = 5;
 }
 
-public sealed class PcGamingSettings : GameShellSettings
+public sealed class GamingSettings : GameShellSettings
 {
     public List<string> GameProcessNames { get; set; } = [];
 
-    public PcGamingSettings()
+    public GamingSettings()
     {
         HideDesktopIcons = true;
         HideTaskbar = true;
@@ -164,7 +177,7 @@ public sealed class AudioSettings
 public sealed class HotkeySettings
 {
     public string ConsoleMode { get; set; } = "";
-    public string PcGamingMode { get; set; } = "";
+    public string GamingMode { get; set; } = "";
     public string WorkMode { get; set; } = "";
 }
 

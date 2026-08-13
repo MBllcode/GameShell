@@ -33,13 +33,13 @@ const launcherOptions: Array<{ value: LauncherType; title: string; descriptionKe
 
 export function LauncherStep({
   stepNumber,
-  pcGamingProfiles,
+  gamingProfiles,
   selectedProfileName,
   launcher,
   setLauncher
 }: {
   stepNumber: number;
-  pcGamingProfiles: DisplayLayoutProfile[];
+  gamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   launcher: LauncherType;
   setLauncher: (launcher: LauncherType) => void;

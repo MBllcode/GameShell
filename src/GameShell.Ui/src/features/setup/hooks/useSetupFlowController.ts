@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile } from '../../../types/bridge';
 import type { ControllerCaptureApi } from '../../controller/hooks/useControllerCapture';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../../profiles/utils';
+import type { GamingProfileBehaviourMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
 import type { LauncherType } from '../../../utils/modes';
-import type { PcGamingBehaviourState, HotkeySettingsState } from '../../settings/hooks/useSettingsFormState';
+import type { GamingBehaviourState, HotkeySettingsState } from '../../settings/hooks/useSettingsFormState';
 import { syncActiveDisplaySelections } from '../../displays/syncActiveDisplaySelections';
 import { defaultProfileHotkeys } from '../../settings/hooks/useSettingsFormState';
 import { resolveSetupSteps, steps, type SetupMode, type StepId } from '../setupFlow';
@@ -13,18 +13,18 @@ import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
 type Options = {
   stepIndex: number;
   setupMode: SetupMode;
-  activePcGamingProfileName: string | null;
+  activeGamingProfileName: string | null;
   selectedProfileName: string;
   profiles: DisplayLayoutProfile[];
-  profileBehaviours: PcGamingProfileBehaviourMap;
-  profileLaunchers: PcGamingProfileLauncherMap;
-  profileHotkeys: PcGamingProfileHotkeysMap;
-  pcGamingBehaviour: PcGamingBehaviourState;
+  profileBehaviours: GamingProfileBehaviourMap;
+  profileLaunchers: GamingProfileLauncherMap;
+  profileHotkeys: GamingProfileHotkeysMap;
+  gamingBehaviour: GamingBehaviourState;
   launcher: LauncherType;
   setSelectedConsoleDisplays: Dispatch<SetStateAction<DisplayIdentity[]>>;
   setSelectedConsoleDisplay: Dispatch<SetStateAction<DisplayIdentity | null>>;
   setSelectedProfileName: Dispatch<SetStateAction<string>>;
-  setPcGamingBehaviour: Dispatch<SetStateAction<PcGamingBehaviourState>>;
+  setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
   setHotkeys: Dispatch<SetStateAction<HotkeySettingsState>>;
   displays: DisplayDeviceInfo[];
@@ -56,8 +56,8 @@ export function useSetupFlowController(options: Options) {
 
     const fallbackProfileName = hasSelectedProfile
       ? options.selectedProfileName
-      : options.activePcGamingProfileName && options.profiles.some((profile) => profile.name === options.activePcGamingProfileName)
-        ? options.activePcGamingProfileName
+      : options.activeGamingProfileName && options.profiles.some((profile) => profile.name === options.activeGamingProfileName)
+        ? options.activeGamingProfileName
         : options.profiles[0]?.name ?? '';
 
     if (!hasSelectedProfile) {
@@ -65,14 +65,14 @@ export function useSetupFlowController(options: Options) {
     }
 
     if (fallbackProfileName) {
-      options.setPcGamingBehaviour(options.profileBehaviours[fallbackProfileName] ?? options.pcGamingBehaviour);
+      options.setGamingBehaviour(options.profileBehaviours[fallbackProfileName] ?? options.gamingBehaviour);
       options.setLauncher(options.profileLaunchers[fallbackProfileName] ?? options.launcher);
       options.setHotkeys((current) => ({
         ...current,
-        pcGamingMode: normalizeHotkeyForDisplay(options.profileHotkeys[fallbackProfileName]?.enterProfile ?? defaultProfileHotkeys.enterProfile)
+        gamingMode: normalizeHotkeyForDisplay(options.profileHotkeys[fallbackProfileName]?.enterProfile ?? defaultProfileHotkeys.enterProfile)
       }));
     }
-  }, [options.activePcGamingProfileName, options.launcher, options.pcGamingBehaviour, options.profileBehaviours, options.profileHotkeys, options.profileLaunchers, options.profiles, options.selectedProfileName]);
+  }, [options.activeGamingProfileName, options.launcher, options.gamingBehaviour, options.profileBehaviours, options.profileHotkeys, options.profileLaunchers, options.profiles, options.selectedProfileName]);
 
   const previousStepRef = useRef<StepId | null>(null);
   useEffect(() => {

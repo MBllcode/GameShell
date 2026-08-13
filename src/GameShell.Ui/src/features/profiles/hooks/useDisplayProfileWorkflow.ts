@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
-import { normalizePcGamingProfileName } from '../utils';
+import { normalizeGamingProfileName } from '../utils';
 import { areTopologiesEqual, getProfileTopology, topologyToLegacy, validateTopology } from '../../../utils/displays';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../types/bridge';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../utils';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../utils';
 import { canContinueWorkingProfile } from '../../setup/setupRouting';
 
 export type DisplayProfileDraft = { profileName: string; topology: GamingProfileDisplayTopology };
@@ -20,13 +20,13 @@ type Options = {
   isCreatingProfileFlow: boolean;
   isFirstRun: boolean;
   isEditingSection: boolean;
-  pcGamingBehaviour: Record<string, boolean>;
+  gamingBehaviour: Record<string, boolean>;
   launcher: string;
-  hotkeys: { pcGamingMode: string };
-  profileBehaviours: PcGamingProfileBehaviourMap;
-  profileLaunchers: PcGamingProfileLauncherMap;
-  profileHotkeys: PcGamingProfileHotkeysMap;
-  profileControllerShortcuts: PcGamingProfileControllerShortcutMap;
+  hotkeys: { gamingMode: string };
+  profileBehaviours: GamingProfileBehaviourMap;
+  profileLaunchers: GamingProfileLauncherMap;
+  profileHotkeys: GamingProfileHotkeysMap;
+  profileControllerShortcuts: GamingProfileControllerShortcutMap;
   setDisplays: Dispatch<SetStateAction<DisplayDeviceInfo[]>>;
   setIsRefreshingDisplays: Dispatch<SetStateAction<boolean>>;
   setDisplayListError: Dispatch<SetStateAction<string | null>>;
@@ -35,10 +35,10 @@ type Options = {
   setActiveProfileName: Dispatch<SetStateAction<string | null>>;
   setLayout: Dispatch<SetStateAction<DisplayLayoutSnapshot | null>>;
   setSelectedProfileName: Dispatch<SetStateAction<string>>;
-  setProfileBehaviours: Dispatch<SetStateAction<PcGamingProfileBehaviourMap>>;
-  setProfileLaunchers: Dispatch<SetStateAction<PcGamingProfileLauncherMap>>;
-  setProfileHotkeys: Dispatch<SetStateAction<PcGamingProfileHotkeysMap>>;
-  setProfileControllerShortcuts: Dispatch<SetStateAction<PcGamingProfileControllerShortcutMap>>;
+  setProfileBehaviours: Dispatch<SetStateAction<GamingProfileBehaviourMap>>;
+  setProfileLaunchers: Dispatch<SetStateAction<GamingProfileLauncherMap>>;
+  setProfileHotkeys: Dispatch<SetStateAction<GamingProfileHotkeysMap>>;
+  setProfileControllerShortcuts: Dispatch<SetStateAction<GamingProfileControllerShortcutMap>>;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
   setPendingOverwriteProfileAction: (value: SetStateAction<OverwriteProfileAction | null>) => void;
   setShowOverwriteProfileDialog: (value: boolean) => void;
@@ -58,7 +58,7 @@ export function useDisplayProfileWorkflow(options: Options) {
     ready: (name: string) => name ? t('profile.layoutReadyContinue', { name }) : t('profile.refreshListUpdated'),
     empty: t('profile.noDisplaysFound')
   };
-  const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isFirstRun, isEditingSection, pcGamingBehaviour, launcher, hotkeys, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, setProfileBehaviours, setProfileLaunchers, setProfileHotkeys, setProfileControllerShortcuts, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
+  const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isFirstRun, isEditingSection, gamingBehaviour, launcher, hotkeys, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, setProfileBehaviours, setProfileLaunchers, setProfileHotkeys, setProfileControllerShortcuts, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
 
   async function refreshDisplays() {
     setIsRefreshingDisplays(true); setDisplayListError(null); setError(null);
@@ -69,8 +69,8 @@ export function useDisplayProfileWorkflow(options: Options) {
     finally { setIsRefreshingDisplays(false); }
   }
 
-  async function saveSelectedPcGamingLayout(profileName: string, topology: GamingProfileDisplayTopology) {
-    const trimmedName = normalizePcGamingProfileName(profileName);
+  async function saveSelectedGamingLayout(profileName: string, topology: GamingProfileDisplayTopology) {
+    const trimmedName = normalizeGamingProfileName(profileName);
     const topologyErrors = validateTopology(topology);
     if (!trimmedName || topologyErrors.length > 0) { setError(topologyErrors[0] ?? messages.invalid); return; }
     const existingProfile = profiles.find((profile) => profile.name.toLowerCase() === trimmedName.toLowerCase()) ?? null;
@@ -89,23 +89,23 @@ export function useDisplayProfileWorkflow(options: Options) {
     const nextProfileHotkeys = { ...profileHotkeys };
     const nextProfileControllerShortcuts = { ...profileControllerShortcuts };
     if (sourceProfileName && sourceProfileName !== resolvedProfileName) {
-      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[sourceProfileName] ?? pcGamingBehaviour;
+      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[sourceProfileName] ?? gamingBehaviour;
       nextProfileLaunchers[resolvedProfileName] = nextProfileLaunchers[sourceProfileName] ?? launcher;
-      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[sourceProfileName] ?? { enterProfile: hotkeys.pcGamingMode };
+      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[sourceProfileName] ?? { enterProfile: hotkeys.gamingMode };
       nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[sourceProfileName] ?? null;
       delete nextProfileBehaviours[sourceProfileName];
       delete nextProfileLaunchers[sourceProfileName];
       delete nextProfileHotkeys[sourceProfileName];
       delete nextProfileControllerShortcuts[sourceProfileName];
     } else {
-      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[resolvedProfileName] ?? pcGamingBehaviour;
+      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[resolvedProfileName] ?? gamingBehaviour;
       nextProfileLaunchers[resolvedProfileName] = nextProfileLaunchers[resolvedProfileName] ?? launcher;
-      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[resolvedProfileName] ?? (profileBeingUpdated ? { enterProfile: hotkeys.pcGamingMode } : { enterProfile: '' });
+      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[resolvedProfileName] ?? (profileBeingUpdated ? { enterProfile: hotkeys.gamingMode } : { enterProfile: '' });
       nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[resolvedProfileName] ?? (profileBeingUpdated ? null : null);
     }
     const layout = topologyToLegacy(topology, displays);
     setProfiles(nextProfiles); setActiveProfileName(resolvedProfileName); setLayout(layout); setSelectedProfileName(resolvedProfileName); setProfileBehaviours(nextProfileBehaviours); setProfileLaunchers(nextProfileLaunchers); setProfileHotkeys(nextProfileHotkeys); setProfileControllerShortcuts(nextProfileControllerShortcuts);
-    pendingSettingsOverrideRef.current = { pcGamingProfiles: nextProfiles, activePcGamingProfileName: resolvedProfileName, pcGamingLayout: layout, pcGamingProfileBehaviours: nextProfileBehaviours, pcGamingProfileLaunchers: nextProfileLaunchers, pcGamingProfileHotkeys: nextProfileHotkeys, pcGamingProfileControllerShortcuts: nextProfileControllerShortcuts };
+    pendingSettingsOverrideRef.current = { gamingProfiles: nextProfiles, activeGamingProfileName: resolvedProfileName, gamingLayout: layout, gamingProfileBehaviours: nextProfileBehaviours, gamingProfileLaunchers: nextProfileLaunchers, gamingProfileHotkeys: nextProfileHotkeys, gamingProfileControllerShortcuts: nextProfileControllerShortcuts };
     markUnsavedChanges(); setError(null); setMessage(isEditingSection ? messages.prepared(resolvedProfileName) : messages.ready(resolvedProfileName));
   }
 
@@ -121,10 +121,10 @@ export function useDisplayProfileWorkflow(options: Options) {
       const isEditingSelectedProfile = selectedProfileName.length > 0 && selectedProfileName.toLowerCase() === profileName.toLowerCase();
       const isLayoutUnchanged = existingProfile ? areTopologiesEqual(topology, getProfileTopology(existingProfile)) : false;
       if (existingProfile && !isEditingSelectedProfile && !isLayoutUnchanged && !allowOverwrite) { setPendingOverwriteProfileAction(overwriteAction); setShowOverwriteProfileDialog(true); return false; }
-      if (!existingProfile || !isLayoutUnchanged) await saveSelectedPcGamingLayout(profileName, topology);
+      if (!existingProfile || !isLayoutUnchanged) await saveSelectedGamingLayout(profileName, topology);
     }
     setDisplayValidationState({ showNameError: false, showSelectionError: false }); return true;
   }
 
-  return { refreshDisplays, saveSelectedPcGamingLayout, commitGamingDisplayDraft };
+  return { refreshDisplays, saveSelectedGamingLayout, commitGamingDisplayDraft };
 }

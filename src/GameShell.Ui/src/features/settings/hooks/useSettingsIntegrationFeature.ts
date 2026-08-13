@@ -5,7 +5,7 @@ import { useSettingsHydration } from './useSettingsHydration';
 import { useSettingsPayload } from './useSettingsPayload';
 import { useSettingsPersistence } from './useSettingsPersistence';
 import type { SettingsPayloadOverrides, BuildSettingsPayloadState } from '../buildSettingsPayload';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../../profiles/utils';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
 import type { LauncherType } from '../../../utils/modes';
 import type { SetupMode } from '../../setup/setupFlow';
 import { assertSetupStateInvariants, resolveBootstrapState, type BootstrapRoute } from '../../setup/setupRouting';
@@ -16,25 +16,25 @@ type Options = BuildSettingsPayloadState & {
   isSetupComplete: boolean;
   setupMode: SetupMode;
   bootstrapRoute: BootstrapRoute;
-  pcGamingProfilesCount: number;
+  gamingProfilesCount: number;
   preferredProfileName: () => string;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
   setSelectedConsoleDisplays: (value: DisplayIdentity[]) => void;
   setSelectedConsoleDisplay: (value: DisplayIdentity | null) => void;
-  setProfiles: (value: NonNullable<AppSettings['display']['pcGamingProfiles']>) => void;
+  setProfiles: (value: NonNullable<AppSettings['display']['gamingProfiles']>) => void;
   setActiveProfileName: (value: string | null) => void;
-  setProfileBehaviours: (value: PcGamingProfileBehaviourMap) => void;
-  setProfileLaunchers: (value: PcGamingProfileLauncherMap) => void;
-  setProfileHotkeys: (value: PcGamingProfileHotkeysMap) => void;
-  setProfileControllerShortcuts: (value: PcGamingProfileControllerShortcutMap) => void;
+  setProfileBehaviours: (value: GamingProfileBehaviourMap) => void;
+  setProfileLaunchers: (value: GamingProfileLauncherMap) => void;
+  setProfileHotkeys: (value: GamingProfileHotkeysMap) => void;
+  setProfileControllerShortcuts: (value: GamingProfileControllerShortcutMap) => void;
   setWorkModeControllerShortcut: (value: AppSettings['controller']['workMode']) => void;
   setSelectedProfileName: (value: string) => void;
-  setLayout: (value: AppSettings['display']['pcGamingLayout']) => void;
+  setLayout: (value: AppSettings['display']['gamingLayout']) => void;
   setHotkeys: (value: BuildSettingsPayloadState['hotkeys']) => void;
   setLauncher: (value: LauncherType) => void;
   setLanguage: (value: SupportedLanguage) => void;
   setConsoleBehaviour: (value: BuildSettingsPayloadState['consoleBehaviour']) => void;
-  setPcGamingBehaviour: (value: BuildSettingsPayloadState['pcGamingBehaviour']) => void;
+  setGamingBehaviour: (value: BuildSettingsPayloadState['gamingBehaviour']) => void;
   setWorkBehaviour: (value: BuildSettingsPayloadState['workBehaviour']) => void;
   setFinishOptions: (value: BuildSettingsPayloadState['finishOptions']) => void;
   setSetupMode: (value: SetupMode) => void;
@@ -72,7 +72,7 @@ export function useSettingsIntegrationFeature(options: Options) {
     setLauncher: options.setLauncher,
     setLanguage: options.setLanguage,
     setConsoleBehaviour: options.setConsoleBehaviour,
-    setPcGamingBehaviour: options.setPcGamingBehaviour,
+    setGamingBehaviour: options.setGamingBehaviour,
     setWorkBehaviour: options.setWorkBehaviour,
     setFinishOptions: options.setFinishOptions,
     setHasUnsavedChanges: options.setHasUnsavedChanges,
@@ -91,8 +91,8 @@ export function useSettingsIntegrationFeature(options: Options) {
       options.setEditingProfileId(bootstrap.editingProfileId);
       options.setIsSetupComplete(bootstrap.isSetupComplete);
       options.setStepIndex(bootstrap.currentStepIndex);
-      const profiles = settings.display?.pcGamingProfiles ?? [];
-      const selectedProfileId = settings.display?.activePcGamingProfileName ?? profiles[0]?.name ?? null;
+      const profiles = settings.display?.gamingProfiles ?? [];
+      const selectedProfileId = settings.display?.activeGamingProfileName ?? profiles[0]?.name ?? null;
       console.info('BOOTSTRAP STATE', {
         isFirstRunCompleted: settings.ui?.isFirstRunCompleted ?? false,
         profilesCount: profiles.length,
@@ -119,7 +119,7 @@ export function useSettingsIntegrationFeature(options: Options) {
     settings: options.settings,
     setupMode: options.setupMode,
     bootstrapRoute: options.bootstrapRoute,
-    pcGamingProfilesCount: options.pcGamingProfilesCount,
+    gamingProfilesCount: options.gamingProfilesCount,
     preferredProfileName: options.preferredProfileName,
     pendingSettingsOverrideRef: options.pendingSettingsOverrideRef,
     buildSettingsPayload,

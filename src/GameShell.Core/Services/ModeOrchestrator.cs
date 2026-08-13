@@ -108,37 +108,37 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     public Task<ModeResult> EnterGameShellWithDisplayProfileAsync(string profileName, CancellationToken cancellationToken = default)
     {
-        return RunPcGamingModeAsync(profileName, cancellationToken);
+        return RunGamingModeAsync(profileName, cancellationToken);
     }
 
-    public Task<ModeResult> RunPcGamingModeAsync(CancellationToken cancellationToken = default)
+    public Task<ModeResult> RunGamingModeAsync(CancellationToken cancellationToken = default)
     {
-        return RunPcGamingModeAsync(null, cancellationToken);
+        return RunGamingModeAsync(null, cancellationToken);
     }
 
-    private Task<ModeResult> RunPcGamingModeAsync(string? profileName, CancellationToken cancellationToken = default)
+    private Task<ModeResult> RunGamingModeAsync(string? profileName, CancellationToken cancellationToken = default)
     {
         return RunModeAsync(
-            operationName: "Enter PC Gaming",
+            operationName: "Enter Gaming Profile",
             switchingState: ModeState.SwitchingToConsole,
             completedState: ModeState.GameShell,
-            transition: settings => _displayTransitionService.EnterPcGamingModeAsync(
-                ResolvePcGamingLayout(settings.Display, profileName),
+            transition: settings => _displayTransitionService.EnterGamingModeAsync(
+                ResolveGamingLayout(settings.Display, profileName),
                 GetConsoleDisplays(settings),
                 cancellationToken),
             preWorkflow: settings => _modeWorkflowService.PrepareGamingWorkflowAsync(
-                BuildEffectivePcGamingSettings(settings, profileName),
-                GameShellMode.PcGaming,
+                BuildEffectiveGamingSettings(settings, profileName),
+                GameShellMode.GamingProfile,
                 cancellationToken),
             workflow: settings => _modeWorkflowService.CompleteGamingWorkflowAsync(
-                BuildEffectivePcGamingSettings(settings, profileName),
-                GameShellMode.PcGaming,
+                BuildEffectiveGamingSettings(settings, profileName),
+                GameShellMode.GamingProfile,
                 cancellationToken),
-            completionDelay: settings => TimeSpan.FromSeconds(ResolvePcGamingBehaviour(settings.Display, settings.PcGaming, profileName).CompletionDelaySeconds),
-            runtimeMode: GameShellMode.PcGaming,
+            completionDelay: settings => TimeSpan.FromSeconds(ResolveGamingBehaviour(settings.Display, settings.Gaming, profileName).CompletionDelaySeconds),
+            runtimeMode: GameShellMode.GamingProfile,
             cancellationToken,
-            preTransitionGate: settings => CheckPcGamingTopologyReadinessAsync(settings, profileName, cancellationToken),
-            postTransitionGate: settings => CheckPcGamingTopologyAfterTransitionAsync(settings, profileName, cancellationToken));
+            preTransitionGate: settings => CheckGamingTopologyReadinessAsync(settings, profileName, cancellationToken),
+            postTransitionGate: settings => CheckGamingTopologyAfterTransitionAsync(settings, profileName, cancellationToken));
     }
 
     public Task<ModeResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
@@ -408,8 +408,8 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     private AppStatus CreateStatus(AppSettings settings)
     {
-        var activeProfileName = ResolvePcGamingProfileName(settings.Display, null);
-        var activeConfiguration = ResolvePcGamingProfileConfiguration(settings.Display, activeProfileName);
+        var activeProfileName = ResolveGamingProfileName(settings.Display, null);
+        var activeConfiguration = ResolveGamingProfileConfiguration(settings.Display, activeProfileName);
 
         lock (_statusGate)
         {
@@ -420,7 +420,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 IsBusy = _state is ModeState.SwitchingToConsole or ModeState.SwitchingToWork,
                 DisplayMode = "NativeDisplayConfig",
                 SelectedConsoleDisplay = GetConsoleDisplays(settings).FirstOrDefault()?.FriendlyName,
-                HasPcGamingLayout = ResolvePcGamingLayout(settings.Display, null) is not null,
+                HasGamingProfiles = ResolveGamingLayout(settings.Display, null) is not null,
                 ActiveLauncher = _currentMode == GameShellMode.Work
                     ? null
                     : activeConfiguration?.Launcher.Type ?? settings.Launcher.Type,
@@ -444,14 +444,14 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             : [settings.Display.ConsoleDisplay];
     }
 
-    private async Task<ModeResult?> CheckPcGamingTopologyReadinessAsync(AppSettings settings, string? profileName, CancellationToken cancellationToken)
+    private async Task<ModeResult?> CheckGamingTopologyReadinessAsync(AppSettings settings, string? profileName, CancellationToken cancellationToken)
     {
         if (_topologyReadinessEvaluator is null)
         {
             return null;
         }
 
-        var profile = ResolvePcGamingProfile(settings.Display, profileName);
+        var profile = ResolveGamingProfile(settings.Display, profileName);
         if (profile?.DisplayTopology is null)
         {
             return null;
@@ -481,14 +481,14 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         };
     }
 
-    private async Task<ModeResult?> CheckPcGamingTopologyAfterTransitionAsync(AppSettings settings, string? profileName, CancellationToken cancellationToken)
+    private async Task<ModeResult?> CheckGamingTopologyAfterTransitionAsync(AppSettings settings, string? profileName, CancellationToken cancellationToken)
     {
         if (_topologyReadinessEvaluator is null)
         {
             return null;
         }
 
-        var profile = ResolvePcGamingProfile(settings.Display, profileName);
+        var profile = ResolveGamingProfile(settings.Display, profileName);
         if (profile?.DisplayTopology is null)
         {
             return null;
@@ -502,6 +502,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
         if (readiness.IsReady)
         {
+            await UpdateLastKnownGoodCapabilitiesAsync(settings, profile, readiness, cancellationToken);
             return null;
         }
 
@@ -524,7 +525,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         foreach (var targetReadiness in readiness.Targets
                      .Where(target => target.SavedTarget.Enabled
                          && target.Result == ProfileDisplayReadiness.Degraded
-                         && target.Reason == ProfileDisplayReadinessReason.ExpectedModeUnavailable
+                         && target.Reason is ProfileDisplayReadinessReason.ExpectedModeUnavailable or ProfileDisplayReadinessReason.CapabilityRegression
                          && target.ResolvedTarget is { IsEnabled: true }))
         {
             var resolvedTarget = targetReadiness.ResolvedTarget!;
@@ -570,6 +571,60 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         return readiness;
     }
 
+    private async Task UpdateLastKnownGoodCapabilitiesAsync(
+        AppSettings settings,
+        DisplayLayoutProfile profile,
+        GamingProfileTopologyReadiness readiness,
+        CancellationToken cancellationToken)
+    {
+        var changed = false;
+        foreach (var targetReadiness in readiness.Targets.Where(target =>
+                     target.Result == ProfileDisplayReadiness.Ready
+                     && target.SavedTarget.Enabled
+                     && target.CurrentCapability is not null))
+        {
+            var current = targetReadiness.CurrentCapability!;
+            var saved = targetReadiness.SavedTarget.CapabilityExpectation;
+            if (saved is not null
+                && saved.Width == current.Width
+                && saved.Height == current.Height
+                && current.MaxRefreshRateHz + 0.25 < saved.MaxRefreshRateHz)
+            {
+                continue;
+            }
+
+            if (saved is not null
+                && saved.Width == current.Width
+                && saved.Height == current.Height
+                && current.MaxRefreshRateHz <= saved.MaxRefreshRateHz + 0.25)
+            {
+                continue;
+            }
+
+            targetReadiness.SavedTarget.CapabilityExpectation = new DisplayCapabilityExpectation
+            {
+                Width = current.Width,
+                Height = current.Height,
+                LastKnownGoodMaxRefreshNumerator = current.LastKnownGoodMaxRefreshNumerator,
+                LastKnownGoodMaxRefreshDenominator = current.LastKnownGoodMaxRefreshDenominator
+            };
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        await _settingsService.SaveAsync(settings, cancellationToken);
+        _logger.LogInformation(
+            "[DISPLAY CAPABILITY EXPECTATION UPDATED] Profile={Profile} Capabilities={Capabilities}",
+            profile.Name,
+            string.Join(", ", readiness.Targets
+                .Where(target => target.SavedTarget.CapabilityExpectation is not null)
+                .Select(target => $"{target.SavedTarget.Identity.FriendlyName}={FormatCapability(target.SavedTarget.CapabilityExpectation)}")));
+    }
+
     private static ProfileDisplayTargetReadiness? FindMatchingReadiness(
         GamingProfileTopologyReadiness readiness,
         ProfileDisplayTarget savedTarget)
@@ -584,6 +639,13 @@ public sealed class ModeOrchestrator : IModeOrchestrator
     private static string FormatModes(IReadOnlyList<DisplayModeInfo> modes)
     {
         return $"[{string.Join(", ", modes.Select(mode => $"{mode.Width}x{mode.Height}@{mode.RefreshRateHz:0.##}"))}]";
+    }
+
+    private static string FormatCapability(DisplayCapabilityExpectation? capability)
+    {
+        return capability is null || capability.Width <= 0 || capability.Height <= 0 || capability.MaxRefreshRateHz <= 0
+            ? "none"
+            : $"{capability.Width}x{capability.Height}@{capability.MaxRefreshRateHz:0.##}";
     }
 
     private static string FormatMode(ProfileDisplayTarget target)
@@ -601,19 +663,19 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         return resultCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "NotAttempted";
     }
 
-    private static DisplayLayoutProfile? ResolvePcGamingProfile(DisplaySettings display, string? profileName)
+    private static DisplayLayoutProfile? ResolveGamingProfile(DisplaySettings display, string? profileName)
     {
-        if (!string.IsNullOrWhiteSpace(profileName) && !string.Equals(profileName, "PcGaming", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(profileName) && !string.Equals(profileName, "Gaming", StringComparison.OrdinalIgnoreCase))
         {
-            return display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
+            return display.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName))
+        if (!string.IsNullOrWhiteSpace(display.ActiveGamingProfileName))
         {
-            return display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
+            return display.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase));
         }
 
-        return display.PcGamingProfiles.FirstOrDefault();
+        return display.GamingProfiles.FirstOrDefault();
     }
 
     private static string FormatRefreshRate(ProfileDisplayTarget target)
@@ -623,28 +685,28 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             : ((double)target.RefreshRateNumerator / target.RefreshRateDenominator).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private static DisplayLayoutSnapshot? ResolvePcGamingLayout(DisplaySettings display, string? profileName)
+    private static DisplayLayoutSnapshot? ResolveGamingLayout(DisplaySettings display, string? profileName)
     {
         if (!string.IsNullOrWhiteSpace(profileName)
-            && !string.Equals(profileName, "PcGaming", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(profileName, "Gaming", StringComparison.OrdinalIgnoreCase))
         {
-            var namedProfile = display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
+            var namedProfile = display.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
             if (namedProfile is not null)
             {
                 return ResolveProfileLayout(namedProfile);
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName))
+        if (!string.IsNullOrWhiteSpace(display.ActiveGamingProfileName))
         {
-            var activeProfile = display.PcGamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase));
+            var activeProfile = display.GamingProfiles.FirstOrDefault(profile => string.Equals(profile.Name, display.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase));
             if (activeProfile is not null)
             {
                 return ResolveProfileLayout(activeProfile);
             }
         }
 
-        return display.PcGamingLayout;
+        return display.GamingLayout;
     }
 
     private static DisplayLayoutSnapshot ResolveProfileLayout(DisplayLayoutProfile profile)
@@ -654,17 +716,17 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             : profile.Layout;
     }
 
-    private static AppSettings BuildEffectivePcGamingSettings(AppSettings settings, string? profileName)
+    private static AppSettings BuildEffectiveGamingSettings(AppSettings settings, string? profileName)
     {
-        var resolvedProfileName = ResolvePcGamingProfileName(settings.Display, profileName);
-        var profileConfiguration = ResolvePcGamingProfileConfiguration(settings.Display, resolvedProfileName);
+        var resolvedProfileName = ResolveGamingProfileName(settings.Display, profileName);
+        var profileConfiguration = ResolveGamingProfileConfiguration(settings.Display, resolvedProfileName);
 
         return new AppSettings
         {
             Display = settings.Display,
             Launcher = profileConfiguration?.Launcher ?? settings.Launcher,
             GameShell = settings.GameShell,
-            PcGaming = profileConfiguration?.Behaviour ?? settings.PcGaming,
+            Gaming = profileConfiguration?.Behaviour ?? settings.Gaming,
             WorkMode = settings.WorkMode,
             Audio = settings.Audio,
             Controller = settings.Controller,
@@ -674,10 +736,10 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         };
     }
 
-    private static PcGamingSettings ResolvePcGamingBehaviour(DisplaySettings display, PcGamingSettings defaultBehaviour, string? profileName)
+    private static GamingSettings ResolveGamingBehaviour(DisplaySettings display, GamingSettings defaultBehaviour, string? profileName)
     {
-        var resolvedProfileName = ResolvePcGamingProfileName(display, profileName);
-        var configuration = ResolvePcGamingProfileConfiguration(display, resolvedProfileName);
+        var resolvedProfileName = ResolveGamingProfileName(display, profileName);
+        var configuration = ResolveGamingProfileConfiguration(display, resolvedProfileName);
         if (configuration is not null)
         {
             return configuration.Behaviour;
@@ -688,36 +750,36 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             return defaultBehaviour;
         }
 
-        var legacyBehaviour = display.PcGamingProfileBehaviours.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase));
+        var legacyBehaviour = display.GamingProfileBehaviours.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase));
         return legacyBehaviour?.Behaviour ?? defaultBehaviour;
     }
 
-    private static PcGamingProfileConfiguration? ResolvePcGamingProfileConfiguration(DisplaySettings display, string? profileName)
+    private static GamingProfileConfiguration? ResolveGamingProfileConfiguration(DisplaySettings display, string? profileName)
     {
         if (string.IsNullOrWhiteSpace(profileName))
         {
             return null;
         }
 
-        return display.PcGamingProfileConfigurations.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
+        return display.GamingProfileConfigurations.FirstOrDefault(candidate => string.Equals(candidate.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string? ResolvePcGamingProfileName(DisplaySettings display, string? requestedProfileName)
+    private static string? ResolveGamingProfileName(DisplaySettings display, string? requestedProfileName)
     {
         if (!string.IsNullOrWhiteSpace(requestedProfileName)
-            && !string.Equals(requestedProfileName, "PcGaming", StringComparison.OrdinalIgnoreCase)
-            && display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, requestedProfileName, StringComparison.OrdinalIgnoreCase)))
+            && !string.Equals(requestedProfileName, "Gaming", StringComparison.OrdinalIgnoreCase)
+            && display.GamingProfiles.Any(profile => string.Equals(profile.Name, requestedProfileName, StringComparison.OrdinalIgnoreCase)))
         {
             return requestedProfileName;
         }
 
-        if (!string.IsNullOrWhiteSpace(display.ActivePcGamingProfileName)
-            && display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase)))
+        if (!string.IsNullOrWhiteSpace(display.ActiveGamingProfileName)
+            && display.GamingProfiles.Any(profile => string.Equals(profile.Name, display.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase)))
         {
-            return display.ActivePcGamingProfileName;
+            return display.ActiveGamingProfileName;
         }
 
-        return display.PcGamingProfiles.FirstOrDefault()?.Name;
+        return display.GamingProfiles.FirstOrDefault()?.Name;
     }
 
     private ModeState GetState()

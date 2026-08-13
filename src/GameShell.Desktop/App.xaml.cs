@@ -20,7 +20,7 @@ namespace GameShell.Desktop;
 public partial class App : System.Windows.Application
 {
     private const int HotkeyConsoleModeId = 0x4701;
-    private const int HotkeyPcGamingModeId = 0x4702;
+    private const int HotkeyGamingProfileModeId = 0x4702;
     private const int HotkeyWorkModeId = 0x4703;
     private const int HotkeyProfileEnterBaseId = 0x4800;
     private const uint ModAlt = 0x0001;
@@ -30,8 +30,8 @@ public partial class App : System.Windows.Application
     private const int WmHotkey = 0x0312;
     private const string SingleInstanceMutexName = @"Local\GameShell.Desktop.SingleInstance";
     private const string ShowWindowEventName = @"Local\GameShell.Desktop.ShowWindow";
-    private const string GamingCommandEventName = @"Local\GameShell.Desktop.Command.Gaming";
-    private const string PcGamingCommandEventName = @"Local\GameShell.Desktop.Command.PcGaming";
+    private const string ConsoleModeCommandEventName = @"Local\GameShell.Desktop.Command.ConsoleMode";
+    private const string GamingProfileCommandEventName = @"Local\GameShell.Desktop.Command.GamingProfile";
     private const string WorkCommandEventName = @"Local\GameShell.Desktop.Command.Work";
 
     private ServiceProvider? _serviceProvider;
@@ -112,8 +112,8 @@ public partial class App : System.Windows.Application
     private void RegisterCommandEvents()
     {
         RegisterCommandEvent(ShowWindowEventName, () => ShowMainWindow());
-        RegisterCommandEvent(GamingCommandEventName, async () => await RunCommandAsync(service => service.EnterGameShellAsync()));
-        RegisterCommandEvent(PcGamingCommandEventName, RunPcGamingCommandAsync);
+        RegisterCommandEvent(ConsoleModeCommandEventName, async () => await RunCommandAsync(service => service.EnterGameShellAsync()));
+        RegisterCommandEvent(GamingProfileCommandEventName, RunGamingCommandAsync);
         RegisterCommandEvent(WorkCommandEventName, async () => await RunCommandAsync(service => service.EnterWorkModeAsync()));
     }
 
@@ -235,20 +235,20 @@ public partial class App : System.Windows.Application
 
         var currentMode = _trayStatus.CurrentMode ?? _trayRuntimeState.CurrentMode?.ToString();
         var isWorkMode = string.Equals(currentMode, GameShellMode.Work.ToString(), StringComparison.OrdinalIgnoreCase);
-        var isProfileMode = string.Equals(currentMode, GameShellMode.PcGaming.ToString(), StringComparison.OrdinalIgnoreCase)
+        var isProfileMode = string.Equals(currentMode, GameShellMode.GamingProfile.ToString(), StringComparison.OrdinalIgnoreCase)
             || string.Equals(currentMode, GameShellMode.Console.ToString(), StringComparison.OrdinalIgnoreCase);
-        var activeProfileName = _traySettings.Display.ActivePcGamingProfileName;
+        var activeProfileName = _traySettings.Display.ActiveGamingProfileName;
         var currentLabel = TrayMenuText.CurrentStatus(language, isWorkMode, activeProfileName);
         _trayMenu.Items.Add(new ToolStripMenuItem(currentLabel) { Enabled = false });
 
         var profilesItem = new ToolStripMenuItem(TrayMenuText.GamingProfiles(language)) { Enabled = true };
-        if (_traySettings.Display.PcGamingProfiles.Count == 0)
+        if (_traySettings.Display.GamingProfiles.Count == 0)
         {
             profilesItem.DropDownItems.Add(new ToolStripMenuItem(TrayMenuText.NoGamingProfiles(language)) { Enabled = false });
         }
         else
         {
-            foreach (var profile in _traySettings.Display.PcGamingProfiles)
+            foreach (var profile in _traySettings.Display.GamingProfiles)
             {
                 var profileItem = new ToolStripMenuItem(profile.Name)
                 {
@@ -272,7 +272,7 @@ public partial class App : System.Windows.Application
             "Tray menu rebuilt. Open enabled={OpenEnabled}; Profiles enabled={ProfilesEnabled} count={ProfileCount}; WorkMode enabled={WorkModeEnabled}; Exit enabled={ExitEnabled}",
             openItem.Enabled,
             profilesItem.Enabled,
-            _traySettings.Display.PcGamingProfiles.Count,
+            _traySettings.Display.GamingProfiles.Count,
             true,
             true);
 
@@ -506,7 +506,7 @@ public partial class App : System.Windows.Application
         {
             if (!_isHotkeyCaptureActive)
             {
-                await RunPcGamingHotkeyAsync(profileName);
+                await RunGamingHotkeyAsync(profileName);
             }
 
             return;
@@ -522,8 +522,8 @@ public partial class App : System.Windows.Application
             case HotkeyConsoleModeId:
                 await RunTrayCommandAsync(() => _modeCommandService!.EnterGameShellAsync());
                 break;
-            case HotkeyPcGamingModeId:
-                await RunPcGamingHotkeyAsync(null);
+            case HotkeyGamingProfileModeId:
+                await RunGamingHotkeyAsync(null);
                 break;
             case HotkeyWorkModeId:
                 await RunTrayCommandAsync(() => _modeCommandService!.EnterWorkModeAsync());
@@ -552,9 +552,9 @@ public partial class App : System.Windows.Application
             RegisterHotkey(HotkeyConsoleModeId, settings.Hotkeys?.ConsoleMode ?? "");
 
             var hasProfileEnterHotkeys = false;
-            for (var index = 0; index < settings.Display.PcGamingProfileConfigurations.Count; index++)
+            for (var index = 0; index < settings.Display.GamingProfileConfigurations.Count; index++)
             {
-                var configuration = settings.Display.PcGamingProfileConfigurations[index];
+                var configuration = settings.Display.GamingProfileConfigurations[index];
                 if (string.IsNullOrWhiteSpace(configuration.ProfileName))
                 {
                     continue;
@@ -570,7 +570,7 @@ public partial class App : System.Windows.Application
 
             if (!hasProfileEnterHotkeys)
             {
-                RegisterHotkey(HotkeyPcGamingModeId, settings.Hotkeys?.PcGamingMode ?? "");
+                RegisterHotkey(HotkeyGamingProfileModeId, settings.Hotkeys?.GamingMode ?? "");
             }
 
             RegisterHotkey(HotkeyWorkModeId, settings.Hotkeys?.WorkMode ?? "");
@@ -602,7 +602,7 @@ public partial class App : System.Windows.Application
         if (_hotkeySource is not null)
         {
             UnregisterHotkey(HotkeyConsoleModeId);
-            UnregisterHotkey(HotkeyPcGamingModeId);
+            UnregisterHotkey(HotkeyGamingProfileModeId);
             UnregisterHotkey(HotkeyWorkModeId);
             foreach (var hotkeyId in _profileEnterHotkeys.Keys.ToList())
             {
@@ -621,15 +621,15 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private async Task RunPcGamingHotkeyAsync(string? forcedProfileName)
+    private async Task RunGamingHotkeyAsync(string? forcedProfileName)
     {
         try
         {
             var settings = await _settingsService!.LoadAsync();
             var profileName = ResolveRequestedProfileName(settings, forcedProfileName);
-            if (settings.Display.PcGamingLayout is not null || settings.Display.PcGamingProfiles.Count > 0)
+            if (settings.Display.GamingLayout is not null || settings.Display.GamingProfiles.Count > 0)
             {
-                await _modeCommandService!.EnterGameShellWithDisplayProfileAsync(profileName ?? "PcGaming");
+                await _modeCommandService!.EnterGameShellWithDisplayProfileAsync(profileName ?? string.Empty);
             }
             else
             {
@@ -638,7 +638,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "PC Gaming hotkey command failed.");
+            _logger?.LogError(ex, "Gaming profile hotkey command failed.");
         }
         finally
         {
@@ -649,18 +649,18 @@ public partial class App : System.Windows.Application
     private static string? ResolveRequestedProfileName(AppSettings settings, string? forcedProfileName)
     {
         if (!string.IsNullOrWhiteSpace(forcedProfileName)
-            && settings.Display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, forcedProfileName, StringComparison.OrdinalIgnoreCase)))
+            && settings.Display.GamingProfiles.Any(profile => string.Equals(profile.Name, forcedProfileName, StringComparison.OrdinalIgnoreCase)))
         {
             return forcedProfileName;
         }
 
-        if (!string.IsNullOrWhiteSpace(settings.Display.ActivePcGamingProfileName)
-            && settings.Display.PcGamingProfiles.Any(profile => string.Equals(profile.Name, settings.Display.ActivePcGamingProfileName, StringComparison.OrdinalIgnoreCase)))
+        if (!string.IsNullOrWhiteSpace(settings.Display.ActiveGamingProfileName)
+            && settings.Display.GamingProfiles.Any(profile => string.Equals(profile.Name, settings.Display.ActiveGamingProfileName, StringComparison.OrdinalIgnoreCase)))
         {
-            return settings.Display.ActivePcGamingProfileName;
+            return settings.Display.ActiveGamingProfileName;
         }
 
-        return settings.Display.PcGamingProfiles.FirstOrDefault()?.Name;
+        return settings.Display.GamingProfiles.FirstOrDefault()?.Name;
     }
 
     private async void OnHotkeyCaptureStateChanged(object? sender, bool isActive)
@@ -761,7 +761,7 @@ public partial class App : System.Windows.Application
         await action(modeCommandService);
     }
 
-    private async Task RunPcGamingCommandAsync()
+    private async Task RunGamingCommandAsync()
     {
         if (_isExiting || _serviceProvider is null)
         {
@@ -771,9 +771,9 @@ public partial class App : System.Windows.Application
         var settings = await _serviceProvider.GetRequiredService<ISettingsService>().LoadAsync();
         var modeCommandService = _serviceProvider.GetRequiredService<IModeCommandService>();
 
-        if (settings.Display.PcGamingLayout is not null || settings.Display.PcGamingProfiles.Count > 0)
+        if (settings.Display.GamingLayout is not null || settings.Display.GamingProfiles.Count > 0)
         {
-            await modeCommandService.EnterGameShellWithDisplayProfileAsync("PcGaming");
+            await modeCommandService.EnterGameShellWithDisplayProfileAsync(string.Empty);
             return;
         }
 
@@ -790,8 +790,8 @@ public partial class App : System.Windows.Application
 
         _ = eventName switch
         {
-            GamingCommandEventName => RunCommandAsync(service => service.EnterGameShellAsync()),
-            PcGamingCommandEventName => RunPcGamingCommandAsync(),
+            ConsoleModeCommandEventName => RunCommandAsync(service => service.EnterGameShellAsync()),
+            GamingProfileCommandEventName => RunGamingCommandAsync(),
             WorkCommandEventName => RunCommandAsync(service => service.EnterWorkModeAsync()),
             _ => Task.CompletedTask
         };
@@ -811,14 +811,16 @@ public partial class App : System.Windows.Application
 
     private static string? GetCommandEventName(string[] args)
     {
-        if (args.Any(arg => arg.Equals("--gaming", StringComparison.OrdinalIgnoreCase)))
+        if (args.Any(arg => arg.Equals("--console", StringComparison.OrdinalIgnoreCase)
+            || arg.Equals("--gaming", StringComparison.OrdinalIgnoreCase)))
         {
-            return GamingCommandEventName;
+            return ConsoleModeCommandEventName;
         }
 
-        if (args.Any(arg => arg.Equals("--pcgaming", StringComparison.OrdinalIgnoreCase)))
+        if (args.Any(arg => arg.Equals("--profile", StringComparison.OrdinalIgnoreCase)
+            || arg.Equals("--pcgaming", StringComparison.OrdinalIgnoreCase)))
         {
-            return PcGamingCommandEventName;
+            return GamingProfileCommandEventName;
         }
 
         if (args.Any(arg => arg.Equals("--work", StringComparison.OrdinalIgnoreCase)))

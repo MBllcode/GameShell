@@ -7,8 +7,8 @@ type TranslationLike = (key: string, options?: Record<string, string | number>) 
 export function formatCurrentMode(status: AppStatus, t?: TranslationLike) {
   switch (status.currentMode) {
     case 'Console':
-    case 'PcGaming':
-      return t ? t('status.gamingMode') : 'Gaming mode';
+    case 'GamingProfile':
+      return t ? t('status.gamingProfile') : 'Gaming profile';
     case 'Work':
       return t ? t('status.workMode') : 'Work Mode';
     default:
@@ -32,7 +32,7 @@ export function formatSessionState(state: string, t?: TranslationLike) {
 function formatModeState(state: AppStatus['state'], t?: TranslationLike) {
   switch (state) {
     case 'WorkMode': return t ? t('status.workMode') : 'Work Mode';
-    case 'GameShell': return t ? t('status.gamingMode') : 'Gaming mode';
+    case 'GameShell': return t ? t('status.gamingProfile') : 'Gaming profile';
     case 'SwitchingToConsole': return t ? t('status.mode.switchingToConsole') : 'switching to gaming mode';
     case 'SwitchingToWork': return t ? t('status.mode.switchingToWork') : 'switching to Work Mode';
     case 'Error': return t ? t('status.mode.error') : 'requires attention';
@@ -44,7 +44,7 @@ function formatModeState(state: AppStatus['state'], t?: TranslationLike) {
 export function formatCommandTargetMode(command: ModeCommand, t?: TranslationLike) {
   switch (command) {
     case 'enterGameShell':
-    case 'enterGameShellWithProfile': return t ? t('status.gamingMode') : 'Gaming mode';
+    case 'enterGameShellWithProfile': return t ? t('status.gamingProfile') : 'Gaming profile';
     case 'enterWorkMode': return t ? t('status.workMode') : 'Work Mode';
   }
 }

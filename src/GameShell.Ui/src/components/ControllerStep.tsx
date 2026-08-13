@@ -7,13 +7,13 @@ import { HotkeyField } from './HotkeyField';
 
 type HotkeySettingsState = {
   consoleMode: string;
-  pcGamingMode: string;
+  gamingMode: string;
   workMode: string;
 };
 
 export function ControllerStep({
   stepNumber,
-  pcGamingProfiles,
+  gamingProfiles,
   selectedProfileName,
   isWorkMode = false,
   hotkeys,
@@ -33,7 +33,7 @@ export function ControllerStep({
   onChangeHotkey
 }: {
   stepNumber: number;
-  pcGamingProfiles: DisplayLayoutProfile[];
+  gamingProfiles: DisplayLayoutProfile[];
   selectedProfileName: string;
   isWorkMode?: boolean;
   hotkeys: HotkeySettingsState;
@@ -58,7 +58,7 @@ export function ControllerStep({
   const [visibleControllerValidationError, setVisibleControllerValidationError] = useState<string | null>(null);
   const hasWorkingProfile = selectedProfileName.trim().length > 0;
   const selectedProfileLabel = isWorkMode ? t('setup.workMode') : (selectedProfileName || t('profile.noProfileSelected'));
-  const currentHotkey = isWorkMode ? hotkeys.workMode : hotkeys.pcGamingMode;
+  const currentHotkey = isWorkMode ? hotkeys.workMode : hotkeys.gamingMode;
   const displayedHotkey = pendingHotkeyCandidate ?? currentHotkey;
   const selectedControllerButtons = controllerShortcut?.buttons ?? [];
   const hasControllerShortcut = selectedControllerButtons.length > 0;

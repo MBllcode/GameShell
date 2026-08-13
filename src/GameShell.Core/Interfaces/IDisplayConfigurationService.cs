@@ -60,17 +60,17 @@ public interface IDisplayTransitionService
         return EnterConsoleModeAsync(consoleDisplays?.FirstOrDefault(), cancellationToken);
     }
 
-    Task<DisplayTransitionResult> EnterPcGamingModeAsync(
-        DisplayLayoutSnapshot? pcGamingLayout,
+    Task<DisplayTransitionResult> EnterGamingModeAsync(
+        DisplayLayoutSnapshot? gamingLayout,
         DisplayIdentity? fallbackConsoleDisplay,
         CancellationToken cancellationToken = default);
 
-    Task<DisplayTransitionResult> EnterPcGamingModeAsync(
-        DisplayLayoutSnapshot? pcGamingLayout,
+    Task<DisplayTransitionResult> EnterGamingModeAsync(
+        DisplayLayoutSnapshot? gamingLayout,
         IReadOnlyCollection<DisplayIdentity>? fallbackConsoleDisplays,
         CancellationToken cancellationToken = default)
     {
-        return EnterPcGamingModeAsync(pcGamingLayout, fallbackConsoleDisplays?.FirstOrDefault(), cancellationToken);
+        return EnterGamingModeAsync(gamingLayout, fallbackConsoleDisplays?.FirstOrDefault(), cancellationToken);
     }
 
     Task<DisplayTransitionResult> EnterWorkModeAsync(
@@ -87,8 +87,8 @@ public interface IDisplayTransitionService
         return TestConsoleDisplayAsync(consoleDisplays?.FirstOrDefault(), cancellationToken);
     }
 
-    Task<DisplayTransitionResult> TestPcGamingLayoutAsync(
-        DisplayLayoutSnapshot? pcGamingLayout,
+    Task<DisplayTransitionResult> TestGamingLayoutAsync(
+        DisplayLayoutSnapshot? gamingLayout,
         CancellationToken cancellationToken = default);
 
     Task<DisplayTransitionResult> ConfirmPendingTestAsync(

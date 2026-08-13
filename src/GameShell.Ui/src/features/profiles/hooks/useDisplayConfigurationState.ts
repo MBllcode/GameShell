@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ControllerShortcutSettings, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
-import type { PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap } from '../utils';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../utils';
 
 type Options = {
   selectedProfileName: string;
@@ -12,13 +12,13 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
   const [displayListError, setDisplayListError] = useState<string | null>(null);
   const [selectedConsoleDisplay, setSelectedConsoleDisplay] = useState<DisplayIdentity | null>(null);
   const [selectedConsoleDisplays, setSelectedConsoleDisplays] = useState<DisplayIdentity[]>([]);
-  const [pcGamingLayout, setPcGamingLayout] = useState<DisplayLayoutSnapshot | null>(null);
-  const [pcGamingProfiles, setPcGamingProfiles] = useState<DisplayLayoutProfile[]>([]);
-  const [activePcGamingProfileName, setActivePcGamingProfileName] = useState<string | null>(null);
-  const [pcGamingProfileBehaviours, setPcGamingProfileBehaviours] = useState<PcGamingProfileBehaviourMap>({});
-  const [pcGamingProfileLaunchers, setPcGamingProfileLaunchers] = useState<PcGamingProfileLauncherMap>({});
-  const [pcGamingProfileHotkeys, setPcGamingProfileHotkeys] = useState<PcGamingProfileHotkeysMap>({});
-  const [pcGamingProfileControllerShortcuts, setPcGamingProfileControllerShortcuts] = useState<PcGamingProfileControllerShortcutMap>({});
+  const [gamingLayout, setGamingLayout] = useState<DisplayLayoutSnapshot | null>(null);
+  const [gamingProfiles, setGamingProfiles] = useState<DisplayLayoutProfile[]>([]);
+  const [activeGamingProfileName, setActiveGamingProfileName] = useState<string | null>(null);
+  const [gamingProfileBehaviours, setGamingProfileBehaviours] = useState<GamingProfileBehaviourMap>({});
+  const [gamingProfileLaunchers, setGamingProfileLaunchers] = useState<GamingProfileLauncherMap>({});
+  const [gamingProfileHotkeys, setGamingProfileHotkeys] = useState<GamingProfileHotkeysMap>({});
+  const [gamingProfileControllerShortcuts, setGamingProfileControllerShortcuts] = useState<GamingProfileControllerShortcutMap>({});
   const [workModeControllerShortcut, setWorkModeControllerShortcut] = useState<ControllerShortcutSettings | null>(null);
   const [profileHotkeyValidationError, setProfileHotkeyValidationError] = useState<string | null>(null);
   const [profileControllerValidationError, setProfileControllerValidationError] = useState<string | null>(null);
@@ -35,20 +35,20 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
     setSelectedConsoleDisplay,
     selectedConsoleDisplays,
     setSelectedConsoleDisplays,
-    pcGamingLayout,
-    setPcGamingLayout,
-    pcGamingProfiles,
-    setPcGamingProfiles,
-    activePcGamingProfileName,
-    setActivePcGamingProfileName,
-    pcGamingProfileBehaviours,
-    setPcGamingProfileBehaviours,
-    pcGamingProfileLaunchers,
-    setPcGamingProfileLaunchers,
-    pcGamingProfileHotkeys,
-    setPcGamingProfileHotkeys,
-    pcGamingProfileControllerShortcuts,
-    setPcGamingProfileControllerShortcuts,
+    gamingLayout,
+    setGamingLayout,
+    gamingProfiles,
+    setGamingProfiles,
+    activeGamingProfileName,
+    setActiveGamingProfileName,
+    gamingProfileBehaviours,
+    setGamingProfileBehaviours,
+    gamingProfileLaunchers,
+    setGamingProfileLaunchers,
+    gamingProfileHotkeys,
+    setGamingProfileHotkeys,
+    gamingProfileControllerShortcuts,
+    setGamingProfileControllerShortcuts,
     workModeControllerShortcut,
     setWorkModeControllerShortcut,
     profileHotkeyValidationError,

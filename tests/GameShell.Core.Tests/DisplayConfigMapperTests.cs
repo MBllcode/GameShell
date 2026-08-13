@@ -275,6 +275,7 @@ public sealed class DisplayConfigMapperTests
         {
             MonitorDevicePath = path,
             FriendlyName = name,
+            EdidIdsValid = manufacturer != 0 && product != 0,
             EdidManufacturerId = manufacturer,
             EdidProductCodeId = product,
             ConnectorInstance = connector

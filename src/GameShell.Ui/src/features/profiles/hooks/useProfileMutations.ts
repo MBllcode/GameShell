@@ -5,10 +5,10 @@ import {
 } from '../../../utils/controllers';
 import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
 import {
-  type PcGamingProfileBehaviourMap,
-  type PcGamingProfileControllerShortcutMap,
-  type PcGamingProfileHotkeysMap,
-  type PcGamingProfileLauncherMap,
+  type GamingProfileBehaviourMap,
+  type GamingProfileControllerShortcutMap,
+  type GamingProfileHotkeysMap,
+  type GamingProfileLauncherMap,
   type ProfileHotkeysState
 } from '../utils';
 import { tryAssignProfileControllerShortcut, tryAssignProfileHotkey, tryAssignWorkModeControllerShortcut, tryAssignWorkModeHotkey } from '../shortcutAssignment';
@@ -16,7 +16,7 @@ import type { ControllerShortcutSettings } from '../../../types/bridge';
 import type { LauncherType } from '../../../utils/modes';
 import { triggerValidationError } from '../../../utils/validation';
 
-type PcGamingBehaviourState = {
+type GamingBehaviourState = {
   hideDesktopIcons: boolean;
   hideTaskbar: boolean;
   closeVisibleWindows: boolean;
@@ -27,28 +27,28 @@ type PcGamingBehaviourState = {
   bringLauncherToForeground: boolean;
 };
 
-type PcGamingBehaviourKey = keyof PcGamingBehaviourState;
+type GamingBehaviourKey = keyof GamingBehaviourState;
 
 const defaultProfileHotkeys: ProfileHotkeysState = { enterProfile: '' };
 const defaultControllerShortcutHoldDurationMs = 700;
 
 type UseProfileMutationsOptions = {
   workingProfileName: string;
-  pcGamingBehaviour: PcGamingBehaviourState;
-  profileBehaviours: PcGamingProfileBehaviourMap;
-  profileLaunchers: PcGamingProfileLauncherMap;
-  profileHotkeys: PcGamingProfileHotkeysMap;
-  profileControllerShortcuts: PcGamingProfileControllerShortcutMap;
+  gamingBehaviour: GamingBehaviourState;
+  profileBehaviours: GamingProfileBehaviourMap;
+  profileLaunchers: GamingProfileLauncherMap;
+  profileHotkeys: GamingProfileHotkeysMap;
+  profileControllerShortcuts: GamingProfileControllerShortcutMap;
   workModeControllerShortcut: ControllerShortcutSettings | null;
   workModeHotkey: string;
-  setPcGamingBehaviour: Dispatch<SetStateAction<PcGamingBehaviourState>>;
-  setProfileBehaviours: Dispatch<SetStateAction<PcGamingProfileBehaviourMap>>;
+  setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
+  setProfileBehaviours: Dispatch<SetStateAction<GamingProfileBehaviourMap>>;
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
-  setProfileLaunchers: Dispatch<SetStateAction<PcGamingProfileLauncherMap>>;
-  setProfileHotkeys: Dispatch<SetStateAction<PcGamingProfileHotkeysMap>>;
-  setProfileControllerShortcuts: Dispatch<SetStateAction<PcGamingProfileControllerShortcutMap>>;
+  setProfileLaunchers: Dispatch<SetStateAction<GamingProfileLauncherMap>>;
+  setProfileHotkeys: Dispatch<SetStateAction<GamingProfileHotkeysMap>>;
+  setProfileControllerShortcuts: Dispatch<SetStateAction<GamingProfileControllerShortcutMap>>;
   setWorkModeControllerShortcut: Dispatch<SetStateAction<ControllerShortcutSettings | null>>;
-  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; pcGamingMode: string; workMode: string }>>;
+  setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -57,14 +57,14 @@ type UseProfileMutationsOptions = {
 
 export function useProfileMutations({
   workingProfileName,
-  pcGamingBehaviour,
+  gamingBehaviour,
   profileBehaviours,
   profileLaunchers,
   profileHotkeys,
   profileControllerShortcuts,
   workModeControllerShortcut,
   workModeHotkey,
-  setPcGamingBehaviour,
+  setGamingBehaviour,
   setProfileBehaviours,
   setLauncher,
   setProfileLaunchers,
@@ -79,21 +79,21 @@ export function useProfileMutations({
 }: UseProfileMutationsOptions) {
   const { t } = useTranslation();
 
-  const setPcGamingBehaviourForProfile = useCallback((profileName: string, behaviour: PcGamingBehaviourState) => {
+  const setGamingBehaviourForProfile = useCallback((profileName: string, behaviour: GamingBehaviourState) => {
     setProfileBehaviours((current) => ({ ...current, [profileName]: behaviour }));
-    setPcGamingBehaviour(behaviour);
+    setGamingBehaviour(behaviour);
     markUnsavedChanges();
-  }, [markUnsavedChanges, setPcGamingBehaviour, setProfileBehaviours]);
+  }, [markUnsavedChanges, setGamingBehaviour, setProfileBehaviours]);
 
-  const updatePcGamingBehaviourFlag = useCallback((key: PcGamingBehaviourKey, value: boolean) => {
+  const updateGamingBehaviourFlag = useCallback((key: GamingBehaviourKey, value: boolean) => {
     if (!workingProfileName) {
-      setPcGamingBehaviour((current) => ({ ...current, [key]: value }));
+      setGamingBehaviour((current) => ({ ...current, [key]: value }));
       return;
     }
 
-    const currentProfileBehaviour = profileBehaviours[workingProfileName] ?? pcGamingBehaviour;
-    setPcGamingBehaviourForProfile(workingProfileName, { ...currentProfileBehaviour, [key]: value });
-  }, [pcGamingBehaviour, profileBehaviours, workingProfileName, setPcGamingBehaviour, setPcGamingBehaviourForProfile]);
+    const currentProfileBehaviour = profileBehaviours[workingProfileName] ?? gamingBehaviour;
+    setGamingBehaviourForProfile(workingProfileName, { ...currentProfileBehaviour, [key]: value });
+  }, [gamingBehaviour, profileBehaviours, workingProfileName, setGamingBehaviour, setGamingBehaviourForProfile]);
 
   const setProfileLauncher = useCallback((profileName: string, nextLauncher: LauncherType) => {
     setProfileLaunchers((current) => ({ ...current, [profileName]: nextLauncher }));
@@ -118,7 +118,7 @@ export function useProfileMutations({
     markUnsavedChanges();
 
     if (workingProfileName === profileName) {
-      setHotkeys((current) => ({ ...current, pcGamingMode: key === 'enterProfile' ? normalizedValue : current.pcGamingMode }));
+      setHotkeys((current) => ({ ...current, gamingMode: key === 'enterProfile' ? normalizedValue : current.gamingMode }));
     }
     console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileHotkeys[profileName]?.enterProfile ?? '', Candidate: normalizedValue, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
     return true;
@@ -174,7 +174,7 @@ export function useProfileMutations({
 
   return {
     setProfileLauncher,
-    updatePcGamingBehaviourFlag,
+    updateGamingBehaviourFlag,
     updateProfileHotkey,
     updateProfileControllerShortcut,
     updateWorkModeControllerShortcut,

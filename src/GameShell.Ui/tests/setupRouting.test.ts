@@ -14,12 +14,12 @@ test('fresh configuration opens FirstRun only after hydration', () => {
 
 test('Dashboard add profile enters CreateProfile with exactly four profile steps', () => {
   assert.equal(resolveDashboardSetupMode('create'), 'CreateProfile');
-  assert.deepEqual(getSetupSteps('CreateProfile').map((step) => step.id), ['gaming-display', 'launcher', 'console-behaviour', 'controller']);
+  assert.deepEqual(getSetupSteps('CreateProfile').map((step) => step.id), ['gaming-display', 'launcher', 'profile-behaviour', 'controller']);
 });
 
 test('Dashboard profile edit enters EditProfile with exactly four profile steps', () => {
   assert.equal(resolveDashboardSetupMode('edit-profile'), 'EditProfile');
-  assert.deepEqual(getSetupSteps('EditProfile').map((step) => step.id), ['gaming-display', 'launcher', 'console-behaviour', 'controller']);
+  assert.deepEqual(getSetupSteps('EditProfile').map((step) => step.id), ['gaming-display', 'launcher', 'profile-behaviour', 'controller']);
 });
 
 test('profile setup modes do not expose global settings', () => {
@@ -30,7 +30,7 @@ test('profile setup modes do not expose global settings', () => {
 });
 
 test('FirstRun exposes all global sections', () => {
-  assert.deepEqual(getSetupSteps('FirstRun').map((step) => step.id), ['welcome', 'gaming-display', 'launcher', 'console-behaviour', 'controller', 'work-behaviour', 'work-shortcuts', 'app-behaviour', 'finish']);
+  assert.deepEqual(getSetupSteps('FirstRun').map((step) => step.id), ['welcome', 'gaming-display', 'launcher', 'profile-behaviour', 'controller', 'work-behaviour', 'work-shortcuts', 'app-behaviour', 'finish']);
 });
 
 test('Dashboard global settings remain separate from profile setup', () => {

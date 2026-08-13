@@ -8,7 +8,7 @@ export const initialStatus: AppStatus = {
   isBusy: false,
   displayMode: 'NativeDisplayConfig',
   selectedConsoleDisplay: null,
-  hasPcGamingLayout: false,
+  hasGamingProfiles: false,
   activeProfileName: null,
   activeLauncher: null,
   lastOperation: null,

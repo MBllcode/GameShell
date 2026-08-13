@@ -32,7 +32,7 @@ public sealed class ModeOrchestratorTests
     public async Task CompletedFirstRunOnStartup_DoesNotOverwriteActiveGamingMode()
     {
         var settings = new AppSettings { Ui = { IsFirstRunCompleted = true } };
-        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile });
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(settings),
             new FakeModeWorkflowService(),
@@ -42,9 +42,9 @@ public sealed class ModeOrchestratorTests
 
         var status = await orchestrator.GetStatusAsync();
 
-        Assert.Equal(GameShellMode.PcGaming.ToString(), status.CurrentMode);
+        Assert.Equal(GameShellMode.GamingProfile.ToString(), status.CurrentMode);
         Assert.Equal(ModeState.GameShell, status.State);
-        Assert.Equal(GameShellMode.PcGaming, runtime.State.CurrentMode);
+        Assert.Equal(GameShellMode.GamingProfile, runtime.State.CurrentMode);
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class ModeOrchestratorTests
             new FakeSettingsService(new AppSettings()),
             new FakeModeWorkflowService(order),
             new FakeDisplayTransitionService(order),
-            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming }),
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile }),
             NullLogger<ModeOrchestrator>.Instance);
 
         var result = await orchestrator.EnterWorkModeAsync();
@@ -108,15 +108,15 @@ public sealed class ModeOrchestratorTests
             Launcher = { Type = "Playnite" },
             Display =
             {
-                PcGamingProfiles = [new DisplayLayoutProfile { Name = "PC" }],
-                ActivePcGamingProfileName = "PC"
+                GamingProfiles = [new DisplayLayoutProfile { Name = "PC" }],
+                ActiveGamingProfileName = "PC"
             }
         };
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(settings),
             new FakeModeWorkflowService(),
             new FakeDisplayTransitionService(),
-            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming }),
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile }),
             NullLogger<ModeOrchestrator>.Instance);
 
         await orchestrator.EnterWorkModeAsync();
@@ -130,7 +130,7 @@ public sealed class ModeOrchestratorTests
     public async Task EnterWorkMode_DisplayFailureDoesNotRunPostWorkflowOrChangeRuntimeMode()
     {
         var order = new List<string>();
-        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile });
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(new AppSettings()),
             new FakeModeWorkflowService(order),
@@ -143,14 +143,14 @@ public sealed class ModeOrchestratorTests
         Assert.False(result.Success);
         Assert.Equal(ModeState.Error, result.CurrentState);
         Assert.Equal(["prepare-work", "display-work"], order);
-        Assert.Equal(GameShellMode.PcGaming, runtime.State.CurrentMode);
+        Assert.Equal(GameShellMode.GamingProfile, runtime.State.CurrentMode);
     }
 
     [Fact]
     public async Task EnterWorkMode_PostWorkflowFailureIsBestEffortAfterDisplaySuccess()
     {
         var order = new List<string>();
-        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile });
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(new AppSettings()),
             new FakeModeWorkflowService(order) { PostWorkResult = ModeWorkflowResult.Fail("desktop icons failed") },
@@ -168,7 +168,7 @@ public sealed class ModeOrchestratorTests
     [Fact]
     public async Task EnterWorkMode_CallerCancellationReturnsCancelledResult()
     {
-        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.PcGaming });
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile });
         var display = new FakeDisplayTransitionService { BlockUntilCancellation = true };
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(new AppSettings()),
@@ -217,7 +217,7 @@ public sealed class ModeOrchestratorTests
         {
             Display =
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile
                     {
@@ -256,17 +256,17 @@ public sealed class ModeOrchestratorTests
 
         Assert.Equal(ModeResultStatus.InvalidConfiguration, result.Status);
         Assert.Contains("zapisany tryb profilu", result.Message);
-        Assert.Equal(0, display.PcGamingCount);
+        Assert.Equal(0, display.GamingCount);
     }
 
     [Fact]
-    public async Task EnterProfile_RecoversExpectedModeAfterApplyingProfile()
+    public async Task EnterProfile_RecoversCapabilityRegressionAfterApplyingProfile()
     {
         var settings = new AppSettings
         {
             Display =
             {
-                PcGamingProfiles =
+                GamingProfiles =
                 [
                     new DisplayLayoutProfile
                     {
@@ -277,12 +277,18 @@ public sealed class ModeOrchestratorTests
                             [
                                 new ProfileDisplayTarget
                                 {
-                                    Identity = new DisplayIdentity { AdapterLuid = 1, TargetId = 7, EdidManufacturerId = 123, EdidProductCodeId = 456 },
+                                    Identity = new DisplayIdentity { FriendlyName = "Model X", AdapterLuid = 1, TargetId = 7, EdidIdsValid = true, EdidManufacturerId = 123, EdidProductCodeId = 456 },
                                     Enabled = true,
                                     Width = 3840,
                                     Height = 2160,
-                                    RefreshRateNumerator = 144,
-                                    RefreshRateDenominator = 1
+                                    RefreshPolicy = RefreshPolicy.AutoHighest,
+                                    CapabilityExpectation = new DisplayCapabilityExpectation
+                                    {
+                                        Width = 3840,
+                                        Height = 2160,
+                                        LastKnownGoodMaxRefreshNumerator = 144,
+                                        LastKnownGoodMaxRefreshDenominator = 1
+                                    }
                                 }
                             ]
                         }
@@ -292,7 +298,7 @@ public sealed class ModeOrchestratorTests
         };
         var display = new FakeDisplayTransitionService();
         var query = new RecoveringReadinessDisplayQuery();
-        display.OnPcGaming = () => query.Active = true;
+        display.OnGaming = () => query.Active = true;
         var evaluator = new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance);
         var recovery = new FakeDisplayRecoveryService(query);
         var orchestrator = new ModeOrchestrator(
@@ -308,7 +314,8 @@ public sealed class ModeOrchestratorTests
 
         Assert.True(result.Success, result.Message);
         Assert.Equal(1, recovery.AttemptCount);
-        Assert.Equal(1, display.PcGamingCount);
+        Assert.Equal(1, display.GamingCount);
+        Assert.Equal(144, settings.Display.GamingProfiles[0].DisplayTopology!.Displays[0].CapabilityExpectation!.MaxRefreshRateHz);
     }
 
     private sealed class FakeSettingsService : ISettingsService
@@ -396,25 +403,25 @@ public sealed class ModeOrchestratorTests
 
         public DisplayTransitionResult WorkModeResult { get; init; } = DisplayTransitionResult.Ok();
         public bool BlockUntilCancellation { get; init; }
-        public int PcGamingCount { get; private set; }
-        public Action? OnPcGaming { get; set; }
+        public int GamingCount { get; private set; }
+        public Action? OnGaming { get; set; }
 
         public Task<DisplayTransitionResult> EnterConsoleModeAsync(
             DisplayIdentity? consoleDisplay,
             CancellationToken cancellationToken = default)
         {
-            PcGamingCount++;
-            OnPcGaming?.Invoke();
+            GamingCount++;
+            OnGaming?.Invoke();
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
 
-        public Task<DisplayTransitionResult> EnterPcGamingModeAsync(
-            DisplayLayoutSnapshot? pcGamingLayout,
+        public Task<DisplayTransitionResult> EnterGamingModeAsync(
+            DisplayLayoutSnapshot? gamingLayout,
             DisplayIdentity? fallbackConsoleDisplay,
             CancellationToken cancellationToken = default)
         {
-            PcGamingCount++;
-            OnPcGaming?.Invoke();
+            GamingCount++;
+            OnGaming?.Invoke();
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
 
@@ -436,8 +443,8 @@ public sealed class ModeOrchestratorTests
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
 
-        public Task<DisplayTransitionResult> TestPcGamingLayoutAsync(
-            DisplayLayoutSnapshot? pcGamingLayout,
+        public Task<DisplayTransitionResult> TestGamingLayoutAsync(
+            DisplayLayoutSnapshot? gamingLayout,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(DisplayTransitionResult.Ok());

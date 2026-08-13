@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { AppBehaviourStep } from '../components/AppBehaviourStep';
-import { ConsoleBehaviourStep } from '../components/ConsoleBehaviourStep';
+import { ProfileBehaviourStep } from '../components/ProfileBehaviourStep';
 import { ControllerStep } from '../components/ControllerStep';
 import { DisplaysStep } from '../components/DisplaysStep';
 import { FinishStep } from '../components/FinishStep';
@@ -11,12 +11,12 @@ import { WorkBehaviourStep } from '../components/WorkBehaviourStep';
 import type { AppSettings, ControllerShortcutSettings, ControllerStatusInfo, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../types/bridge';
 import type { LauncherType } from '../utils/modes';
 
-type StepId = 'welcome' | 'gaming-display' | 'launcher' | 'console-behaviour' | 'work-behaviour' | 'work-shortcuts' | 'controller' | 'app-behaviour' | 'finish';
+type StepId = 'welcome' | 'gaming-display' | 'launcher' | 'profile-behaviour' | 'work-behaviour' | 'work-shortcuts' | 'controller' | 'app-behaviour' | 'finish';
 type PendingNavigationAction = 'goBack' | 'goNext' | 'returnToDashboard';
 type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
-type PcGamingBehaviourState = Pick<AppSettings['pcGaming'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>;
+type GamingBehaviourState = Pick<AppSettings['gaming'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>;
 type WorkBehaviourState = Pick<AppSettings['workMode'], 'closeLauncher' | 'showTaskbars' | 'showDesktopIcons' | 'doNotMinimizeWindows'>;
-type HotkeysState = { consoleMode: string; pcGamingMode: string; workMode: string };
+type HotkeysState = { consoleMode: string; gamingMode: string; workMode: string };
 type FinishOptions = { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean };
 type ProfileHotkeysMap = Record<string, { enterProfile: string }>;
 type ProfileLauncherMap = Record<string, LauncherType>;
@@ -55,8 +55,8 @@ export type ProfileSetupPageProps = {
   setLauncher: (launcher: LauncherType) => void;
   language: import('../i18n/language').SupportedLanguage;
   setLanguage: (value: import('../i18n/language').SupportedLanguage) => void;
-  pcGamingBehaviour: PcGamingBehaviourState;
-  onChangePcGamingBehaviour: (key: keyof PcGamingBehaviourState, value: boolean) => void;
+  gamingBehaviour: GamingBehaviourState;
+  onChangeGamingBehaviour: (key: keyof GamingBehaviourState, value: boolean) => void;
   workBehaviour: WorkBehaviourState;
   setWorkBehaviour: (behaviour: WorkBehaviourState) => void;
   hotkeys: HotkeysState;
@@ -80,7 +80,7 @@ export type ProfileSetupPageProps = {
   changeProfileHotkey: (value: string) => boolean;
   finishOptions: FinishOptions;
   setFinishOptions: (options: FinishOptions) => void;
-  pcGamingLayout: DisplayLayoutSnapshot | null;
+  gamingLayout: DisplayLayoutSnapshot | null;
   profileLaunchers: ProfileLauncherMap;
   profileHotkeys: ProfileHotkeysMap;
   activeProfileName: string | null;
@@ -102,7 +102,7 @@ export type ProfileSetupPageProps = {
 };
 
 export function ProfileSetupPage({
-  activeSteps, resolvedFlowPosition, currentStep, stepIndex, isVeryFirstConfiguration, isNonFirstRunEditingSession, isEditingSection, isCreatingProfileFlow, isSaving, canGoBack, isLastStep, canSelectSidebarStep, footerMessage, hasError, statusLastError, pendingOverwriteProfileAction, showOverwriteProfileDialog, showUnsavedDialog, displays, profiles, selectedProfileName, displayValidationState, displayDraftChange, setDisplayValidationState, isRefreshingDisplays, displayListError, refreshDisplays, launcher, setLauncher, language, setLanguage, pcGamingBehaviour, onChangePcGamingBehaviour, workBehaviour, setWorkBehaviour, hotkeys, profileHotkeyValidationError, profileControllerValidationError, onHotkeyValidationErrorChange, workModeControllerShortcut, profileControllerShortcut, controllerStatus, captureSuccessButtons, rejectedControllerButtons, onControllerValidationErrorChange, controllerNotice, startControllerCapture, cancelControllerCapture, removeWorkControllerShortcut, removeProfileControllerShortcut, removeWorkHotkey, removeProfileHotkey, changeWorkHotkey, changeProfileHotkey, finishOptions, setFinishOptions, pcGamingLayout, profileLaunchers, profileHotkeys, activeProfileName, requestNavigation, saveAndReturnToDashboard, handleOverwriteConfirm, handleUnsavedSave, handleUnsavedDiscard, setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog, handleSidebarStepSelect, updateProfileLauncher, updateProfileHotkey, updateProfileControllerShortcut, updateWorkModeHotkey, updateWorkModeControllerShortcut
+  activeSteps, resolvedFlowPosition, currentStep, stepIndex, isVeryFirstConfiguration, isNonFirstRunEditingSession, isEditingSection, isCreatingProfileFlow, isSaving, canGoBack, isLastStep, canSelectSidebarStep, footerMessage, hasError, statusLastError, pendingOverwriteProfileAction, showOverwriteProfileDialog, showUnsavedDialog, displays, profiles, selectedProfileName, displayValidationState, displayDraftChange, setDisplayValidationState, isRefreshingDisplays, displayListError, refreshDisplays, launcher, setLauncher, language, setLanguage, gamingBehaviour, onChangeGamingBehaviour, workBehaviour, setWorkBehaviour, hotkeys, profileHotkeyValidationError, profileControllerValidationError, onHotkeyValidationErrorChange, workModeControllerShortcut, profileControllerShortcut, controllerStatus, captureSuccessButtons, rejectedControllerButtons, onControllerValidationErrorChange, controllerNotice, startControllerCapture, cancelControllerCapture, removeWorkControllerShortcut, removeProfileControllerShortcut, removeWorkHotkey, removeProfileHotkey, changeWorkHotkey, changeProfileHotkey, finishOptions, setFinishOptions, gamingLayout, profileLaunchers, profileHotkeys, activeProfileName, requestNavigation, saveAndReturnToDashboard, handleOverwriteConfirm, handleUnsavedSave, handleUnsavedDiscard, setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog, handleSidebarStepSelect, updateProfileLauncher, updateProfileHotkey, updateProfileControllerShortcut, updateWorkModeHotkey, updateWorkModeControllerShortcut
 }: ProfileSetupPageProps) {
   const { t } = useTranslation();
   const sidebarSteps = activeSteps.map((step) => ({
@@ -115,14 +115,14 @@ export function ProfileSetupPage({
   const renderStep = (): ReactNode => {
     const stepNumber = resolvedFlowPosition + 1;
     if (currentStep.id === 'welcome') return <WelcomeStep stepNumber={stepIndex + 1} language={language} setLanguage={setLanguage} />;
-    if (currentStep.id === 'gaming-display') return <DisplaysStep stepNumber={stepNumber} displays={displays} pcGamingProfiles={profiles} selectedProfileName={selectedProfileName} prefillFromSelectedProfile={isEditingSection} onDraftChange={displayDraftChange} validationState={displayValidationState} onValidationStateChange={setDisplayValidationState} isRefreshingDisplays={isRefreshingDisplays} displayListError={displayListError} refreshDisplays={refreshDisplays} />;
-    if (currentStep.id === 'launcher') return <LauncherStep stepNumber={stepNumber} pcGamingProfiles={profiles} selectedProfileName={selectedProfileName} launcher={launcher} setLauncher={updateProfileLauncher} />;
-    if (currentStep.id === 'console-behaviour') return <ConsoleBehaviourStep stepNumber={stepNumber} pcGamingProfiles={profiles} selectedProfileName={selectedProfileName} pcGamingBehaviour={pcGamingBehaviour} onChangeBehaviourFlag={onChangePcGamingBehaviour} />;
+    if (currentStep.id === 'gaming-display') return <DisplaysStep stepNumber={stepNumber} displays={displays} gamingProfiles={profiles} selectedProfileName={selectedProfileName} prefillFromSelectedProfile={isEditingSection} onDraftChange={displayDraftChange} validationState={displayValidationState} onValidationStateChange={setDisplayValidationState} isRefreshingDisplays={isRefreshingDisplays} displayListError={displayListError} refreshDisplays={refreshDisplays} />;
+    if (currentStep.id === 'launcher') return <LauncherStep stepNumber={stepNumber} gamingProfiles={profiles} selectedProfileName={selectedProfileName} launcher={launcher} setLauncher={updateProfileLauncher} />;
+    if (currentStep.id === 'profile-behaviour') return <ProfileBehaviourStep stepNumber={stepNumber} gamingProfiles={profiles} selectedProfileName={selectedProfileName} gamingBehaviour={gamingBehaviour} onChangeBehaviourFlag={onChangeGamingBehaviour} />;
     if (currentStep.id === 'work-behaviour') return <WorkBehaviourStep stepNumber={stepNumber} behaviour={workBehaviour} setBehaviour={setWorkBehaviour} />;
-    if (currentStep.id === 'work-shortcuts') return <ControllerStep stepNumber={stepNumber} pcGamingProfiles={[]} selectedProfileName={t('setup.workMode')} isWorkMode hotkeys={hotkeys} hotkeyValidationError={profileHotkeyValidationError} onHotkeyValidationErrorChange={onHotkeyValidationErrorChange} controllerShortcut={workModeControllerShortcut} controllerValidationError={profileControllerValidationError} controllerStatus={controllerStatus} captureSuccessButtons={captureSuccessButtons} rejectedControllerButtons={rejectedControllerButtons} onControllerValidationErrorChange={onControllerValidationErrorChange} controllerNotice={controllerNotice} onStartControllerCapture={() => startControllerCapture('WorkMode')} onCancelControllerCapture={cancelControllerCapture} onRemoveControllerShortcut={removeWorkControllerShortcut} onRemoveHotkey={removeWorkHotkey} onChangeHotkey={(_, value) => changeWorkHotkey(value)} />;
-    if (currentStep.id === 'controller') return <ControllerStep stepNumber={stepNumber} pcGamingProfiles={profiles} selectedProfileName={selectedProfileName} hotkeys={hotkeys} hotkeyValidationError={profileHotkeyValidationError} onHotkeyValidationErrorChange={onHotkeyValidationErrorChange} controllerShortcut={profileControllerShortcut} controllerValidationError={profileControllerValidationError} controllerStatus={controllerStatus} captureSuccessButtons={captureSuccessButtons} rejectedControllerButtons={rejectedControllerButtons} onControllerValidationErrorChange={onControllerValidationErrorChange} controllerNotice={controllerNotice} onStartControllerCapture={() => startControllerCapture(selectedProfileName)} onCancelControllerCapture={cancelControllerCapture} onRemoveControllerShortcut={removeProfileControllerShortcut} onRemoveHotkey={removeProfileHotkey} onChangeHotkey={(_, value) => changeProfileHotkey(value)} />;
+    if (currentStep.id === 'work-shortcuts') return <ControllerStep stepNumber={stepNumber} gamingProfiles={[]} selectedProfileName={t('setup.workMode')} isWorkMode hotkeys={hotkeys} hotkeyValidationError={profileHotkeyValidationError} onHotkeyValidationErrorChange={onHotkeyValidationErrorChange} controllerShortcut={workModeControllerShortcut} controllerValidationError={profileControllerValidationError} controllerStatus={controllerStatus} captureSuccessButtons={captureSuccessButtons} rejectedControllerButtons={rejectedControllerButtons} onControllerValidationErrorChange={onControllerValidationErrorChange} controllerNotice={controllerNotice} onStartControllerCapture={() => startControllerCapture('WorkMode')} onCancelControllerCapture={cancelControllerCapture} onRemoveControllerShortcut={removeWorkControllerShortcut} onRemoveHotkey={removeWorkHotkey} onChangeHotkey={(_, value) => changeWorkHotkey(value)} />;
+    if (currentStep.id === 'controller') return <ControllerStep stepNumber={stepNumber} gamingProfiles={profiles} selectedProfileName={selectedProfileName} hotkeys={hotkeys} hotkeyValidationError={profileHotkeyValidationError} onHotkeyValidationErrorChange={onHotkeyValidationErrorChange} controllerShortcut={profileControllerShortcut} controllerValidationError={profileControllerValidationError} controllerStatus={controllerStatus} captureSuccessButtons={captureSuccessButtons} rejectedControllerButtons={rejectedControllerButtons} onControllerValidationErrorChange={onControllerValidationErrorChange} controllerNotice={controllerNotice} onStartControllerCapture={() => startControllerCapture(selectedProfileName)} onCancelControllerCapture={cancelControllerCapture} onRemoveControllerShortcut={removeProfileControllerShortcut} onRemoveHotkey={removeProfileHotkey} onChangeHotkey={(_, value) => changeProfileHotkey(value)} />;
     if (currentStep.id === 'app-behaviour') return <AppBehaviourStep stepNumber={stepNumber} finishOptions={finishOptions} setFinishOptions={setFinishOptions} language={language} setLanguage={setLanguage} showLanguageSelector={!isVeryFirstConfiguration} />;
-    return <FinishStep stepNumber={stepNumber} launcher={launcher} pcGamingLayout={pcGamingLayout} pcGamingProfileLaunchers={profileLaunchers} pcGamingProfileHotkeys={profileHotkeys} activeProfileName={activeProfileName} />;
+    return <FinishStep stepNumber={stepNumber} launcher={launcher} gamingLayout={gamingLayout} gamingProfileLaunchers={profileLaunchers} gamingProfileHotkeys={profileHotkeys} activeProfileName={activeProfileName} />;
   };
 
   return <main className="app-shell"><section className="setup-window" aria-labelledby="app-title">

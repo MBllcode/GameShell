@@ -2,19 +2,15 @@ using GameShell.Core.Models;
 
 namespace GameShell.Core.Services;
 
-public enum DisplayIdentityMatchConfidence
-{
-    None,
-    WeakFriendlyName,
-    EdidProduct,
-    EdidProductAndConnector,
-    ExactMonitorDevicePath
-}
-
 public static class DisplayIdentityMatcher
 {
     public static DisplayIdentityMatchConfidence GetMatchConfidence(DisplayIdentity saved, DisplayIdentity detected)
     {
+        if (HasSameAdapterAndTarget(saved, detected))
+        {
+            return DisplayIdentityMatchConfidence.AdapterAndTargetRoute;
+        }
+
         if (!string.IsNullOrWhiteSpace(saved.MonitorDevicePath)
             && !string.IsNullOrWhiteSpace(detected.MonitorDevicePath)
             && string.Equals(saved.MonitorDevicePath, detected.MonitorDevicePath, StringComparison.OrdinalIgnoreCase))
@@ -22,8 +18,8 @@ public static class DisplayIdentityMatcher
             return DisplayIdentityMatchConfidence.ExactMonitorDevicePath;
         }
 
-        var hasSavedEdid = saved.EdidManufacturerId != 0 && saved.EdidProductCodeId != 0;
-        var hasDetectedEdid = detected.EdidManufacturerId != 0 && detected.EdidProductCodeId != 0;
+        var hasSavedEdid = saved.EdidIdsValid && saved.EdidManufacturerId != 0 && saved.EdidProductCodeId != 0;
+        var hasDetectedEdid = detected.EdidIdsValid && detected.EdidManufacturerId != 0 && detected.EdidProductCodeId != 0;
         if (hasSavedEdid
             && hasDetectedEdid
             && saved.EdidManufacturerId == detected.EdidManufacturerId
@@ -48,7 +44,10 @@ public static class DisplayIdentityMatcher
 
     public static bool IsReliableMatch(DisplayIdentity saved, DisplayIdentity detected)
     {
-        return GetMatchConfidence(saved, detected) >= DisplayIdentityMatchConfidence.EdidProduct;
+        return GetMatchConfidence(saved, detected) is DisplayIdentityMatchConfidence.AdapterAndTargetRoute
+            or DisplayIdentityMatchConfidence.ExactMonitorDevicePath
+            or DisplayIdentityMatchConfidence.EdidProduct
+            or DisplayIdentityMatchConfidence.EdidProductAndConnector;
     }
 
     public static int GetStableIdentityScore(DisplayIdentity saved, DisplayIdentity detected)
@@ -76,7 +75,9 @@ public static class DisplayIdentityMatcher
             score += 15;
         }
 
-        if (saved.EdidManufacturerId != 0
+        if (saved.EdidIdsValid
+            && detected.EdidIdsValid
+            && saved.EdidManufacturerId != 0
             && saved.EdidProductCodeId != 0
             && saved.EdidManufacturerId == detected.EdidManufacturerId
             && saved.EdidProductCodeId == detected.EdidProductCodeId)
@@ -92,5 +93,15 @@ public static class DisplayIdentityMatcher
         }
 
         return score;
+    }
+
+    private static bool HasSameAdapterAndTarget(DisplayIdentity saved, DisplayIdentity detected)
+    {
+        return saved.AdapterLuid != 0
+            && detected.AdapterLuid != 0
+            && saved.TargetId != 0
+            && detected.TargetId != 0
+            && saved.AdapterLuid == detected.AdapterLuid
+            && saved.TargetId == detected.TargetId;
     }
 }

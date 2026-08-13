@@ -127,7 +127,7 @@ test('dashboard footer strings use Polish translations instead of falling back t
 
 test('runtime status and layout summaries stay localized with the active language', () => {
   const translations: Record<string, string> = {
-    'status.gamingMode': 'Tryb gamingowy',
+    'status.gamingProfile': 'Profil gamingowy',
     'status.workMode': 'Work Mode',
     'status.session.launchingProfile': 'uruchamianie profilu',
     'profile.summaryNoActiveDisplays': 'Brak aktywnych ekranów',
@@ -135,7 +135,7 @@ test('runtime status and layout summaries stay localized with the active languag
   };
   const t = (key: string) => translations[key] ?? key;
 
-  assert.equal(formatCurrentMode({ currentMode: 'Console', state: 'GameShell' } as any, t), 'Tryb gamingowy');
+  assert.equal(formatCurrentMode({ currentMode: 'Console', state: 'GameShell' } as any, t), 'Profil gamingowy');
   assert.equal(formatSessionState('EnteringProfile', t), 'uruchamianie profilu');
   assert.equal(summarizeLayout({ displays: [{ isActive: false }] } as any, t), 'Brak aktywnych ekranów');
   assert.equal(summarizeLayout({ displays: [{ isActive: true, identity: { friendlyName: '' }, width: 1920, height: 1080 }] } as any, t), 'Nieznany ekran 1920 × 1080');
@@ -187,7 +187,7 @@ test('first-run components rely on translation keys rather than hardcoded Polish
     '../src/components/AppBehaviourStep.tsx',
     '../src/components/DisplaysStep.tsx',
     '../src/components/LauncherStep.tsx',
-    '../src/components/ConsoleBehaviourStep.tsx',
+    '../src/components/ProfileBehaviourStep.tsx',
     '../src/components/WorkBehaviourStep.tsx',
     '../src/components/ControllerStep.tsx',
     '../src/components/FinishStep.tsx',

@@ -1,4 +1,4 @@
-﻿# GameShell - Project State
+# GameShell - Project State
 
 Aktualne, robocze podsumowanie stanu projektu.
 
@@ -11,11 +11,15 @@ Aktualne, robocze podsumowanie stanu projektu.
 
 ## Ostatnia iteracja zmian
 
-- Uzupełniono flow setupu i walidację kolejnych kroków: `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ConsoleBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep` oraz `ControllerStep` są spójne pod względem lokalnych błędów, deterministycznego zapisu draftu oraz bezpieczniejszej nawigacji po pierwszej konfiguracji.
+- Uzupełniono flow setupu i walidację kolejnych kroków: `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ProfileBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep` oraz `ControllerStep` są spójne pod względem lokalnych błędów, deterministycznego zapisu draftu oraz bezpieczniejszej nawigacji po pierwszej konfiguracji.
 - Draft konfiguracji ekranów jest teraz commitowany przed przejściem dalej i przed zapisaniem profilu, co zapobiega sytuacjom, w których UI zapisuje stale snapshot bez pełnej, znormalizowanej geometrii.
 - Hotkeyi profili są normalizowane i weryfikowane lokalnie; podczas `NASLUCHIWANIE` aplikacja chwilowo wyrejestrowuje globalne skróty, aby poprawnie przechwycić i zwalidować kombinację bez konfliktów.
 - Zajęta kombinacja klawiatury lub kontrolera pozostaje tymczasowo widoczna na czerwono wraz z komunikatem walidacyjnym przez `2,8 s`; następnie pole wraca do poprzednio zapisanego skrótu albo pozostaje puste. Błąd blokuje zapis oraz wyjście do dashboardu i może pojawić się ponownie przy kolejnej próbie.
 - Końcowy przycisk flow dodawania profilu ma etykietę `Zapisz zmiany`; jego działanie zapisuje nowy profil i dopiero potem wraca do dashboardu.
+- Readiness profilu rozdziela obecność fizycznego route od bieżącej capability handshake. Dopasowanie nie wymaga `FriendlyName`: preferowane są `AdapterLuid + TargetId`, stabilna ścieżka monitora oraz poprawne EDID/connector fields; nazwy pozostają diagnostyczne i nie ma aliasów Samsung/S90F.
+- `ProfileDisplayTarget` może przechowywać osobne `CapabilityExpectation` z rozdzielczością i last-known-good maximum refresh. Przy `AutoHighest` niższe aktualne maksimum daje `Degraded/CapabilityRegression`, a oczekiwanie jest aktualizowane wyłącznie po zdrowej obserwacji i nigdy nie jest obniżane przez słabszy handshake.
+- Po rozpoznaniu fizycznego targetu recovery jest uruchamiane również dla `CapabilityRegression`; po bounded recovery capability jest ponownie odczytywana. Aktywacja jest kontynuowana tylko po wyniku `Ready`.
+- Diagnostyka readiness zapisuje `[DISPLAY PHYSICAL MATCH]` oraz `[DISPLAY CAPABILITY READINESS]` z nazwami, route, EDID validity, capability i powodem wyniku.
 - Zachowanie startu i autostartu jest spójne w zwykłym starcie i scenariuszach fallbackowych: `Start with Windows` i `Start minimized to tray` są zastosowane w ścieżce runtime, a nie tylko w dekoracji UI.
 - Aktualna dokumentacja UI jest utrzymywana w `docs/ui.md` jako aktywny standard zgodny z obecnym green-v2 theme, motion systemem i zasadami dla sidebaru, profili i walidacji.
 
@@ -65,8 +69,8 @@ Aktualne, robocze podsumowanie stanu projektu.
 
 ## Tryby aplikacji
 
-- `Console Mode`: aktywuje jeden wybrany ekran konsolowy.
-- `PC Gaming`: stosuje zapisany profil ekranow (fallback do Console Mode).
+- `Console Mode`: kompatybilnosciowa sciezka aktywujaca jeden wybrany ekran.
+- `Gaming profiles`: stosuja konfigurowalne przez uzytkownika profile ekranow i zachowania, niezaleznie od tego, czy docelowym setupem jest PC, projektor, TV czy inna kombinacja ekranow.
 - `Work Mode`: przywraca `WorkReturnLayout` zapisany przed sesja gamingowa.
 
 ## Console Session i launcher lifecycle
@@ -84,7 +88,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - `ConsoleSessionManager` uniewaznia `SessionGeneration` przy wyjsciu z sesji gamingowej. Opoznione callbacki monitora i recovery sa ignorowane, gdy stan nie jest juz `GameActive`/`ReturningToLauncher`, wiec nie moga przywrocic `LauncherActive` po Work Mode.
 - Wejscie do Work Mode z dashboardu i z pada korzysta z tego samego `IModeCommandService`. Skrot SDL3 uruchamia komendę z watku pollingu, dlatego `WebViewBridge.NotifyStatusChanged` musi publikowac event przez WPF Dispatcher; bez tego backend zmienial stan, ale WebView2 nie odswiezal sidebara.
 - Przy diagnostyce przeplywu uzywamy logow `[WORKMODE REQUEST]`, `[WORKMODE SESSION COMMIT]`, `[WORKMODE BACKEND COMMIT]`, `[STATUSCHANGED EMIT]`, `[STATUSCHANGED RECEIVED]`, `[GETSTATUS RESPONSE]`, `[UI STATUS RECEIVED]` i `[DASHBOARD RUNTIME STATE]`. Log aplikacji jest w `%LOCALAPPDATA%\GameShell\Logs\gameshell-yyyy-MM-dd.log`.
-- `IGameSessionMonitor` jest osobnym kontraktem. Implementacja Windows sprawdza tylko jawnie skonfigurowane `PcGaming.GameProcessNames`; pusta lista oznacza brak heurystycznego wykrywania gry.
+- `IGameSessionMonitor` jest osobnym kontraktem. Implementacja Windows sprawdza tylko jawnie skonfigurowane `Gaming.GameProcessNames`; pusta lista oznacza brak heurystycznego wykrywania gry.
 - Po `GameDetected` GameShell zmienia wyłącznie stan sesji na `GameActive` i monitoruje zakończenie skonfigurowanego procesu. Nie modyfikuje HWND gry, jej stylu, rozmiaru, pozycji ani focusu.
 - GameShell celowo nie wymusza fullscreen/windowed/borderless, aspect ratio, wewnętrznej rozdzielczości, `Alt+Enter` ani syntetycznego inputu. Te ustawienia pozostają odpowiedzialnością gry.
 - `ILauncherRecoveryStrategy` dziala tylko po `GameExited`: czeka 1500 ms na wlasny powrot launchera, ponownie wyszukuje widoczne nietoolowe okno Playnite, a potem wykonuje najwyzej dwie proby `ShowWindow(SW_RESTORE)`, `BringWindowToTop` i `SetForegroundWindow`, sprawdzajac PID foregroundu po kazdej probie.
@@ -140,16 +144,18 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Brak `window.confirm` dla standardowego `Zapisz zmiany`.
 - Modal nadpisania pojawia sie tylko przy rzeczywistym konflikcie nazwy z innym profilem.
 - Launcher i ustawienia profilu nie sa nadpisywane starym snapshotem po edycji ekranow.
-- Jawne `null` dla pustego `pcGamingLayout` i `activePcGamingProfileName` jest zachowywane podczas zapisu, aby walidator nie odtwarzal profilu `Domyslny`.
+- Jawne `null` dla pustego `gamingLayout` i `activeGamingProfileName` jest zachowywane podczas zapisu, aby walidator nie odtwarzal profilu `Domyslny`.
+- Nazewnictwo domenowe jest ujednolicone wokol `GamingProfile`, `GamingProfiles` i `GamingSettings`. Stare klucze `pcGaming*` sa przyjmowane tylko przez jednorazowa migracje wczytywania ustawien; nowe zapisy uzywaja nazw kanonicznych.
+- Kontrakt nazewniczy jest celowo rozdzielony: `Work Mode` oraz konfigurowalne `Gaming profiles` to obszary produktu, a `Console Mode` pozostaje tylko kompatybilnosciowa sciezka techniczna. Friendly names ekranow sa diagnostyczne i nie tworza aliasow modeli.
 - `SettingsService` zapisuje ustawienia atomowo: serializacja i walidacja odbywaja sie przed otwarciem pliku docelowego, nastepnie tworzony jest plik `.tmp`, flush do dysku i `File.Move` na miejsce `settings.json`.
 - Backup `.bak` jest aktualizowany w bezpiecznej sekwencji; przy niepoprawnym albo uszkodzonym `settings.json` loader preferuje poprawny backup zamiast resetu do pierwszego uruchomienia.
 - Pliki z uszkodzeniem sa zachowywane jako kopie `.corrupt-<timestamp>` z zachowaniem diagnostyki, a w przypadku braku poprawnego glownego pliku i backupu system tworzy domyslne ustawienia dopiero po potwierdzeniu, ze brak bezpiecznego odzyskania.
-- Weryfikacja: `SettingsServiceTests` 25/25, `dotnet test GameShell.sln` 118/118, 0 failed.
+- Weryfikacja: `SettingsServiceTests` obejmuje migracje i zapis nazw kanonicznych; `dotnet test GameShell.sln` 124/124, 0 failed.
 
 ## Desktop host i runtime
 
-- Tray menu: Open, Enter Console, Enter PC Gaming, Enter Work, Restore previous display layout, Exit.
-- CLI: `--gaming`, `--pcgaming`, `--work`.
+- Tray menu: Open, Gaming profiles, Work Mode, Exit.
+- CLI: `--console`, `--profile`, `--work`; `--gaming` i `--pcgaming` pozostaja aliasami kompatybilnosciowymi.
 - Single-instance forwarding: druga instancja przekazuje komende do dzialajacej.
 - Domyslny rozmiar okna: 1360x860, minimum 1040x720, z zapamietywaniem i bezpiecznym clampem pozycji.
 - `Startuj z Windows` ustawia wpis autostartu Windows dla aktualnej formy uruchomienia aplikacji.
@@ -165,7 +171,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja tego etapu: `dotnet test GameShell.sln` -> `118/118` passed, `SettingsServiceTests` -> `25/25` passed, `npm run build` oraz build .NET wykonane bez bledow; pakowanie EXE ostatnio odpalane po finalnej poprawce stanu repo.
+- Ostatnia walidacja tego etapu: `dotnet test GameShell.sln` -> `124/124` passed, testy UI refaktoryzowanych obszarow -> `37/37` passed, `npm run test:encoding`, `npm run build` oraz build .NET wykonane bez bledow; bundle UI skopiowano do WPF `wwwroot` przez `build.ps1`.
 
 ## Utrzymanie repo
 

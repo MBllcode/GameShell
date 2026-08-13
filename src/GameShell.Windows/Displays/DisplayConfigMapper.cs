@@ -67,6 +67,7 @@ internal sealed class DisplayConfigMapper
         {
             MonitorDevicePath = path.MonitorDevicePath,
             FriendlyName = path.MonitorFriendlyName,
+            EdidIdsValid = path.HasEdid,
             EdidManufacturerId = path.EdidManufacturerId,
             EdidProductCodeId = path.EdidProductCodeId,
             ConnectorInstance = path.ConnectorInstance,

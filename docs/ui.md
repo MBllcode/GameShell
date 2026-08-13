@@ -1,4 +1,4 @@
-﻿# UI Guidelines (Current)
+# UI Guidelines (Current)
 
 To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly usuniete.
 
@@ -73,6 +73,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Przy przeciaganiu dziala snap krawedziowy oraz ograniczony alignment snap. Resolver kolizji nie pozwala zakonczyc drag z dodatnim overlapem; dotykajace krawedzie i narożniki sa poprawne.
 - Primary moze byc wizualnie ustawiony w dowolnym miejscu. Dopiero snapshot runtime jest normalizowany do primary `0,0`, bez przesuwania draftu w edytorze.
 - Przed wywolaniem DisplayConfig topology runtime sprawdza jeden primary, rozmiary, overlap i unikalnosc fizycznych targetow. Bledna geometria zatrzymuje apply z opisem wewnetrznego bledu.
+- Readiness profilu nie opiera obecności fizycznego ekranu na `FriendlyName`; nazwa jest tylko informacją diagnostyczną. Przy tym samym route, ale słabszym handshake, runtime raportuje `Degraded/CapabilityRegression` i uruchamia istniejący bounded recovery.
 - Diagnostyke apply czytamy z logu `[DISPLAY TOPOLOGY APPLY]`; wspolrzedne w tym logu sa wspolrzednymi przekazanymi do Windows, nie pikselami canvasa.
 - Pole `Odświeżanie` zachowuje szerokosc i geometrie pozostalych pol, ale uzywa `appearance: none`, prawego paddingu `38px` oraz wlasnego subtelnego chevrona ustawionego `13px` od prawej ramki. Chevron ma `pointer-events: none`, a tekst opcji nie nachodzi na niego.
 
@@ -114,4 +115,10 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - `npm run test:encoding` w `src/GameShell.Ui`
 - `dotnet build GameShell.sln`
 - (zalecane) `dotnet test GameShell.sln`
+
+## Nazewnictwo domenowe
+
+- W UI i bridge'u uÅ¼ywamy `GamingProfile`/`GamingProfiles` dla konfiguracji gamingowych; `Console Mode` pozostaje wyÅ‚Ä…cznie technicznym scenariuszem kompatybilnoÅ›ciowym.
+- Nowe komponenty, hooki i komunikaty powinny używać `gamingProfile`/`gamingProfiles`, a nie `pcGaming`.
+- Nazwa ekranu służy do prezentacji i diagnostyki; UI nie powinno dodawać aliasów zależnych od producenta lub modelu.
 

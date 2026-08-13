@@ -4,7 +4,7 @@ import { normalizeHotkeyForDisplay, normalizeHotkeyValue } from '../../utils/hot
 import { toLauncherType, type LauncherType } from '../../utils/modes.ts';
 
 type ProfileHotkeysState = { enterProfile: string };
-type PcGamingBehaviourState = {
+type GamingBehaviourState = {
   hideDesktopIcons: boolean;
   hideTaskbar: boolean;
   closeVisibleWindows: boolean;
@@ -14,16 +14,16 @@ type PcGamingBehaviourState = {
   startLauncher: boolean;
   bringLauncherToForeground: boolean;
 };
-type PcGamingProfileBehaviourMap = Record<string, PcGamingBehaviourState>;
-type PcGamingProfileLauncherMap = Record<string, LauncherType>;
-type PcGamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
-type PcGamingProfileControllerShortcutMap = Record<string, ControllerShortcutSettings | null>;
+type GamingProfileBehaviourMap = Record<string, GamingBehaviourState>;
+type GamingProfileLauncherMap = Record<string, LauncherType>;
+type GamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
+type GamingProfileControllerShortcutMap = Record<string, ControllerShortcutSettings | null>;
 
-export function normalizePcGamingProfileName(value: string) {
+export function normalizeGamingProfileName(value: string) {
   return value.trim().toUpperCase();
 }
 
-export function toPcGamingBehaviourState(behaviour: Partial<PcGamingBehaviourState> | AppSettings['pcGaming'] | null | undefined): PcGamingBehaviourState {
+export function toGamingBehaviourState(behaviour: Partial<GamingBehaviourState> | AppSettings['gaming'] | null | undefined): GamingBehaviourState {
   return {
     hideDesktopIcons: behaviour?.hideDesktopIcons ?? true,
     hideTaskbar: behaviour?.hideTaskbar ?? true,
@@ -36,22 +36,22 @@ export function toPcGamingBehaviourState(behaviour: Partial<PcGamingBehaviourSta
   };
 }
 
-export function resolvePcGamingBehaviourProfileName(activeName: string | null, profiles: DisplayLayoutProfile[]) {
-  return resolveActivePcGamingProfile(activeName, profiles)?.name ?? null;
+export function resolveGamingBehaviourProfileName(activeName: string | null, profiles: DisplayLayoutProfile[]) {
+  return resolveActiveGamingProfile(activeName, profiles)?.name ?? null;
 }
 
-export function buildProfileBehaviourMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>, savedBehaviours: NonNullable<AppSettings['display']['pcGamingProfileBehaviours']>, fallbackBehaviour: PcGamingBehaviourState): PcGamingProfileBehaviourMap {
-  const map: PcGamingProfileBehaviourMap = {};
+export function buildProfileBehaviourMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, savedBehaviours: NonNullable<AppSettings['display']['gamingProfileBehaviours']>, fallbackBehaviour: GamingBehaviourState): GamingProfileBehaviourMap {
+  const map: GamingProfileBehaviourMap = {};
   profiles.forEach((profile) => {
     const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
     const saved = savedBehaviours.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    map[profile.name] = toPcGamingBehaviourState(configured?.behaviour ?? saved?.behaviour ?? fallbackBehaviour);
+    map[profile.name] = toGamingBehaviourState(configured?.behaviour ?? saved?.behaviour ?? fallbackBehaviour);
   });
   return map;
 }
 
-export function buildProfileLauncherMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>, fallbackLauncher: LauncherType): PcGamingProfileLauncherMap {
-  const map: PcGamingProfileLauncherMap = {};
+export function buildProfileLauncherMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, fallbackLauncher: LauncherType): GamingProfileLauncherMap {
+  const map: GamingProfileLauncherMap = {};
   profiles.forEach((profile) => {
     const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
     map[profile.name] = toLauncherType(configured?.launcher?.type ?? fallbackLauncher);
@@ -59,8 +59,8 @@ export function buildProfileLauncherMap(profiles: DisplayLayoutProfile[], config
   return map;
 }
 
-export function buildProfileHotkeysMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>, fallbackHotkey: ProfileHotkeysState): PcGamingProfileHotkeysMap {
-  const map: PcGamingProfileHotkeysMap = {};
+export function buildProfileHotkeysMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, fallbackHotkey: ProfileHotkeysState): GamingProfileHotkeysMap {
+  const map: GamingProfileHotkeysMap = {};
   profiles.forEach((profile) => {
     const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
     map[profile.name] = {
@@ -70,8 +70,8 @@ export function buildProfileHotkeysMap(profiles: DisplayLayoutProfile[], configu
   return map;
 }
 
-export function buildProfileControllerShortcutMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['pcGamingProfileConfigurations']>, fallbackShortcut: ControllerShortcutSettings | null): PcGamingProfileControllerShortcutMap {
-  const map: PcGamingProfileControllerShortcutMap = {};
+export function buildProfileControllerShortcutMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, fallbackShortcut: ControllerShortcutSettings | null): GamingProfileControllerShortcutMap {
+  const map: GamingProfileControllerShortcutMap = {};
   profiles.forEach((profile) => {
     const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
     map[profile.name] = normalizeControllerShortcut(configured?.controllerShortcut ?? fallbackShortcut);
@@ -79,19 +79,19 @@ export function buildProfileControllerShortcutMap(profiles: DisplayLayoutProfile
   return map;
 }
 
-export function isDuplicateProfileEnterHotkey(profileName: string, candidateHotkey: string, profileHotkeys: PcGamingProfileHotkeysMap) {
+export function isDuplicateProfileEnterHotkey(profileName: string, candidateHotkey: string, profileHotkeys: GamingProfileHotkeysMap) {
   const normalizedCandidate = normalizeHotkeyValue(candidateHotkey);
   if (!normalizedCandidate) return false;
   const currentOwnerId = normalizeOwnerId(profileName);
   return Object.entries(profileHotkeys).some(([name, hotkeys]) => normalizeOwnerId(name) !== currentOwnerId && normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate);
 }
 
-export function isDuplicateWorkModeHotkey(candidateHotkey: string, profileHotkeys: PcGamingProfileHotkeysMap) {
+export function isDuplicateWorkModeHotkey(candidateHotkey: string, profileHotkeys: GamingProfileHotkeysMap) {
   const normalizedCandidate = normalizeHotkeyValue(candidateHotkey);
   return normalizedCandidate.length > 0 && Object.values(profileHotkeys).some((hotkeys) => normalizeHotkeyValue(hotkeys.enterProfile) === normalizedCandidate);
 }
 
-export function resolveActivePcGamingProfile(activeName: string | null, profiles: DisplayLayoutProfile[]) {
+export function resolveActiveGamingProfile(activeName: string | null, profiles: DisplayLayoutProfile[]) {
   if (profiles.length === 0) return null;
   if (activeName) {
     const matched = profiles.find((profile) => profile.name.toLowerCase() === activeName.toLowerCase());
@@ -111,4 +111,4 @@ function normalizeOwnerId(value: string) {
   return value.trim().toUpperCase();
 }
 
-export type { PcGamingBehaviourState, PcGamingProfileBehaviourMap, PcGamingProfileControllerShortcutMap, PcGamingProfileHotkeysMap, PcGamingProfileLauncherMap, ProfileHotkeysState };
+export type { GamingBehaviourState, GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap, ProfileHotkeysState };
