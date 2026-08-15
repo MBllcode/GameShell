@@ -8,3 +8,4 @@ dist/
 *.log
 src/GameShell.Ui/tsconfig.tsbuildinfo
 artifacts/installer/GameShell-*.exe
+artifacts/installer/GameShell.exe
