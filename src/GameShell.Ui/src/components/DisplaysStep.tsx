@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, DisplayModeQueryResult, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../types/bridge';
 import { normalizeGamingProfileName } from '../features/profiles/utils';
-import { computeTopologyBounds, createCanvasTransform, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
-import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, hasValidFixedRefresh, normalizeTopologyPrimary, profileTargetForAddition, sameIdentity, topologyFromLegacy } from '../utils/displays';
+import { computeTopologyBounds, createCanvasTransform, getDockingGuides, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
+import { areTopologiesEqual, getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, hasValidFixedRefresh, normalizeCanvasTopology, normalizeTopologyPrimary, profileTargetForAddition, sameIdentity, topologyFromLegacy } from '../utils/displays';
 import { sendBridgeCommand } from '../services/webViewBridge';
 
 type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
-type DragState = { identityKey: string; startX: number; startY: number; startRect: GeometryRect; transform: CanvasTransform; topologyRects: GeometryRect[] };
+type DragState = { identityKey: string; startX: number; startY: number; startRect: GeometryRect; currentRect: GeometryRect; transform: CanvasTransform; topologyRects: GeometryRect[]; hasMoved: boolean };
 
 type DisplaysStepProps = {
   stepNumber: number;
@@ -21,6 +21,10 @@ type DisplaysStepProps = {
   isRefreshingDisplays: boolean;
   displayListError: string | null;
   refreshDisplays: () => Promise<void>;
+  displayMode?: 'gaming' | 'work';
+  workModeLayout?: DisplayLayoutSnapshot | null;
+  workModeSavedLayout?: DisplayLayoutSnapshot | null;
+  onWorkModeDraftChange?: (topology: GamingProfileDisplayTopology) => void;
 };
 
 export function DisplaysStep({
@@ -34,15 +38,29 @@ export function DisplaysStep({
   onValidationStateChange,
   isRefreshingDisplays,
   displayListError,
-  refreshDisplays
+  refreshDisplays,
+  displayMode = 'gaming',
+  workModeLayout = null,
+  workModeSavedLayout = null,
+  onWorkModeDraftChange
 }: DisplaysStepProps) {
   const { t } = useTranslation();
-  const selectedProfile = gamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
+  const workModeProfile = useMemo(() => displayMode === 'work' && workModeSavedLayout
+    ? { name: t('setup.workMode'), layout: workModeSavedLayout, displayTopology: topologyFromLegacy(workModeSavedLayout) }
+    : null, [displayMode, t, workModeSavedLayout]);
+  const selectedProfile = workModeProfile ?? gamingProfiles.find((profile) => profile.name === selectedProfileName) ?? null;
   const [profileName, setProfileName] = useState('');
   const [topology, setTopology] = useState<GamingProfileDisplayTopology>({ displays: [] });
   const [selectedIdentityKey, setSelectedIdentityKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedDisplayModes, setSelectedDisplayModes] = useState<DisplayModeInfo[]>([]);
+  const lastPrefillKeyRef = useRef<string | null>(null);
+
+  const prefillKey = useMemo(() => {
+    if (!prefillFromSelectedProfile || !selectedProfile) return null;
+    const layout = displayMode === 'work' ? workModeSavedLayout ?? selectedProfile.layout : selectedProfile.layout;
+    return `${displayMode}:${selectedProfile.name}:${layout.id}:${layout.capturedAt}`;
+  }, [displayMode, prefillFromSelectedProfile, selectedProfile, workModeSavedLayout]);
 
   useEffect(() => {
     if (!validationState.showSelectionError) return;
@@ -53,17 +71,29 @@ export function DisplaysStep({
   }, [onValidationStateChange, validationState]);
 
   useEffect(() => {
-    if (!prefillFromSelectedProfile || !selectedProfile) return;
-    const nextTopology = getProfileTopology(selectedProfile);
+    if (!prefillFromSelectedProfile || !selectedProfile || !prefillKey) {
+      lastPrefillKeyRef.current = null;
+      return;
+    }
+    if (lastPrefillKeyRef.current === prefillKey) return;
+    lastPrefillKeyRef.current = prefillKey;
+
+    const sourceLayout = displayMode === 'work' ? workModeLayout ?? selectedProfile.layout : selectedProfile.layout;
+    const nextTopology = displayMode === 'work'
+      ? normalizeCanvasTopology(topologyFromLegacy(sourceLayout))
+      : getProfileTopology(selectedProfile);
     setProfileName(selectedProfile.name);
     setTopology(nextTopology);
     setSelectedIdentityKey(identityKey(nextTopology.displays[0]?.identity));
-    onDraftChange(selectedProfile.name, nextTopology);
+    if (displayMode !== 'work') onDraftChange(selectedProfile.name, nextTopology);
+    else if (!areTopologiesEqual(nextTopology, topologyFromLegacy(sourceLayout))) onWorkModeDraftChange?.(nextTopology);
     onValidationStateChange({ showNameError: false, showSelectionError: false });
-  }, [onDraftChange, onValidationStateChange, prefillFromSelectedProfile, selectedProfile]);
+  }, [displayMode, onDraftChange, onValidationStateChange, onWorkModeDraftChange, prefillFromSelectedProfile, prefillKey, selectedProfile, workModeLayout]);
 
   const selectedTarget = topology.displays.find((display) => identityKey(display.identity) === selectedIdentityKey) ?? topology.displays[0] ?? null;
   const topologyErrors = getTopologyEditorErrors(topology, t);
+  const resetTopology = selectedProfile ? normalizeCanvasTopology(getProfileTopology(selectedProfile)) : { displays: [] };
+  const canResetCanvas = !areTopologiesEqual(topology, resetTopology);
   const savedIdentityKeys = useMemo(() => new Set(topology.displays.map((display) => identityKey(display.identity))), [topology.displays]);
   const availableDisplays = displays.filter((display) => !savedIdentityKeys.has(identityKey(display.identity)));
 
@@ -84,14 +114,16 @@ export function DisplaysStep({
 
   function commitTopology(nextTopology: GamingProfileDisplayTopology) {
     setTopology(nextTopology);
-    onDraftChange(profileName, nextTopology);
+    if (displayMode === 'work') onWorkModeDraftChange?.(nextTopology);
+    else onDraftChange(profileName, nextTopology);
     setActionError(null);
   }
 
   function updateProfileName(value: string) {
     const normalized = normalizeGamingProfileName(value);
     setProfileName(normalized);
-    onDraftChange(normalized, topology);
+    if (displayMode === 'work') onWorkModeDraftChange?.(topology);
+    else onDraftChange(normalized, topology);
     if (normalized && validationState.showNameError) onValidationStateChange({ ...validationState, showNameError: false });
   }
 
@@ -113,7 +145,7 @@ export function DisplaysStep({
     } catch {
       modes = [];
     }
-    const target = profileTargetForAddition(display, modes, isFirstDisplay);
+    const target = profileTargetForAddition(display, modes, isFirstDisplay, topology.displays);
     const nextTopology = normalizeTopologyPrimary({ displays: [...topology.displays, target] });
     setSelectedIdentityKey(identityKey(display.identity));
     commitTopology(nextTopology);
@@ -131,22 +163,33 @@ export function DisplaysStep({
     }
   }
 
+  function resetCanvas() {
+    const nextTopology = selectedProfile ? normalizeCanvasTopology(getProfileTopology(selectedProfile)) : { displays: [] };
+    setSelectedIdentityKey(identityKey(nextTopology.displays[0]?.identity));
+    commitTopology(nextTopology);
+    onValidationStateChange({ showNameError: false, showSelectionError: false });
+  }
+
   return (
     <div className="wizard-copy displays-step">
       <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('setup.displays')}</h2>
+      <h2>{displayMode === 'work' ? t('setup.workModeDisplays') : t('setup.displays')}</h2>
+      <p>{displayMode === 'work' ? t('setup.defaultDisplayLayoutDescription') : t('setup.profileSetup')}</p>
       <section className="settings-section display-topology-editor">
         <div className="display-topology-toolbar display-profile-row">
           <div className="display-profile-field">
-            <label className="profile-name-label" htmlFor="profile-name-input">{t('profile.nameLabel')}</label>
-            <input id="profile-name-input" className="text-input profile-name-input" type="text" value={profileName} onChange={(event) => updateProfileName(event.target.value)} onBlur={() => onValidationStateChange({ ...validationState, showNameError: !profileName.trim() })} aria-invalid={validationState.showNameError && !profileName.trim()} placeholder={t('profile.namePlaceholder')} />
+            <label className="profile-name-label" htmlFor="profile-name-input">{displayMode === 'work' ? t('setup.workModeDisplays') : t('profile.nameLabel')}</label>
+            <div className="display-profile-input-row">
+              <input id="profile-name-input" className="text-input profile-name-input" type="text" value={displayMode === 'work' ? t('setup.workMode') : profileName} readOnly={displayMode === 'work'} onChange={(event) => updateProfileName(event.target.value)} onBlur={() => onValidationStateChange({ ...validationState, showNameError: !profileName.trim() })} aria-invalid={displayMode !== 'work' && validationState.showNameError && !profileName.trim()} placeholder={t('profile.namePlaceholder')} />
+              <button className="secondary-button compact display-reset-button" type="button" onClick={resetCanvas} disabled={!canResetCanvas} title={t('profile.resetDisplayCanvas')}>{t('profile.resetDisplayCanvas')}</button>
+            </div>
           </div>
           <div className="display-diagnostics-actions">
             <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}>{t('profile.displayCurrentLayout')}</button>
             <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}>{isRefreshingDisplays ? t('profile.displayRefreshListBusy') : t('profile.displayRefreshList')}</button>
           </div>
         </div>
-        {validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">{t('profile.nameRequired')}</div> : null}
+        {displayMode !== 'work' && validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">{t('profile.nameRequired')}</div> : null}
         {displayListError ? <p className="error-line display-error">{displayListError}</p> : null}
         {actionError ? <p className="error-line display-error">{actionError}</p> : null}
         <div className={`display-topology-layout ${topology.displays.length === 0 ? 'is-empty' : ''}`}>
@@ -200,24 +243,54 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove
       if (!drag) return;
       const target = topology.displays.find((display) => identityKey(display.identity) === drag.identityKey);
       if (!target) return;
-      const desired = rectFromPosition(drag.startRect.left + (event.clientX - drag.startX) / drag.transform.scale, drag.startRect.top + (event.clientY - drag.startY) / drag.transform.scale, drag.startRect.width, drag.startRect.height);
+      const deltaX = event.clientX - drag.startX;
+      const deltaY = event.clientY - drag.startY;
+      if (!drag.hasMoved && Math.hypot(deltaX, deltaY) < 5) return;
+      drag.hasMoved = true;
+      const desired = rectFromPosition(drag.startRect.left + deltaX / drag.transform.scale, drag.startRect.top + deltaY / drag.transform.scale, drag.startRect.width, drag.startRect.height);
       const otherRects = drag.topologyRects.filter((_, index) => topology.displays[index] && identityKey(topology.displays[index].identity) !== drag.identityKey);
       const resolved = snapAndResolve(desired, otherRects);
+      drag.currentRect = resolved;
       setDragPreview({ identityKey: drag.identityKey, rect: resolved });
-      onMove(target.identity, Math.round(resolved.left), Math.round(resolved.top));
     }
-    function handlePointerUp() { dragRef.current = null; setDragPreview(null); }
+
+    function finishDrag(commit: boolean) {
+      const drag = dragRef.current;
+      if (commit && drag?.hasMoved) {
+        const target = topology.displays.find((display) => identityKey(display.identity) === drag.identityKey);
+        if (target) onMove(target.identity, Math.round(drag.currentRect.left), Math.round(drag.currentRect.top));
+      }
+      dragRef.current = null;
+      setDragPreview(null);
+    }
+
+    function handlePointerUp() {
+      finishDrag(true);
+    }
+
+    function handlePointerCancel() {
+      finishDrag(false);
+    }
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
-    return () => { window.removeEventListener('pointermove', handlePointerMove); window.removeEventListener('pointerup', handlePointerUp); };
+    window.addEventListener('pointercancel', handlePointerCancel);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+    };
   }, [onMove, topology.displays]);
 
   function beginDrag(event: React.PointerEvent, identity: ProfileDisplayTarget['identity'], index: number) {
     if (event.button !== 0) return;
-    dragRef.current = { identityKey: identityKey(identity), startX: event.clientX, startY: event.clientY, startRect: rects[index], transform, topologyRects: rects };
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    onSelect(identityKey(identity));
+    dragRef.current = { identityKey: identityKey(identity), startX: event.clientX, startY: event.clientY, startRect: rects[index], currentRect: rects[index], transform, topologyRects: rects, hasMoved: false };
   }
 
   const previewRect = dragPreview ? rectToCanvas(dragPreview.rect, transform) : null;
+  const dockingGuides = dragPreview ? getDockingGuides(dragPreview.rect, rects.filter((_, index) => topology.displays[index] && identityKey(topology.displays[index].identity) !== dragPreview.identityKey)) : [];
   return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''}`} style={{ height: `${fixedCanvasHeight}px` }} aria-label={t('profile.topologyPreview')}>
     {topology.displays.map((display, index) => {
       const key = identityKey(display.identity);
@@ -227,7 +300,10 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, onSelect, onMove
         <span className="display-topology-node-number">{index + 1}</span><strong>{display.identity.friendlyName || t('profile.displayUnknown')}</strong><small>{display.width > 0 ? `${display.width} × ${display.height}` : t('profile.topologyUnknownMode')}</small>{display.isPrimary ? <em>{t('profile.topologyPrimary')}</em> : null}
       </button>;
     })}
-    {previewRect ? <><div className="display-topology-preview" aria-hidden="true" style={{ left: `${previewRect.left}px`, top: `${previewRect.top}px`, width: `${previewRect.width}px`, height: `${previewRect.height}px` }} /><div className="display-topology-guide is-vertical" aria-hidden="true" style={{ left: `${previewRect.left}px` }} /><div className="display-topology-guide is-horizontal" aria-hidden="true" style={{ top: `${previewRect.top}px` }} /></> : null}
+    {previewRect ? <><div className="display-topology-preview" aria-hidden="true" style={{ left: `${previewRect.left}px`, top: `${previewRect.top}px`, width: `${previewRect.width}px`, height: `${previewRect.height}px` }} />{dockingGuides.map((guide, index) => guide.orientation === 'vertical'
+      ? <div className="display-topology-guide is-vertical" aria-hidden="true" key={`vertical-${index}`} style={{ left: `${guide.position * transform.scale + transform.offsetX}px`, top: `${guide.start * transform.scale + transform.offsetY}px`, height: `${guide.length * transform.scale}px` }} />
+      : <div className="display-topology-guide is-horizontal" aria-hidden="true" key={`horizontal-${index}`} style={{ left: `${guide.start * transform.scale + transform.offsetX}px`, top: `${guide.position * transform.scale + transform.offsetY}px`, width: `${guide.length * transform.scale}px` }} />)}</> : null}
+    {!dragPreview && topology.displays.length > 1 ? <span className="display-topology-canvas-hint">{t('profile.topologyDragHint')}</span> : null}
     {topology.displays.length === 0 ? <p className="display-topology-empty">{t('profile.topologyEmpty')}</p> : null}
   </div>;
 }
@@ -340,7 +416,19 @@ function DisplayTopologyValidation({ errors, showSelectionError }: { errors: str
 
 function identityKey(identity: ProfileDisplayTarget['identity'] | undefined): string {
   if (!identity) return '';
-  return identity.monitorDevicePath || `${identity.adapterLuid}:${identity.targetId}:${identity.connectorInstance}`;
+  const monitorDevicePath = identity.monitorDevicePath?.trim();
+  if (monitorDevicePath) return `path:${monitorDevicePath.toLowerCase()}`;
+
+  return [
+    identity.adapterLuid,
+    identity.targetId,
+    identity.connectorInstance,
+    identity.sourceId,
+    identity.outputTechnology,
+    identity.edidIdsValid ? identity.edidManufacturerId : 0,
+    identity.edidIdsValid ? identity.edidProductCodeId : 0,
+    identity.friendlyName
+  ].map(value => String(value ?? '').trim().toLowerCase()).join(':');
 }
 
 function getBounds(displays: ProfileDisplayTarget[]) {

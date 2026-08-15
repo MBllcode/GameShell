@@ -101,6 +101,32 @@ public sealed class ModeOrchestratorTests
     }
 
     [Fact]
+    public async Task EnterWorkMode_PassesConfiguredDefaultDisplayLayoutToTransition()
+    {
+        var layout = new DisplayLayoutSnapshot
+        {
+            Id = "work-default",
+            Displays = []
+        };
+        var settings = new AppSettings
+        {
+            WorkMode = { DefaultDisplayLayout = layout }
+        };
+        var display = new FakeDisplayTransitionService();
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            display,
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile }),
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterWorkModeAsync();
+
+        Assert.True(result.Success, result.Message);
+        Assert.Same(layout, display.WorkModeLayout);
+    }
+
+    [Fact]
     public async Task WorkModeStatus_ClearsActiveLauncher()
     {
         var settings = new AppSettings
@@ -404,6 +430,7 @@ public sealed class ModeOrchestratorTests
         public DisplayTransitionResult WorkModeResult { get; init; } = DisplayTransitionResult.Ok();
         public bool BlockUntilCancellation { get; init; }
         public int GamingCount { get; private set; }
+        public DisplayLayoutSnapshot? WorkModeLayout { get; private set; }
         public Action? OnGaming { get; set; }
 
         public Task<DisplayTransitionResult> EnterConsoleModeAsync(
@@ -427,6 +454,14 @@ public sealed class ModeOrchestratorTests
 
         public async Task<DisplayTransitionResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
         {
+            return await EnterWorkModeAsync(null, cancellationToken);
+        }
+
+        public async Task<DisplayTransitionResult> EnterWorkModeAsync(
+            DisplayLayoutSnapshot? defaultDisplayLayout,
+            CancellationToken cancellationToken = default)
+        {
+            WorkModeLayout = defaultDisplayLayout;
             _order?.Add("display-work");
             if (BlockUntilCancellation)
             {

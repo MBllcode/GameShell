@@ -13,6 +13,7 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
   const [selectedConsoleDisplay, setSelectedConsoleDisplay] = useState<DisplayIdentity | null>(null);
   const [selectedConsoleDisplays, setSelectedConsoleDisplays] = useState<DisplayIdentity[]>([]);
   const [gamingLayout, setGamingLayout] = useState<DisplayLayoutSnapshot | null>(null);
+  const [workModeLayout, setWorkModeLayout] = useState<DisplayLayoutSnapshot | null>(null);
   const [gamingProfiles, setGamingProfiles] = useState<DisplayLayoutProfile[]>([]);
   const [activeGamingProfileName, setActiveGamingProfileName] = useState<string | null>(null);
   const [gamingProfileBehaviours, setGamingProfileBehaviours] = useState<GamingProfileBehaviourMap>({});
@@ -37,6 +38,8 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
     setSelectedConsoleDisplays,
     gamingLayout,
     setGamingLayout,
+    workModeLayout,
+    setWorkModeLayout,
     gamingProfiles,
     setGamingProfiles,
     activeGamingProfileName,

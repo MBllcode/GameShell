@@ -30,6 +30,7 @@ type Options = BuildSettingsPayloadState & {
   setWorkModeControllerShortcut: (value: AppSettings['controller']['workMode']) => void;
   setSelectedProfileName: (value: string) => void;
   setLayout: (value: AppSettings['display']['gamingLayout']) => void;
+  setWorkModeLayout: (value: AppSettings['workMode']['defaultDisplayLayout']) => void;
   setHotkeys: (value: BuildSettingsPayloadState['hotkeys']) => void;
   setLauncher: (value: LauncherType) => void;
   setLanguage: (value: SupportedLanguage) => void;
@@ -40,6 +41,7 @@ type Options = BuildSettingsPayloadState & {
   setSetupMode: (value: SetupMode) => void;
   setEditingProfileId: (value: string | null) => void;
   setIsSetupComplete: (value: boolean) => void;
+  hasUnsavedChanges: boolean;
   setHasUnsavedChanges: (value: boolean) => void;
   setSettings: (value: AppSettings) => void;
   setStatus: Dispatch<SetStateAction<AppStatus>>;
@@ -68,6 +70,7 @@ export function useSettingsIntegrationFeature(options: Options) {
     setWorkModeControllerShortcut: options.setWorkModeControllerShortcut,
     setSelectedProfileName: options.setSelectedProfileName,
     setLayout: options.setLayout,
+    setWorkModeLayout: options.setWorkModeLayout,
     setHotkeys: options.setHotkeys,
     setLauncher: options.setLauncher,
     setLanguage: options.setLanguage,
@@ -131,6 +134,8 @@ export function useSettingsIntegrationFeature(options: Options) {
     setBootstrapRoute: options.setBootstrapRoute,
     setEditingProfileId: options.setEditingProfileId,
     setIsSetupComplete: options.setIsSetupComplete,
+    hasUnsavedChanges: options.hasUnsavedChanges,
+    setHasUnsavedChanges: options.setHasUnsavedChanges,
     setIsSaving: options.setIsSaving,
     setError: options.setError,
     setMessage: options.setMessage

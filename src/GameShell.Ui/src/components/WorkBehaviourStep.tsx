@@ -23,7 +23,7 @@ export function WorkBehaviourStep({
   return (
     <div className="wizard-copy">
       <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('behaviour.workTitle')}</h2>
+      <h2>{t('globalSection.workBehaviour')}</h2>
       <p>{t('behaviour.workDescription')}</p>
       <div className="settings-category-list">
         <SettingsSection title={t('behaviour.launcher')}>

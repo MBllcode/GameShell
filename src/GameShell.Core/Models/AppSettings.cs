@@ -156,6 +156,11 @@ public sealed class GamingSettings : GameShellSettings
 
 public sealed class WorkModeSettings
 {
+    /// <summary>
+    /// The user's persistent default desktop display layout. When absent, Work Mode
+    /// falls back to the runtime layout captured before entering a gaming profile.
+    /// </summary>
+    public DisplayLayoutSnapshot? DefaultDisplayLayout { get; set; }
     public bool CloseLauncher { get; set; } = true;
     public bool ShowTaskbars { get; set; } = true;
     public bool ShowDesktopIcons { get; set; } = true;

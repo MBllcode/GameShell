@@ -2,6 +2,7 @@ export type GeometryRect = { left: number; top: number; width: number; height: n
 export type GeometryPoint = { x: number; y: number };
 export type GeometryBounds = { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number };
 export type CanvasTransform = { scale: number; offsetX: number; offsetY: number; padding: number };
+export type DockingGuide = { orientation: 'vertical' | 'horizontal'; position: number; start: number; length: number };
 
 const DEFAULT_SNAP_THRESHOLD = 28;
 const DEFAULT_ALIGNMENT_THRESHOLD = 24;
@@ -57,6 +58,16 @@ export function rectToCanvas(rect: GeometryRect, transform: CanvasTransform): Ge
   return { left: point.x, top: point.y, width: rect.width * transform.scale, height: rect.height * transform.scale };
 }
 
+export function placeRectNextToTopology(rect: GeometryRect, others: GeometryRect[], anchorIndex = 0): GeometryRect {
+  if (others.length === 0) return rect;
+
+  const bounds = computeTopologyBounds(others);
+  const anchor = others[Math.min(Math.max(anchorIndex, 0), others.length - 1)];
+  const centeredTop = Math.round(anchor.top + (anchor.height - rect.height) / 2);
+  const desired = { ...rect, left: bounds.maxX, top: centeredTop };
+  return snapAndResolve(desired, others);
+}
+
 function alignmentCandidates(desired: GeometryRect, other: GeometryRect, threshold: number) {
   const candidates: GeometryRect[] = [];
   const verticalAlignments = [other.top, other.top + (other.height - desired.height) / 2, rectBottom(other) - desired.height]
@@ -107,4 +118,27 @@ export function resolveCollision(desired: GeometryRect, others: GeometryRect[]) 
 
 export function snapAndResolve(desired: GeometryRect, others: GeometryRect[]) {
   return resolveCollision(applyEdgeSnap(desired, others), others);
+}
+
+export function getDockingGuides(rect: GeometryRect, others: GeometryRect[]): DockingGuide[] {
+  const guides: DockingGuide[] = [];
+  for (const other of others) {
+    if (Math.abs(rect.left - rectRight(other)) <= EPSILON || Math.abs(rectRight(rect) - other.left) <= EPSILON) {
+      const start = Math.max(rect.top, other.top);
+      const end = Math.min(rectBottom(rect), rectBottom(other));
+      if (end - start > EPSILON) {
+        guides.push({ orientation: 'vertical', position: Math.abs(rect.left - rectRight(other)) <= EPSILON ? rect.left : rectRight(rect), start, length: end - start });
+      }
+    }
+
+    if (Math.abs(rect.top - rectBottom(other)) <= EPSILON || Math.abs(rectBottom(rect) - other.top) <= EPSILON) {
+      const start = Math.max(rect.left, other.left);
+      const end = Math.min(rectRight(rect), rectRight(other));
+      if (end - start > EPSILON) {
+        guides.push({ orientation: 'horizontal', position: Math.abs(rect.top - rectBottom(other)) <= EPSILON ? rect.top : rectBottom(rect), start, length: end - start });
+      }
+    }
+  }
+
+  return guides;
 }

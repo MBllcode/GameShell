@@ -76,6 +76,10 @@ public interface IDisplayTransitionService
     Task<DisplayTransitionResult> EnterWorkModeAsync(
         CancellationToken cancellationToken = default);
 
+    Task<DisplayTransitionResult> EnterWorkModeAsync(
+        DisplayLayoutSnapshot? defaultDisplayLayout,
+        CancellationToken cancellationToken = default);
+
     Task<DisplayTransitionResult> TestConsoleDisplayAsync(
         DisplayIdentity? consoleDisplay,
         CancellationToken cancellationToken = default);

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { AppStatus } from '../../../types/bridge';
+import type { AppStatus, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../types/bridge';
 import type { ProfileSetupPageProps } from '../../../pages/ProfileSetupPage';
 import { useProfileSetupPageModel } from './useProfileSetupPageModel';
 import type { useSetupWorkflowState } from './useSetupWorkflowState';
@@ -31,6 +31,9 @@ type Options = {
   footerMessage: string;
   status: AppStatus;
   selectedProfileName: string;
+  workModeLayout: DisplayLayoutSnapshot | null;
+  workModeSavedLayout: DisplayLayoutSnapshot | null;
+  onWorkModeDraftChange: (topology: GamingProfileDisplayTopology) => void;
 };
 
 export function useSetupFeature(options: Options): ProfileSetupPageProps {
@@ -81,7 +84,10 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
       isRefreshingDisplays: displayState.isRefreshingDisplays,
       displayListError: displayState.displayListError,
       refreshDisplays: displayWorkflow.refreshDisplays,
-      gamingLayout: displayState.gamingLayout
+      gamingLayout: displayState.gamingLayout,
+      workModeLayout: options.workModeLayout,
+      workModeSavedLayout: options.workModeSavedLayout,
+      onWorkModeDraftChange: options.onWorkModeDraftChange
     },
     profile: {
       launcher,

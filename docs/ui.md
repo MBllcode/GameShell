@@ -51,6 +51,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Sidebar pokazuje aktualny tryb i skrocone fakty konfiguracji.
 - W module `STAN` sidebar pokazuje drugorzedny status kontrolera z realtime `controllerStatus`; przy braku urzadzenia wyswietla `Brak kontrolera`, bez badge `ROZLACZONY`.
 - Work Mode jest prezentowany w obszarze sidebar/profilu, nie jako glowna karta quick-switch.
+- Work Mode pozostaje jednym globalnym trybem, ale ma osobny zapisany krok `Domyslne ekrany pracy`. Ten krok korzysta z tego samego canvasu co profile gamingowe i opisuje uklad monitorow, ktory GameShell przywraca przy kazdym powrocie do Work Mode.
 - Przy aktywnej sesji konsolowej sidebar pokazuje osobny, zwiezly status lifecycle sesji obok informacji o trybie; status nie wymaga osobnego pollingu UI. Jest to status nadzoru GameShell, a nie zastapienie lifecycle launchera.
 - Dashboard ma byc zwarty i czytelny; unikamy pustych, wysokich kart bez informacji.
 - Przy pustej liscie profili boxy `Profile gamingowe` i `USTAWIENIA PROFILU` pozostaja widoczne. Profilowe akcje i ustawienia sa wtedy wyszarzone oraz nieaktywne; `+ Dodaj profil` i ustawienia globalne pozostaja aktywne.
@@ -69,8 +70,13 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Profil nie ma sztucznego limitu liczby ekranow; lista wykrytych ekranow pozostaje dostepna do dalszego dodawania.
 - Akcje `Użyj bieżącego układu` i `Odśwież listę` sa wyrównane do prawej strony toolbara, także w responsywnym widoku mobilnym.
 - Canvas jest technicznym obszarem roboczym z uniform scalingiem, paddingiem i obsluga ujemnych wspolrzednych. Skala, offset viewportu i padding nie sa zapisywane do topology.
+- Nowy ekran jest automatycznie ustawiany obok prawej krawedzi istniejacego ukladu i wycentrowany wzgledem primary, takze gdy nie jest obecnie aktywny.
+- Obok pola nazwy profilu znajduje sie `Resetuj układ`; przywraca ostatni zapisany canvas edytowanego profilu albo pusty canvas dla nowego profilu. Przycisk jest nieaktywny, gdy draft juz odpowiada bazowej konfiguracji.
+- Toolbar kroku `Ekrany` przechodzi responsywnie z ukladu poziomego do pionowego, a stopka flow na malych szerokosciach trzyma akcje `Wroc`/`Dalej` w stabilnych grupach i przenosi komunikat do osobnego wiersza.
+- Stopka zachowuje trzy kolumny takze przy bardzo malej szerokosci: akcje pozostaja przy odpowiednich rogach, a komunikat pozostaje wycentrowany pomiedzy nimi.
 - Drag przelicza ruch z pikseli ekranu na wspolrzedne topology przy uzyciu skali z poczatku gestu. Pozycje sa zapisywane jako rzeczywiste `PositionX`/`PositionY`.
-- Przy przeciaganiu dziala snap krawedziowy oraz ograniczony alignment snap. Resolver kolizji nie pozwala zakonczyc drag z dodatnim overlapem; dotykajace krawedzie i narożniki sa poprawne.
+- Pozycja podczas dragowania jest tylko podgladem i zapisuje sie po puszczeniu; prog 5 px zapobiega przypadkowemu przesunieciu przy kliknieciu. Dziala snap krawedziowy oraz ograniczony alignment snap, a prowadnice pokazuja aktywne dokowanie.
+- Resolver kolizji nie pozwala zakonczyc drag z dodatnim overlapem; dotykajace krawedzie i narożniki sa poprawne. Animacje wejscia/przejscia respektuja `prefers-reduced-motion`.
 - Primary moze byc wizualnie ustawiony w dowolnym miejscu. Dopiero snapshot runtime jest normalizowany do primary `0,0`, bez przesuwania draftu w edytorze.
 - Przed wywolaniem DisplayConfig topology runtime sprawdza jeden primary, rozmiary, overlap i unikalnosc fizycznych targetow. Bledna geometria zatrzymuje apply z opisem wewnetrznego bledu.
 - Readiness profilu nie opiera obecności fizycznego ekranu na `FriendlyName`; nazwa jest tylko informacją diagnostyczną. Przy tym samym route, ale słabszym handshake, runtime raportuje `Degraded/CapabilityRegression` i uruchamia istniejący bounded recovery.
@@ -96,6 +102,9 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 
 - `Startuj z Windows` i `Startuj zminimalizowany do tray` sa ustawieniami runtime, nie tylko dekoracja UI.
 - `Startuj zminimalizowany do tray` moze byc wlaczone tylko gdy autostart jest wlaczony.
+- Stan niezapisanych zmian jest wyliczany semantycznie na podstawie roznicy pomiedzy formularzem a ostatnimi zapisanymi ustawieniami; samo otwarcie edycji, klikniecie zapisu bez zmian oraz zmiana cofnieta do wartosci poczatkowej nie tworza dirty state.
+- Klikniecie `Zapisz zmiany` bez rzeczywistych zmian nie wywoluje zapisu backendowego i pokazuje komunikat `Brak zmian do zapisania.` w stopce.
+- Gdy aktywny profil zostal faktycznie zmieniony i zapisany, ponowne uruchomienie tego samego profilu moze go przeladowac. Ponowienie bez zapisanych zmian jest bezpiecznym no-op i pokazuje adekwatny komunikat.
 
 ## Responsywnosc
 

@@ -12,6 +12,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 ## Ostatnia iteracja zmian
 
 - Rozpoczeto etapowy refactor architektoniczny: audyt zapisano w `docs/architecture-audit.md`; wydzielono resolver profili gamingowych, koordynator readiness/recovery, router komend WebView, migrator starego JSON, parser hotkeyow oraz serwisy Windows integration/cursor. Zachowanie DisplayConfig/CCD pozostalo bez zmian.
+- Uruchamianie launcherow ma wspolny adapter standard-user: `NativeModeWorkflowService` i `WindowsLauncherRecoveryStrategy` korzystaja z `ILauncherProcessService`, a token/process creation pozostaje w `GameShell.Windows`. Elevated GameShell nie przekazuje juz swojego tokena do Playnite; blad startu zwracany jest kontrolowanie bez silent elevated fallbacku.
 - Po kolejnych slice'ach `ModeOrchestrator` ma 477 linii zamiast 808, `WebViewBridge` 915 zamiast 1154, `WindowsDisplayConfigurationService` 871 zamiast 1249, `App` 795 zamiast 864, a `SettingsService` 290 zamiast 333; testy .NET obejmuja `140/140` przypadkow.
 - `WindowsDisplayTopologyReader` odpowiada za odczyt/retry/mapowanie topologii DisplayConfig, a `WebViewPayloadReader` za stateless parsing payloadow WebView. Zadna produkcyjna klasa C# nie przekracza obecnie 1000 linii.
 - `SingleInstanceCommandHost` przejal rejestracje named events, marshalowanie callbackow do WPF Dispatcher oraz cleanup z `App`; `App` nadal wybiera komendy i zachowuje polityke lifecycle.
@@ -85,6 +86,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - `Console Mode`: kompatybilnosciowa sciezka aktywujaca jeden wybrany ekran.
 - `Gaming profiles`: stosuja konfigurowalne przez uzytkownika profile ekranow i zachowania, niezaleznie od tego, czy docelowym setupem jest PC, projektor, TV czy inna kombinacja ekranow.
 - `Work Mode`: przywraca `WorkReturnLayout` zapisany przed sesja gamingowa.
+- `Work Mode` ma opcjonalny, trwaly `DefaultDisplayLayout` konfigurowany w osobnym kroku `work-display`. Gdy go nie ma w starszych ustawieniach, runtime zachowuje fallback do `WorkReturnLayout`/`PreviousDisplayLayout`.
 
 ## Console Session i launcher lifecycle
 
@@ -203,6 +205,13 @@ The controller stack is physical controller -> SDL3 -> GameShell shortcuts and r
 - Diagnostyka pollingu capture jest na poziomie `Debug`, a realne bledy SDL sa logowane jako `Warning` z deduplikacja tego samego klucza przez 60 sekund oraz raportem liczby suppressed errors.
 - File logger uzywa wspoldzielonego dostepu `FileShare.ReadWrite`, rotacji dziennej i po rozmiarze 10 MB oraz retencji 7 plikow, czyli okolo 70 MB lacznie. Wyjatki sinka nie propagują sie do pollingu ani logiki aplikacji.
 - Ostateczna akceptacja wymaga recznego uruchomienia GameShell bez pada przez 10-15 minut, a potem sprawdzenia logu pod katem braku powtarzajacych sie wpisow.
+
+## Dirty state i ponowne ladowanie profilu
+
+- Frontend porownuje semantyczny payload formularza z ostatnimi zapisanymi ustawieniami. Geometria okna nie jest traktowana jako zmiana profilu.
+- Zapis bez realnych zmian nie wysyla `saveSettings` i pokazuje komunikat `No changes to save` albo `Brak zmian do zapisania`.
+- `ConsoleSessionManager` przechowuje fingerprint aktywacji profilu. Ten sam profil bez zmian zwraca `NoChanges`, a po zapisanej zmianie jest bezpiecznie przeladowywany z ponownym uruchomieniem monitora sesji.
+- Fingerprint pomija niestabilne metadane snapshotu layoutu (`Id`, `CapturedAt`) i obejmuje konfiguracje profilu, topology, launcher oraz zachowanie gamingowe.
 
 ## Logging audit
 

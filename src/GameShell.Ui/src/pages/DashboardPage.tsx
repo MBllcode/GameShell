@@ -6,7 +6,7 @@ import { formatCurrentMode, formatSessionState } from '../utils/status';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 type ModeCommand = 'enterGameShell' | 'enterGameShellWithProfile' | 'enterWorkMode';
-type StepId = 'gaming-display' | 'launcher' | 'profile-behaviour' | 'controller' | 'work-behaviour' | 'work-shortcuts' | 'app-behaviour';
+type StepId = 'gaming-display' | 'launcher' | 'profile-behaviour' | 'controller' | 'work-display' | 'work-behaviour' | 'work-shortcuts' | 'app-behaviour';
 type ProfileHotkeysState = { enterProfile: string };
 type GamingProfileLauncherMap = Record<string, LauncherType>;
 type GamingProfileHotkeysMap = Record<string, ProfileHotkeysState>;
@@ -100,16 +100,19 @@ export function DashboardPage({
       <section className="setup-window" aria-labelledby="app-title">
         <aside className="brand-panel dashboard-sidebar" aria-label={t('app.globalSettings')}>
           <section className="sidebar-state-block" aria-label={t('app.status')}>
-            <div className="sidebar-section-label">{t('app.status')}</div>
+            <div className="sidebar-section-heading">
+              <div className="sidebar-section-label">{t('app.status')}</div>
+              {(isWorkModeActive || isGamingActive) ? <span className="work-return-status">{t('app.active')}</span> : null}
+            </div>
             {isWorkModeActive ? (
               <div className="sidebar-state-content">
-                <div className="status-row"><strong>{t('app.workMode')}</strong><span className="work-return-status">{t('app.active')}</span></div>
+                <div className="status-row"><strong>{t('app.workMode')}</strong></div>
                 <p className="sidebar-status-description">{t('dashboard.workModeDescription')}</p>
                 <small>{globalWorkModeHotkey || t('app.missingHotkey')}</small>
               </div>
             ) : (
               <div className="sidebar-state-content">
-                <div className="status-row"><strong>{formatCurrentMode(status, t)}</strong>{isGamingActive ? <span className="work-return-status">{t('app.active')}</span> : null}</div>
+                <div className="status-row"><strong>{formatCurrentMode(status, t)}</strong></div>
                 {isGamingActive ? <p>{t('profile.activeProfile')}: {runtimeActiveProfileName || t('summary.activeProfileNone')}</p> : null}
                 {status.sessionState && status.sessionState !== 'Idle' ? <p className="sidebar-session-state">{t('app.sessionState', { state: formatSessionState(status.sessionState, t) })}</p> : null}
                 <p className="sidebar-state-detail">{visibleLayoutSummary}</p>
@@ -122,7 +125,8 @@ export function DashboardPage({
           <section className="sidebar-global-settings" aria-label={t('app.globalSettings')}>
             <div className="sidebar-section-label">{t('app.globalSettings')}</div>
             <div className="sidebar-global-links">
-              <button type="button" onClick={() => editSettings('work-behaviour')}><span>{t('setup.workMode')}</span></button>
+              <button type="button" onClick={() => editSettings('work-display')}><span>{t('setup.workModeDisplays')}</span></button>
+              <button type="button" onClick={() => editSettings('work-behaviour')}><span>{t('globalSection.workBehaviour')}</span></button>
               <button type="button" onClick={() => editSettings('work-shortcuts')}><span>{t('setup.workModeShortcuts')}</span></button>
               <button type="button" onClick={() => editSettings('app-behaviour')}><span>{t('setup.appBehaviour')}</span></button>
             </div>

@@ -13,15 +13,18 @@ const KNOWN_MESSAGE_RETRANSLATIONS: Array<{ pattern: RegExp; key: string }> = [
   { pattern: /^Selected section for editing\.$/, key: 'setup.sectionSelected' },
   { pattern: /^Done\.$/, key: 'setup.ready' },
   { pattern: /^You can continue later or save changes\.$/, key: 'setup.continueLater' },
-  { pattern: /^Switching to .+\.\.\.$/, key: 'dashboard.switchingTo' },
-  { pattern: /^Switched to Work Mode\.$/, key: 'dashboard.switchComplete' }
+  { pattern: /^Switching to .+\.\.\.$/, key: 'dashboard.switchingTo' }
 ];
+
+const DEFAULT_TRANSIENT_MESSAGE_DURATION_MS = 2500;
 
 export function useSetupWorkflowState() {
   const { t, i18n } = useTranslation();
   const [stepIndex, setStepIndex] = useState(0);
   const [message, setMessageState] = useState(t('setup.ready'));
   const messageRef = useRef(message);
+  const transientMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messageVersionRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -42,9 +45,29 @@ export function useSetupWorkflowState() {
   const pendingSettingsOverrideRef = useRef<SettingsPayloadOverrides | null>(null);
 
   const setMessage = useCallback((nextMessage: string | ((current: string) => string)) => {
+    if (transientMessageTimerRef.current) {
+      clearTimeout(transientMessageTimerRef.current);
+      transientMessageTimerRef.current = null;
+    }
+
+    messageVersionRef.current += 1;
     const resolvedMessage = typeof nextMessage === 'function' ? nextMessage(messageRef.current) : nextMessage;
     messageRef.current = resolvedMessage;
     setMessageState(resolvedMessage);
+  }, []);
+
+  const setTransientMessage = useCallback((nextMessage: string, durationMs = DEFAULT_TRANSIENT_MESSAGE_DURATION_MS) => {
+    const nextVersion = messageVersionRef.current + 1;
+    setMessage(nextMessage);
+
+    transientMessageTimerRef.current = setTimeout(() => {
+      if (messageVersionRef.current === nextVersion) setMessage('');
+      transientMessageTimerRef.current = null;
+    }, durationMs);
+  }, [setMessage]);
+
+  useEffect(() => () => {
+    if (transientMessageTimerRef.current) clearTimeout(transientMessageTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -71,7 +94,7 @@ export function useSetupWorkflowState() {
   const handleDisplayValidationStateChange = useCallback((state: DisplayValidationState) => setDisplayValidationState(state), []);
 
   return {
-    stepIndex, setStepIndex, message, setMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading,
+    stepIndex, setStepIndex, message, setMessage, setTransientMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading,
     setupMode, setSetupMode, isHydrated, setIsHydrated, bootstrapRoute, setBootstrapRoute, editingProfileId, setEditingProfileId, isVeryFirstConfiguration: setupMode === 'FirstRun', isEditingSection: setupMode === 'EditProfile' || setupMode === 'EditGlobal',
     isCreatingProfileFlow: setupMode === 'CreateProfile', isSetupComplete, setIsSetupComplete,
     hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow,

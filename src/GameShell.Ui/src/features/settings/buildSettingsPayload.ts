@@ -33,6 +33,7 @@ export type BuildSettingsPayloadState = {
   gamingProfileHotkeys: GamingProfileHotkeysMap;
   gamingProfileControllerShortcuts: GamingProfileControllerShortcutMap;
   workModeControllerShortcut: AppSettings['controller']['workMode'];
+  workModeLayout: DisplayLayoutSnapshot | null;
   gamingBehaviour: GamingBehaviourState;
   launcher: LauncherType;
   language: string;
@@ -83,7 +84,7 @@ export function buildSettingsPayload(
     launcher: { type: launcherSettings.type, executablePath: launcherSettings.executablePath, arguments: launcherSettings.arguments, targetDisplayId: state.selectedConsoleDisplay?.monitorDevicePath ?? null },
     gameShell: { ...state.consoleBehaviour, completionDelaySeconds: state.settings?.gameShell.completionDelaySeconds ?? 5 },
     gaming: { ...savedGamingBehaviour, protectedProcessNames: state.settings?.gaming?.protectedProcessNames ?? [], closeOnlyProcessNames: state.settings?.gaming?.closeOnlyProcessNames ?? [], completionDelaySeconds: state.settings?.gaming?.completionDelaySeconds ?? 5 },
-    workMode: { ...state.workBehaviour, taskbarRestoreDelaySeconds: state.settings?.workMode.taskbarRestoreDelaySeconds ?? 3, desktopIconsDelaySeconds: state.settings?.workMode.desktopIconsDelaySeconds ?? 15, completionDelaySeconds: state.settings?.workMode.completionDelaySeconds ?? 20 },
+    workMode: { ...state.workBehaviour, defaultDisplayLayout: state.workModeLayout, taskbarRestoreDelaySeconds: state.settings?.workMode.taskbarRestoreDelaySeconds ?? 3, desktopIconsDelaySeconds: state.settings?.workMode.desktopIconsDelaySeconds ?? 15, completionDelaySeconds: state.settings?.workMode.completionDelaySeconds ?? 20 },
     controller: { enabled: Object.values(effectiveGamingProfileControllerShortcuts).some((shortcut) => (shortcut?.buttons.length ?? 0) > 0) || (state.workModeControllerShortcut?.buttons.length ?? 0) > 0 || state.settings?.controller?.enabled || false, consoleMode: state.settings?.controller?.consoleMode ?? null, gamingMode: activeProfileName ? normalizeControllerShortcut(activeProfileControllerShortcut) : normalizeControllerShortcut(state.settings?.controller?.gamingMode ?? null), workMode: normalizeControllerShortcut(state.workModeControllerShortcut) },
     hotkeys: { consoleMode: normalizeHotkeyForDisplay(state.hotkeys.consoleMode), gamingMode: normalizeHotkeyForDisplay(savedHotkeys.enterProfile || state.hotkeys.gamingMode), workMode: normalizeHotkeyForDisplay(state.hotkeys.workMode) },
     startup: { startWithWindows: state.finishOptions.startWithWindows, startMinimizedToTray: state.finishOptions.startMinimized, createStartMenuShortcut: state.finishOptions.startMenuShortcut, createDesktopShortcut: state.finishOptions.desktopShortcut },

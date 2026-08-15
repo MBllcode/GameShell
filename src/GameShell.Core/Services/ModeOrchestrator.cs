@@ -154,7 +154,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             operationName: "Enter Work Mode",
             switchingState: ModeState.SwitchingToWork,
             completedState: ModeState.WorkMode,
-            transition: _ => _displayTransitionService.EnterWorkModeAsync(cancellationToken),
+            transition: settings => _displayTransitionService.EnterWorkModeAsync(settings.WorkMode.DefaultDisplayLayout, cancellationToken),
             preWorkflow: settings => _modeWorkflowService.PrepareWorkWorkflowAsync(settings, cancellationToken),
             workflow: settings => _modeWorkflowService.RunWorkWorkflowAsync(settings, cancellationToken),
             completionDelay: _ => TimeSpan.Zero,

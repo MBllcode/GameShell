@@ -251,6 +251,7 @@ export interface AppSettings {
     completionDelaySeconds: number;
   };
   workMode: {
+    defaultDisplayLayout: DisplayLayoutSnapshot | null;
     closeLauncher: boolean;
     showTaskbars: boolean;
     showDesktopIcons: boolean;

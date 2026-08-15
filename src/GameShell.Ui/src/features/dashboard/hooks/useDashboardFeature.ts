@@ -41,12 +41,14 @@ type Options = {
   setLayout: (value: DisplayLayoutSnapshot | null) => void;
   setError: (value: string | null) => void;
   setMessage: Dispatch<SetStateAction<string>>;
+  setTransientMessage: (value: string, durationMs?: number) => void;
   syncDisplayProfileDraft: (draft: { profileName: string; topology: import('../../../types/bridge').GamingProfileDisplayTopology }) => void;
   setStepIndex: Dispatch<SetStateAction<number>>;
   setSetupMode: Dispatch<SetStateAction<SetupMode>>;
   setBootstrapRoute: Dispatch<SetStateAction<BootstrapRoute>>;
   setEditingProfileId: Dispatch<SetStateAction<string | null>>;
   setHasAdvancedInCreateProfileFlow: Dispatch<SetStateAction<boolean>>;
+  setHasUnsavedChanges: Dispatch<SetStateAction<boolean>>;
   setIsSetupComplete: Dispatch<SetStateAction<boolean>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
@@ -74,7 +76,8 @@ export function useDashboardFeature(options: Options) {
     setSelectedProfileName: options.setSelectedProfileName,
     setLayout: options.setLayout,
     setError: options.setError,
-    setMessage: options.setMessage
+    setMessage: options.setMessage,
+    setTransientMessage: options.setTransientMessage
   });
   const setupActions = useDashboardSetupActions({
     steps,
@@ -85,6 +88,7 @@ export function useDashboardFeature(options: Options) {
     setBootstrapRoute: options.setBootstrapRoute,
     setEditingProfileId: options.setEditingProfileId,
     setHasAdvancedInCreateProfileFlow: options.setHasAdvancedInCreateProfileFlow,
+    setHasUnsavedChanges: options.setHasUnsavedChanges,
     setIsSetupComplete: options.setIsSetupComplete,
     syncDisplayProfileDraft: options.syncDisplayProfileDraft,
     setProfileHotkeyValidationError: options.setProfileHotkeyValidationError,

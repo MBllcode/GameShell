@@ -42,6 +42,36 @@ public sealed class ConsoleSessionManagerTests
     }
 
     [Fact]
+    public async Task SameProfileActivationWithoutSavedChanges_IsReportedAsNoChanges()
+    {
+        var orchestrator = new FakeModeOrchestrator();
+        using var manager = CreateManager(orchestrator, new FakeGameSessionMonitor());
+
+        await manager.EnterProfileAsync("LivingRoom");
+        var result = await manager.EnterProfileAsync("LivingRoom");
+
+        Assert.Equal(ModeResultStatus.NoChanges, result.Status);
+        Assert.Equal(1, orchestrator.ProfileActivations);
+    }
+
+    [Fact]
+    public async Task SameProfileActivationAfterSavedChanges_ReloadsTheProfile()
+    {
+        var settings = new FakeSettingsService();
+        var orchestrator = new FakeModeOrchestrator();
+        var monitor = new FakeGameSessionMonitor();
+        using var manager = CreateManager(orchestrator, monitor, settings: settings);
+
+        await manager.EnterProfileAsync("LivingRoom");
+        settings.ProfileWidth = 2560;
+        var result = await manager.EnterProfileAsync("LivingRoom");
+
+        Assert.True(result.Success);
+        Assert.Equal(2, orchestrator.ProfileActivations);
+        Assert.Equal(1, monitor.StopCalls);
+    }
+
+    [Fact]
     public async Task WorkMode_StopsMonitorAndReturnsToIdle()
     {
         var monitor = new FakeGameSessionMonitor();
@@ -188,11 +218,12 @@ public sealed class ConsoleSessionManagerTests
     private static ConsoleSessionManager CreateManager(
         FakeModeOrchestrator orchestrator,
         FakeGameSessionMonitor monitor,
-        FakeLauncherRecoveryStrategy? recovery = null)
+        FakeLauncherRecoveryStrategy? recovery = null,
+        FakeSettingsService? settings = null)
     {
         return new ConsoleSessionManager(
             orchestrator,
-            new FakeSettingsService(),
+            settings ?? new FakeSettingsService(),
             monitor,
             recovery ?? new FakeLauncherRecoveryStrategy(),
             NullLogger<ConsoleSessionManager>.Instance);
@@ -246,6 +277,7 @@ public sealed class ConsoleSessionManagerTests
     private sealed class FakeSettingsService : ISettingsService
     {
         public string SettingsPath => "test";
+        public int ProfileWidth { get; set; } = 1920;
         public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new AppSettings
@@ -266,7 +298,7 @@ public sealed class ConsoleSessionManagerTests
                                     {
                                         IsActive = true,
                                         IsPrimary = true,
-                                        Width = 1920,
+                                    Width = ProfileWidth,
                                         Height = 1080
                                     }
                                 ]

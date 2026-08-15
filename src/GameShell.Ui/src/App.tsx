@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProfileEditingFeature } from './features/profiles/hooks/useProfileEditingFeature';
 import { useDisplayProfileWorkflow } from './features/profiles/hooks/useDisplayProfileWorkflow';
 import { useDashboardFeature } from './features/dashboard/hooks/useDashboardFeature';
@@ -15,20 +15,24 @@ import { useAppRuntimeState } from './features/app/hooks/useAppRuntimeState';
 import { useSetupFlowController } from './features/setup/hooks/useSetupFlowController';
 import { AppView } from './AppView';
 import { resolvePreferredProfileNameForPostSaveSelection } from './features/profiles/utils';
+import { normalizeGamingProfileName } from './features/profiles/utils';
+import { areTopologiesEqual, getProfileTopology, normalizeCanvasTopology, topologyFromLegacy, topologyToLegacy } from './utils/displays';
+import { createSettingsComparisonKey } from './features/settings/settingsComparison';
 import { resolveWorkingProfileName } from './features/setup/setupRouting';
 
 export function App() {
   const runtimeState = useAppRuntimeState();
   const { status, setStatus, settings, setSettings, isRemovingProfile, setIsRemovingProfile, activeModeAction, setActiveModeAction } = runtimeState;
   const setupState = useSetupWorkflowState();
-  const { stepIndex, setStepIndex, message, setMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading, setupMode, setSetupMode, isHydrated, setIsHydrated, bootstrapRoute, setBootstrapRoute, editingProfileId, setEditingProfileId, isSetupComplete, setIsSetupComplete, hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow, hasUnsavedChanges, setHasUnsavedChanges, pendingNavigationAction, setPendingNavigationAction, showUnsavedDialog, setShowUnsavedDialog, showOverwriteProfileDialog, setShowOverwriteProfileDialog, pendingOverwriteProfileAction, setPendingOverwriteProfileAction, displayProfileDraft, displayValidationState, setDisplayValidationState, displayProfileDraftRef, pendingSettingsOverrideRef, syncDisplayProfileDraft, markUnsavedChanges, handleDisplayDraftChange, handleDisplayValidationStateChange } = setupState;
+  const { stepIndex, setStepIndex, message, setMessage, setTransientMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading, setupMode, setSetupMode, isHydrated, setIsHydrated, bootstrapRoute, setBootstrapRoute, editingProfileId, setEditingProfileId, isSetupComplete, setIsSetupComplete, hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow, hasUnsavedChanges, setHasUnsavedChanges, pendingNavigationAction, setPendingNavigationAction, showUnsavedDialog, setShowUnsavedDialog, showOverwriteProfileDialog, setShowOverwriteProfileDialog, pendingOverwriteProfileAction, setPendingOverwriteProfileAction, displayProfileDraft, displayValidationState, setDisplayValidationState, displayProfileDraftRef, pendingSettingsOverrideRef, syncDisplayProfileDraft, markUnsavedChanges, handleDisplayDraftChange, handleDisplayValidationStateChange } = setupState;
   const isVeryFirstConfiguration = setupMode === 'FirstRun';
   const isEditingSection = setupMode === 'EditProfile' || setupMode === 'EditGlobal';
   const isCreatingProfileFlow = setupMode === 'CreateProfile';
   const [selectedGamingBehaviourProfileName, setSelectedGamingBehaviourProfileName] = useState('');
+  const persistedSettingsBaselineRef = useRef<string | null>(null);
   const workingProfileName = resolveWorkingProfileName(setupMode, displayProfileDraft.profileName, selectedGamingBehaviourProfileName);
   const displayState = useDisplayConfigurationState({ selectedProfileName: selectedGamingBehaviourProfileName });
-  const { displays, setDisplays, isRefreshingDisplays, setIsRefreshingDisplays, displayListError, setDisplayListError, selectedConsoleDisplay, setSelectedConsoleDisplay, selectedConsoleDisplays, setSelectedConsoleDisplays, gamingLayout, setGamingLayout, gamingProfiles, setGamingProfiles, activeGamingProfileName, setActiveGamingProfileName, gamingProfileBehaviours, setGamingProfileBehaviours, gamingProfileLaunchers, setGamingProfileLaunchers, gamingProfileHotkeys, setGamingProfileHotkeys, gamingProfileControllerShortcuts, setGamingProfileControllerShortcuts, workModeControllerShortcut, setWorkModeControllerShortcut, profileHotkeyValidationError, setProfileHotkeyValidationError, profileControllerValidationError, setProfileControllerValidationError } = displayState;
+  const { displays, setDisplays, isRefreshingDisplays, setIsRefreshingDisplays, displayListError, setDisplayListError, selectedConsoleDisplay, setSelectedConsoleDisplay, selectedConsoleDisplays, setSelectedConsoleDisplays, gamingLayout, setGamingLayout, workModeLayout, setWorkModeLayout, gamingProfiles, setGamingProfiles, activeGamingProfileName, setActiveGamingProfileName, gamingProfileBehaviours, setGamingProfileBehaviours, gamingProfileLaunchers, setGamingProfileLaunchers, gamingProfileHotkeys, setGamingProfileHotkeys, gamingProfileControllerShortcuts, setGamingProfileControllerShortcuts, workModeControllerShortcut, setWorkModeControllerShortcut, profileHotkeyValidationError, setProfileHotkeyValidationError, profileControllerValidationError, setProfileControllerValidationError } = displayState;
   const formState = useSettingsFormState();
   const { hotkeys, setHotkeys, launcher, setLauncher, language, setLanguage, consoleBehaviour, setConsoleBehaviour, gamingBehaviour, setGamingBehaviour, workBehaviour, setWorkBehaviour, finishOptions, setFinishOptions } = formState;
 
@@ -134,11 +138,15 @@ export function App() {
   const isModeSwitching = activeModeAction !== null;
   const footerMessage = error || status.lastError || message;
   const canSelectSidebarStep = !isVeryFirstConfiguration && !isSaving;
+  const handleWorkModeDraftChange = useCallback((topology: Parameters<typeof topologyToLegacy>[0]) => {
+    setWorkModeLayout(topologyToLegacy(topology, displays));
+  }, [displays, setWorkModeLayout]);
 
   const settingsIntegration = useSettingsIntegrationFeature({
     settings,
     selectedConsoleDisplay,
     selectedConsoleDisplays,
+    workModeLayout,
     gamingLayout,
     gamingProfiles,
     activeGamingProfileName,
@@ -162,6 +170,7 @@ export function App() {
     preferredProfileName: () => resolvePreferredProfileNameForPostSaveSelection(displayProfileDraftRef.current.profileName, selectedGamingBehaviourProfileName),
     pendingSettingsOverrideRef,
     setSelectedConsoleDisplays,
+    setWorkModeLayout,
     setSelectedConsoleDisplay,
     setProfiles: setGamingProfiles,
     setActiveProfileName: setActiveGamingProfileName,
@@ -181,6 +190,7 @@ export function App() {
     setFinishOptions,
     setupMode,
     setIsSetupComplete,
+    hasUnsavedChanges,
     setHasUnsavedChanges,
     setSettings,
     setStatus,
@@ -195,7 +205,71 @@ export function App() {
     setDisplayListError,
     setInitialLoading: setIsInitialLoading
   });
-  const { applySettingsToState, saveCurrentSettings, persistAndReturnToDashboard } = settingsIntegration;
+  const { applySettingsToState, buildSettingsPayload, saveCurrentSettings, persistAndReturnToDashboard } = settingsIntegration;
+
+  useEffect(() => {
+    if (!isHydrated || !settings) return;
+
+    const draftHasContent = Boolean(displayProfileDraft.profileName.trim()) || displayProfileDraft.topology.displays.length > 0;
+    let hasDisplayDraftChanges = false;
+    if (draftHasContent && setupMode === 'CreateProfile') {
+      hasDisplayDraftChanges = true;
+    } else if (draftHasContent && setupMode === 'EditProfile') {
+      const editedProfileName = editingProfileId || selectedGamingBehaviourProfileName;
+      const editedProfile = gamingProfiles.find((profile) => normalizeGamingProfileName(profile.name) === normalizeGamingProfileName(editedProfileName));
+      hasDisplayDraftChanges = !editedProfile
+        || normalizeGamingProfileName(displayProfileDraft.profileName) !== normalizeGamingProfileName(editedProfile.name)
+        || !areTopologiesEqual(displayProfileDraft.topology, getProfileTopology(editedProfile));
+    }
+
+    const savedWorkModeTopology = settings.workMode.defaultDisplayLayout
+      ? normalizeCanvasTopology(topologyFromLegacy(settings.workMode.defaultDisplayLayout))
+      : { displays: [] };
+    const draftWorkModeTopology = workModeLayout
+      ? normalizeCanvasTopology(topologyFromLegacy(workModeLayout))
+      : { displays: [] };
+    const hasWorkModeLayoutChanges = !areTopologiesEqual(draftWorkModeTopology, savedWorkModeTopology);
+
+    const candidate = buildSettingsPayload(settings.ui?.isFirstRunCompleted ?? false, pendingSettingsOverrideRef.current ?? undefined);
+    const candidateForPersistedComparison = {
+      ...candidate,
+      workMode: {
+        ...candidate.workMode,
+        defaultDisplayLayout: settings.workMode.defaultDisplayLayout ?? null
+      }
+    };
+    const candidateKey = createSettingsComparisonKey(candidateForPersistedComparison);
+
+    // The bridge payload can contain legacy/default fields that are normalized by
+    // buildSettingsPayload. Establish the baseline from that canonical payload
+    // after hydration instead of comparing two differently-shaped objects.
+    if (setupMode === 'None') {
+      persistedSettingsBaselineRef.current = candidateKey;
+      if (hasUnsavedChanges) setHasUnsavedChanges(false);
+      return;
+    }
+
+    if (persistedSettingsBaselineRef.current === null) {
+      persistedSettingsBaselineRef.current = candidateKey;
+      return;
+    }
+
+    const hasPersistedStateChanges = persistedSettingsBaselineRef.current !== candidateKey;
+    const nextDirtyState = hasDisplayDraftChanges || hasWorkModeLayoutChanges || hasPersistedStateChanges;
+    if (hasUnsavedChanges !== nextDirtyState) setHasUnsavedChanges(nextDirtyState);
+  }, [
+    buildSettingsPayload,
+    displayProfileDraft,
+    editingProfileId,
+    gamingProfiles,
+    hasUnsavedChanges,
+    isHydrated,
+    selectedGamingBehaviourProfileName,
+    setHasUnsavedChanges,
+    settings,
+    setupMode,
+    workModeLayout
+  ]);
 
   const dashboardPage = useDashboardFeature({
     status,
@@ -213,6 +287,7 @@ export function App() {
     message: footerMessage,
     hasError: Boolean(error || status.lastError),
     hasUnsavedChanges,
+    setHasUnsavedChanges,
     isSetupComplete,
     profileBehaviours: gamingProfileBehaviours,
     profileLaunchers: gamingProfileLaunchers,
@@ -227,6 +302,7 @@ export function App() {
     setLayout: setGamingLayout,
     setError,
     setMessage,
+    setTransientMessage,
     syncDisplayProfileDraft,
     setStepIndex,
     setSetupMode,
@@ -292,7 +368,10 @@ export function App() {
     flow,
     footerMessage,
     status,
-    selectedProfileName: workingProfileName
+    selectedProfileName: workingProfileName,
+    workModeLayout,
+    workModeSavedLayout: settings?.workMode?.defaultDisplayLayout ?? null,
+    onWorkModeDraftChange: handleWorkModeDraftChange
   });
 
   return <AppView

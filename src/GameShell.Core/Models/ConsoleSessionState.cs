@@ -17,6 +17,7 @@ public sealed record ConsoleSessionSnapshot
     public ConsoleSessionState State { get; init; } = ConsoleSessionState.Idle;
     public long SessionGeneration { get; init; }
     public string? ProfileName { get; init; }
+    public string? ActivationFingerprint { get; init; }
     public string? LastError { get; init; }
     public int? ActiveGamePid { get; init; }
     public string? ActiveGameProcess { get; init; }

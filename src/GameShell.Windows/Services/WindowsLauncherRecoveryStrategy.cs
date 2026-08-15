@@ -11,12 +11,15 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
     private const int SwRestore = 9;
     private readonly ILogger<WindowsLauncherRecoveryStrategy> _logger;
     private readonly LauncherFocusRecoveryCoordinator _focusRecoveryCoordinator;
+    private readonly ILauncherProcessService _launcherProcessService;
 
     public WindowsLauncherRecoveryStrategy(
         ILogger<WindowsLauncherRecoveryStrategy> logger,
+        ILauncherProcessService launcherProcessService,
         LauncherFocusRecoveryCoordinator? focusRecoveryCoordinator = null)
     {
         _logger = logger;
+        _launcherProcessService = launcherProcessService;
         _focusRecoveryCoordinator = focusRecoveryCoordinator ?? new LauncherFocusRecoveryCoordinator();
     }
 
@@ -112,14 +115,17 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
             await WaitForLauncherExitAsync(processNames, cancellationToken);
         }
 
-        var restarted = StartLauncher(launcher);
-        if (!restarted)
+        var restartResult = StartLauncher(launcher);
+        if (!restartResult.Success)
         {
-            _logger.LogError("Launcher recovery failed: launcher could not be started.");
+            _logger.LogError(
+                "Launcher recovery failed: launcher could not be started. Win32Error={Win32Error} Reason={Reason}.",
+                restartResult.Win32ErrorCode,
+                restartResult.FailureReason);
             return LauncherRecoveryResult.Failed("Nie udało się uruchomić launchera.");
         }
 
-        _logger.LogInformation("Launcher restarted.");
+        _logger.LogInformation("Launcher restarted. Pid={ProcessId}.", restartResult.ProcessId);
         var recovered = await WaitForHealthyLauncherAsync(processNames, cancellationToken);
         if (recovered)
         {
@@ -209,45 +215,9 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         return false;
     }
 
-    private static bool StartLauncher(LauncherSettings launcher)
+    private ExternalProcessLaunchResult StartLauncher(LauncherSettings launcher)
     {
-        try
-        {
-            if (launcher.Type.Equals("Steam", StringComparison.OrdinalIgnoreCase))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = string.IsNullOrWhiteSpace(launcher.ExecutablePath) ? "steam://open/bigpicture" : launcher.ExecutablePath,
-                    UseShellExecute = true
-                });
-                return true;
-            }
-
-            if (launcher.Type.Equals("XboxApp", StringComparison.OrdinalIgnoreCase))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = "shell:AppsFolder\\Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App",
-                    UseShellExecute = true
-                });
-                return true;
-            }
-
-            var executablePath = Environment.ExpandEnvironmentVariables(launcher.ExecutablePath);
-            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath)) return false;
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = executablePath,
-                Arguments = launcher.Arguments,
-                UseShellExecute = false
-            });
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        return _launcherProcessService.StartStandardUser(launcher);
     }
 
     private LauncherDiagnostics? FindLauncherDiagnostics(IReadOnlyCollection<string> processNames)

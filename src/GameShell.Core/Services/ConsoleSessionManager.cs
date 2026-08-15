@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -12,6 +15,7 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
     private readonly IGameSessionMonitor _gameSessionMonitor;
     private readonly ILauncherRecoveryStrategy _launcherRecoveryStrategy;
     private readonly ILogger<ConsoleSessionManager> _logger;
+    private readonly GamingProfileRuntimeSettingsResolver _profileSettingsResolver;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _stateGate = new();
     private ConsoleSessionSnapshot _snapshot = new();
@@ -24,13 +28,15 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         ISettingsService settingsService,
         IGameSessionMonitor gameSessionMonitor,
         ILauncherRecoveryStrategy launcherRecoveryStrategy,
-        ILogger<ConsoleSessionManager> logger)
+        ILogger<ConsoleSessionManager> logger,
+        GamingProfileRuntimeSettingsResolver? profileSettingsResolver = null)
     {
         _modeOrchestrator = modeOrchestrator;
         _settingsService = settingsService;
         _gameSessionMonitor = gameSessionMonitor;
         _launcherRecoveryStrategy = launcherRecoveryStrategy;
         _logger = logger;
+        _profileSettingsResolver = profileSettingsResolver ?? new GamingProfileRuntimeSettingsResolver();
         _gameSessionMonitor.GameDetected += OnGameDetected;
         _gameSessionMonitor.GameExited += OnGameExited;
     }
@@ -185,9 +191,34 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         try
         {
             var current = GetSnapshot();
-            if (current.State is not ConsoleSessionState.Idle and not ConsoleSessionState.Faulted)
+            var settings = await _settingsService.LoadAsync(cancellationToken);
+            var resolvedProfileName = IsKnownProfileRequest(settings, profileName)
+                ? _profileSettingsResolver.ResolveProfileName(settings.Display, profileName) ?? profileName
+                : profileName;
+            var activationFingerprint = CreateActivationFingerprint(settings, resolvedProfileName);
+            var sameProfile = string.Equals(current.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase);
+            if (current.State is not ConsoleSessionState.Idle and not ConsoleSessionState.Faulted && !sameProfile)
             {
                 return AlreadyRunning("Sesja konsolowa jest już aktywna.");
+            }
+
+            if (current.State is not ConsoleSessionState.Idle and not ConsoleSessionState.Faulted
+                && string.Equals(current.ActivationFingerprint, activationFingerprint, StringComparison.Ordinal))
+            {
+                _logger.LogInformation("Profile activation skipped because the active profile has no saved changes. Profile={ProfileName}.", resolvedProfileName ?? "Console");
+                return new ModeResult
+                {
+                    Status = ModeResultStatus.NoChanges,
+                    CurrentState = ModeState.GameShell,
+                    Message = "Profil jest ju\u017C aktywny i nie ma zapisanych zmian do ponownego za\u0142adowania."
+                };
+            }
+
+            if (current.State is not ConsoleSessionState.Idle and not ConsoleSessionState.Faulted)
+            {
+                AdvanceSessionGeneration();
+                await _gameSessionMonitor.StopAsync(cancellationToken);
+                _logger.LogInformation("Active profile reload started. Profile={ProfileName}.", resolvedProfileName ?? "Console");
             }
 
             SetState(ConsoleSessionState.EnteringProfile, profileName, null);
@@ -198,7 +229,6 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
                 return result;
             }
 
-            var settings = await _settingsService.LoadAsync(cancellationToken);
             var behaviour = string.IsNullOrWhiteSpace(profileName)
                 ? settings.Gaming
                 : settings.Display.GamingProfileConfigurations
@@ -211,6 +241,7 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
             await _gameSessionMonitor.StartAsync(processNames, cancellationToken);
             AdvanceSessionGeneration();
             SetState(ConsoleSessionState.LauncherActive, profileName, null);
+            SetActivationFingerprint(activationFingerprint);
             _logger.LogInformation("Console session entered for profile {ProfileName}.", profileName ?? "Console");
             return result;
         }
@@ -327,6 +358,9 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
             State = state,
             SessionGeneration = _sessionGeneration,
             ProfileName = profileName,
+            ActivationFingerprint = string.Equals(profileName, previous.ProfileName, StringComparison.OrdinalIgnoreCase)
+                ? previous.ActivationFingerprint
+                : null,
             LastError = error,
             ActiveGamePid = nextGamePid,
             ActiveGameProcess = nextGameProcess,
@@ -344,6 +378,43 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
         {
             _sessionGeneration++;
         }
+    }
+
+    private void SetActivationFingerprint(string fingerprint)
+    {
+        lock (_stateGate)
+        {
+            _snapshot = _snapshot with { ActivationFingerprint = fingerprint };
+        }
+    }
+
+    private string CreateActivationFingerprint(AppSettings settings, string? profileName)
+    {
+        var profile = _profileSettingsResolver.ResolveProfile(settings.Display, profileName);
+        var effectiveSettings = _profileSettingsResolver.BuildEffectiveSettings(settings, profileName);
+        var fingerprintSource = JsonSerializer.Serialize(new
+        {
+            ProfileName = profileName,
+            Profile = profile is null
+                ? null
+                : new
+                {
+                    profile.Name,
+                    LayoutDisplays = profile.Layout.Displays,
+                    profile.DisplayTopology
+                },
+            Configuration = _profileSettingsResolver.ResolveConfiguration(settings.Display, profileName),
+            EffectiveLauncher = effectiveSettings.Launcher,
+            EffectiveGaming = effectiveSettings.Gaming
+        });
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintSource)));
+    }
+
+    private static bool IsKnownProfileRequest(AppSettings settings, string? profileName)
+    {
+        return string.IsNullOrWhiteSpace(profileName)
+            || string.Equals(profileName, "Gaming", StringComparison.OrdinalIgnoreCase)
+            || settings.Display.GamingProfiles.Any(profile => string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private ModeResult Fail(string? currentProfileName, Exception exception)

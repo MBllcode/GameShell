@@ -138,17 +138,24 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         return DisplayTransitionResult.Ok();
     }
 
-    public async Task<DisplayTransitionResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
+    public Task<DisplayTransitionResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
+    {
+        return EnterWorkModeAsync(null, cancellationToken);
+    }
+
+    public async Task<DisplayTransitionResult> EnterWorkModeAsync(
+        DisplayLayoutSnapshot? defaultDisplayLayout,
+        CancellationToken cancellationToken = default)
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
-        var candidates = new[] { state.WorkReturnLayout, state.PreviousDisplayLayout }
+        var candidates = new[] { defaultDisplayLayout, state.WorkReturnLayout, state.PreviousDisplayLayout }
             .Where(layout => layout is not null)
             .Cast<DisplayLayoutSnapshot>()
             .DistinctBy(layout => layout.Id)
             .ToList();
         if (candidates.Count == 0)
         {
-            _logger.LogWarning("Work Mode requested without a WorkReturnLayout. Display layout will not be changed.");
+            _logger.LogWarning("Work Mode requested without a configured or captured display layout. Display layout will not be changed.");
             state.CurrentMode = GameShellMode.Work;
             await _runtimeStateService.SaveAsync(state, cancellationToken);
             return DisplayTransitionResult.Ok("Brak zapisanego układu Work. Pozostawiono obecny układ ekranów.");

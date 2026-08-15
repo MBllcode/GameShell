@@ -13,17 +13,20 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     private readonly IRuntimeStateService _runtimeStateService;
     private readonly IWindowsCursorService _cursorService;
     private readonly IWindowsWindowManagementService _windowManagementService;
+    private readonly ILauncherProcessService _launcherProcessService;
 
     public NativeModeWorkflowService(
         ILogger<NativeModeWorkflowService> logger,
         IRuntimeStateService runtimeStateService,
         IWindowsCursorService cursorService,
-        IWindowsWindowManagementService windowManagementService)
+        IWindowsWindowManagementService windowManagementService,
+        ILauncherProcessService launcherProcessService)
     {
         _logger = logger;
         _runtimeStateService = runtimeStateService;
         _cursorService = cursorService;
         _windowManagementService = windowManagementService;
+        _launcherProcessService = launcherProcessService;
     }
 
     public async Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
@@ -104,7 +107,8 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     {
         var warnings = new List<string>();
         var behaviour = mode == GameShellMode.GamingProfile ? settings.Gaming : settings.GameShell;
-        Process? launcherProcess = null;
+        int? launcherProcessId = null;
+        ExternalProcessLaunchResult? launcherStartResult = null;
 
         await TryStepAsync("minimize remaining windows after display transition", warnings, async () =>
         {
@@ -122,18 +126,30 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         {
             if (behaviour.StartLauncher)
             {
-                launcherProcess = StartOrFindLauncher(settings, behaviour);
+                launcherStartResult = StartOrFindLauncher(settings);
+                if (!launcherStartResult.Success)
+                {
+                    throw new InvalidOperationException(launcherStartResult.FailureReason ?? "Launcher process could not be started.");
+                }
+
+                launcherProcessId = launcherStartResult.ProcessId;
             }
 
             await Task.CompletedTask;
         }, cancellationToken);
+
+        if (behaviour.StartLauncher && launcherStartResult is { Success: false })
+        {
+            return ModeWorkflowResult.Fail(
+                $"Launcher start failed: {launcherStartResult.FailureReason ?? "unknown reason"}");
+        }
 
         await TryStepAsync("bring launcher to foreground", warnings, async () =>
         {
             if (behaviour.StartLauncher && behaviour.BringLauncherToForeground)
             {
                 await Task.Delay(1500, cancellationToken);
-                BringLauncherToForeground(settings, launcherProcess);
+                BringLauncherToForeground(settings, launcherProcessId);
             }
         }, cancellationToken);
 
@@ -291,65 +307,61 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         }
     }
 
-    private static Process? StartOrFindLauncher(AppSettings settings, GameShellSettings behaviour)
+    private ExternalProcessLaunchResult StartOrFindLauncher(AppSettings settings)
     {
         var existing = FindLauncherProcess(settings);
         if (existing is not null)
         {
-            return existing;
+            var processId = existing.Id;
+            existing.Dispose();
+            return ExternalProcessLaunchResult.Started(processId);
         }
 
-        if (settings.Launcher.Type.Equals("Steam", StringComparison.OrdinalIgnoreCase))
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = string.IsNullOrWhiteSpace(settings.Launcher.ExecutablePath)
-                    ? "steam://open/bigpicture"
-                    : settings.Launcher.ExecutablePath,
-                UseShellExecute = true
-            });
-            return null;
-        }
-
-        if (settings.Launcher.Type.Equals("XboxApp", StringComparison.OrdinalIgnoreCase))
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = "shell:AppsFolder\\Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App",
-                UseShellExecute = true
-            });
-            return null;
-        }
-
-        var executablePath = PathExpander.Expand(settings.Launcher.ExecutablePath);
-        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
-        {
-            return null;
-        }
-
-        return Process.Start(new ProcessStartInfo
-        {
-            FileName = executablePath,
-            Arguments = settings.Launcher.Arguments,
-            UseShellExecute = false
-        });
+        return _launcherProcessService.StartStandardUser(settings.Launcher);
     }
 
-    private void BringLauncherToForeground(AppSettings settings, Process? launcherProcess)
+    private void BringLauncherToForeground(AppSettings settings, int? launcherProcessId)
     {
-        var process = launcherProcess;
-        if (process is null || process.HasExited || process.MainWindowHandle == IntPtr.Zero)
+        using var process = GetProcess(launcherProcessId);
+        var targetProcess = process;
+        if (targetProcess is null || targetProcess.HasExited || targetProcess.MainWindowHandle == IntPtr.Zero)
         {
-            process = FindLauncherProcess(settings);
+            targetProcess = FindLauncherProcess(settings);
         }
 
-        if (process is null || process.MainWindowHandle == IntPtr.Zero)
+        if (targetProcess is null || targetProcess.MainWindowHandle == IntPtr.Zero)
         {
             return;
         }
 
-        _windowManagementService.RestoreAndFocus(process.MainWindowHandle);
+        try
+        {
+            _windowManagementService.RestoreAndFocus(targetProcess.MainWindowHandle);
+        }
+        finally
+        {
+            if (!ReferenceEquals(targetProcess, process))
+            {
+                targetProcess.Dispose();
+            }
+        }
+    }
+
+    private static Process? GetProcess(int? processId)
+    {
+        if (processId is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Process.GetProcessById(processId.Value);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     private static Process? FindLauncherProcess(AppSettings settings)

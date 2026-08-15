@@ -23,6 +23,22 @@ intentional compatibility code.
 The dependency direction is acceptable. The main issue is that several classes
 inside those boundaries contain multiple use-case responsibilities.
 
+## Launcher elevation slice
+
+The launcher start audit found two process-start call sites: the gaming workflow
+and the launcher recovery restart path. Both previously called `Process.Start`
+directly from `GameShell.Windows`, which made an elevated GameShell pass its
+elevated token to Playnite.
+
+The shared boundary is now `IExternalProcessLauncher` plus
+`ILauncherProcessService` in Core. `LauncherProcessRequestFactory` keeps the
+launcher mapping and arguments policy in Core, while
+`WindowsExternalProcessLauncher` owns the interactive standard-user token,
+environment creation and Win32 process creation. Profile activation and
+recovery use the same `StartStandardUser` path. A failed standard-user start is
+returned as a controlled workflow/recovery failure; there is no elevated silent
+fallback.
+
 ## Highest-priority classes
 
 The sizes below are the audit baseline before the staged refactor.

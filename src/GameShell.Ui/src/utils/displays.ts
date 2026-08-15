@@ -1,4 +1,5 @@
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget, RefreshPolicy } from '../types/bridge';
+import { placeRectNextToTopology, rectFromPosition, rectsOverlap, type GeometryRect } from './displayTopologyGeometry.ts';
 
 export function hasValidProfileRefresh(target: Pick<ProfileDisplayTarget, 'refreshRateNumerator' | 'refreshRateDenominator'>) {
   return target.refreshRateNumerator > 0
@@ -60,6 +61,25 @@ export function topologyFromLegacy(layout: DisplayLayoutSnapshot): GamingProfile
   };
 }
 
+export function normalizeCanvasTopology(topology: GamingProfileDisplayTopology): GamingProfileDisplayTopology {
+  const placedRects: GeometryRect[] = [];
+  let changed = false;
+  const displays = topology.displays.map(display => {
+    const desired = rectFromPosition(display.positionX, display.positionY, display.width, display.height);
+    const resolved = placedRects.some(rect => rectsOverlap(desired, rect))
+      ? placeRectNextToTopology(desired, placedRects)
+      : desired;
+    placedRects.push(resolved);
+    const positionChanged = resolved.left !== desired.left || resolved.top !== desired.top;
+    changed ||= positionChanged;
+    return positionChanged
+      ? { ...display, positionX: Math.round(resolved.left), positionY: Math.round(resolved.top) }
+      : display;
+  });
+
+  return changed ? { displays } : topology;
+}
+
 export function profileTargetFromDisplay(display: DisplayDeviceInfo, fallbackModes: DisplayModeInfo[] = []): ProfileDisplayTarget {
   const mode = fallbackModes.find(candidate => candidate.width === (display.width || display.preferredWidth) && candidate.height === (display.height || display.preferredHeight)) ?? fallbackModes[0];
   return {
@@ -79,8 +99,14 @@ export function profileTargetFromDisplay(display: DisplayDeviceInfo, fallbackMod
   };
 }
 
-export function profileTargetForAddition(display: DisplayDeviceInfo, fallbackModes: DisplayModeInfo[] = [], isFirstDisplay: boolean): ProfileDisplayTarget {
-  return { ...profileTargetFromDisplay(display, fallbackModes), enabled: true, isPrimary: isFirstDisplay };
+export function profileTargetForAddition(display: DisplayDeviceInfo, fallbackModes: DisplayModeInfo[] = [], isFirstDisplay: boolean, existingTargets: ProfileDisplayTarget[] = []): ProfileDisplayTarget {
+  const target = { ...profileTargetFromDisplay(display, fallbackModes), enabled: true, isPrimary: isFirstDisplay };
+  if (isFirstDisplay || existingTargets.length === 0) return target;
+
+  const rects = existingTargets.map(existing => rectFromPosition(existing.positionX, existing.positionY, existing.width, existing.height));
+  const anchorIndex = Math.max(existingTargets.findIndex(existing => existing.isPrimary), 0);
+  const positioned = placeRectNextToTopology(rectFromPosition(target.positionX, target.positionY, target.width, target.height), rects, anchorIndex);
+  return { ...target, positionX: positioned.left, positionY: positioned.top };
 }
 
 export function getTopologyEditorErrors(topology: GamingProfileDisplayTopology, translate?: (key: string) => string): string[] {

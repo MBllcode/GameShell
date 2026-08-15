@@ -121,6 +121,8 @@ test('dashboard footer strings use Polish translations instead of falling back t
   assert.equal(i18n.t('dashboard.editSection'), 'Edytujesz wybraną sekcję.');
   assert.equal(i18n.t('dashboard.createProfileHint'), 'Utwórz nowy profil i przejdź przez kroki konfiguracji.');
   assert.equal(i18n.t('dashboard.switchingTo', { mode: 'Work Mode' }), 'Przełączanie do Work Mode...');
+  assert.equal(i18n.t('dashboard.enterWorkModeCompleted'), 'Wejście do Work Mode zakończone.');
+  assert.equal(i18n.t('dashboard.enterGamingProfileCompleted'), 'Wejście do profilu gamingowego zakończone.');
 
   setI18nLanguage('en');
 });

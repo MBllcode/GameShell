@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyEdgeSnap, canvasToTopology, computeTopologyBounds, createCanvasTransform, rectFromPosition, rectsOverlap, resolveCollision, topologyToCanvas } from '../src/utils/displayTopologyGeometry.ts';
+import { applyEdgeSnap, canvasToTopology, computeTopologyBounds, createCanvasTransform, getDockingGuides, placeRectNextToTopology, rectFromPosition, rectsOverlap, resolveCollision, topologyToCanvas } from '../src/utils/displayTopologyGeometry.ts';
 import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, normalizeTopologyPrimary, profileTargetForAddition, profileTargetFromDisplay, topologyFromLegacy, topologyToLegacy, validateTopology } from '../src/utils/displays.ts';
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../src/types/bridge.ts';
 
@@ -70,6 +70,25 @@ test('added displays are enabled and only the first display is primary', () => {
   assert.equal(first.isPrimary, true);
   assert.equal(additional.enabled, true);
   assert.equal(additional.isPrimary, false);
+});
+
+test('places an additional display beside the existing topology', () => {
+  const existing = [
+    rectFromPosition(0, 0, 1920, 1080),
+    rectFromPosition(1920, 120, 2560, 1440)
+  ];
+  const placed = placeRectNextToTopology(rectFromPosition(0, 0, 3840, 2160), existing, 0);
+  assert.equal(placed.left, 4480);
+  assert.equal(placed.top, -540);
+  assert.equal(rectsOverlap(placed, existing[0]), false);
+  assert.equal(rectsOverlap(placed, existing[1]), false);
+});
+
+test('reports a guide when a display is docked to an existing edge', () => {
+  const guides = getDockingGuides(rectFromPosition(1920, 0, 1920, 1080), [rectFromPosition(0, 0, 1920, 1080)]);
+  assert.equal(guides.length, 1);
+  assert.equal(guides[0].orientation, 'vertical');
+  assert.equal(guides[0].position, 1920);
 });
 
 test('selecting another display as primary enables it and clears the previous primary', () => {

@@ -9,6 +9,7 @@ import { defaultGamingBehaviour, type GamingBehaviourState } from '../../setting
 type StepId =
   | 'welcome'
   | 'gaming-display'
+  | 'work-display'
   | 'launcher'
   | 'profile-behaviour'
   | 'work-behaviour'
@@ -26,6 +27,7 @@ type Options = {
   setBootstrapRoute: Dispatch<SetStateAction<BootstrapRoute>>;
   setEditingProfileId: Dispatch<SetStateAction<string | null>>;
   setHasAdvancedInCreateProfileFlow: Dispatch<SetStateAction<boolean>>;
+  setHasUnsavedChanges: Dispatch<SetStateAction<boolean>>;
   setIsSetupComplete: Dispatch<SetStateAction<boolean>>;
   syncDisplayProfileDraft: (draft: { profileName: string; topology: GamingProfileDisplayTopology }) => void;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
@@ -46,6 +48,7 @@ export function useDashboardSetupActions(options: Options) {
     options.setBootstrapRoute('ProfileSetup');
     options.setEditingProfileId(null);
     options.setHasAdvancedInCreateProfileFlow(false);
+    options.setHasUnsavedChanges(false);
     options.setIsSetupComplete(false);
     options.setGamingBehaviour({ ...defaultGamingBehaviour });
     options.syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } });
@@ -60,12 +63,13 @@ export function useDashboardSetupActions(options: Options) {
   const editSettings = (stepId: StepId) => {
     const targetIndex = options.steps.findIndex((step) => step.id === stepId);
     const selectedProfile = options.profiles.find((profile) => profile.name === options.selectedProfileName) ?? null;
-    const nextMode = ['work-behaviour', 'work-shortcuts', 'app-behaviour'].includes(stepId) ? 'EditGlobal' : 'EditProfile';
+    const nextMode = ['work-display', 'work-behaviour', 'work-shortcuts', 'app-behaviour'].includes(stepId) ? 'EditGlobal' : 'EditProfile';
     assertSetupStateInvariants('ProfileSetup', nextMode, nextMode === 'EditProfile' ? selectedProfile?.name ?? null : null);
     options.setSetupMode(nextMode);
     options.setBootstrapRoute('ProfileSetup');
     options.setEditingProfileId(nextMode === 'EditProfile' ? selectedProfile?.name ?? null : null);
     options.setHasAdvancedInCreateProfileFlow(false);
+    options.setHasUnsavedChanges(false);
     options.setIsSetupComplete(false);
     if (selectedProfile) {
       options.syncDisplayProfileDraft({

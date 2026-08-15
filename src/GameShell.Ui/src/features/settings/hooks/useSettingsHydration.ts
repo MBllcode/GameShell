@@ -20,6 +20,7 @@ type Options = {
   setWorkModeControllerShortcut: (value: AppSettings['controller']['workMode']) => void;
   setSelectedProfileName: (value: string) => void;
   setLayout: (value: AppSettings['display']['gamingLayout']) => void;
+  setWorkModeLayout: (value: AppSettings['workMode']['defaultDisplayLayout']) => void;
   setHotkeys: (value: { consoleMode: string; gamingMode: string; workMode: string }) => void;
   setLauncher: (value: ReturnType<typeof toLauncherType>) => void;
   setLanguage: (value: SupportedLanguage) => void;
@@ -46,6 +47,7 @@ export function useSettingsHydration(options: Options) {
     const nextProfileControllerShortcuts = buildProfileControllerShortcutMap(loadedProfiles, configurations, loadedSettings.controller?.gamingMode ?? null);
     const selectedProfileName = activeProfile?.name ?? loadedProfiles[0]?.name ?? '';
     options.setSelectedConsoleDisplays(consoleDisplays); options.setSelectedConsoleDisplay(consoleDisplays[0] ?? null); options.setProfiles(loadedProfiles); options.setActiveProfileName(activeProfile?.name ?? null); options.setProfileBehaviours(nextProfileBehaviours); options.setProfileLaunchers(nextProfileLaunchers); options.setProfileHotkeys(nextProfileHotkeys); options.setProfileControllerShortcuts(nextProfileControllerShortcuts); options.setWorkModeControllerShortcut(normalizeControllerShortcut(loadedSettings.controller?.workMode ?? null)); options.setSelectedProfileName(selectedProfileName); options.setLayout(activeProfile?.layout ?? loadedSettings.display?.gamingLayout ?? null);
+    options.setWorkModeLayout(loadedSettings.workMode?.defaultDisplayLayout ?? null);
     options.setHotkeys({ consoleMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.consoleMode || ''), gamingMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.gamingMode || ''), workMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.workMode || '') });
     options.setLauncher(nextProfileLaunchers[selectedProfileName] ?? defaultLauncher);
     const detectedLanguage = normalizeLanguageCode(loadedSettings.ui?.language ?? detectPreferredLanguage());

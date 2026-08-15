@@ -11,7 +11,7 @@ import { WorkBehaviourStep } from '../components/WorkBehaviourStep';
 import type { AppSettings, ControllerShortcutSettings, ControllerStatusInfo, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../types/bridge';
 import type { LauncherType } from '../utils/modes';
 
-type StepId = 'welcome' | 'gaming-display' | 'launcher' | 'profile-behaviour' | 'work-behaviour' | 'work-shortcuts' | 'controller' | 'app-behaviour' | 'finish';
+type StepId = 'welcome' | 'gaming-display' | 'launcher' | 'profile-behaviour' | 'work-display' | 'work-behaviour' | 'work-shortcuts' | 'controller' | 'app-behaviour' | 'finish';
 type PendingNavigationAction = 'goBack' | 'goNext' | 'returnToDashboard';
 type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
 type GamingBehaviourState = Pick<AppSettings['gaming'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>;
@@ -51,6 +51,9 @@ export type ProfileSetupPageProps = {
   isRefreshingDisplays: boolean;
   displayListError: string | null;
   refreshDisplays: () => Promise<void>;
+  workModeLayout: DisplayLayoutSnapshot | null;
+  workModeSavedLayout: DisplayLayoutSnapshot | null;
+  onWorkModeDraftChange: (topology: GamingProfileDisplayTopology) => void;
   launcher: LauncherType;
   setLauncher: (launcher: LauncherType) => void;
   language: import('../i18n/language').SupportedLanguage;
@@ -102,7 +105,7 @@ export type ProfileSetupPageProps = {
 };
 
 export function ProfileSetupPage({
-  activeSteps, resolvedFlowPosition, currentStep, stepIndex, isVeryFirstConfiguration, isNonFirstRunEditingSession, isEditingSection, isCreatingProfileFlow, isSaving, canGoBack, isLastStep, canSelectSidebarStep, footerMessage, hasError, statusLastError, pendingOverwriteProfileAction, showOverwriteProfileDialog, showUnsavedDialog, displays, profiles, selectedProfileName, displayValidationState, displayDraftChange, setDisplayValidationState, isRefreshingDisplays, displayListError, refreshDisplays, launcher, setLauncher, language, setLanguage, gamingBehaviour, onChangeGamingBehaviour, workBehaviour, setWorkBehaviour, hotkeys, profileHotkeyValidationError, profileControllerValidationError, onHotkeyValidationErrorChange, workModeControllerShortcut, profileControllerShortcut, controllerStatus, captureSuccessButtons, rejectedControllerButtons, onControllerValidationErrorChange, controllerNotice, startControllerCapture, cancelControllerCapture, removeWorkControllerShortcut, removeProfileControllerShortcut, removeWorkHotkey, removeProfileHotkey, changeWorkHotkey, changeProfileHotkey, finishOptions, setFinishOptions, gamingLayout, profileLaunchers, profileHotkeys, activeProfileName, requestNavigation, saveAndReturnToDashboard, handleOverwriteConfirm, handleUnsavedSave, handleUnsavedDiscard, setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog, handleSidebarStepSelect, updateProfileLauncher, updateProfileHotkey, updateProfileControllerShortcut, updateWorkModeHotkey, updateWorkModeControllerShortcut
+  activeSteps, resolvedFlowPosition, currentStep, stepIndex, isVeryFirstConfiguration, isNonFirstRunEditingSession, isEditingSection, isCreatingProfileFlow, isSaving, canGoBack, isLastStep, canSelectSidebarStep, footerMessage, hasError, statusLastError, pendingOverwriteProfileAction, showOverwriteProfileDialog, showUnsavedDialog, displays, profiles, selectedProfileName, displayValidationState, displayDraftChange, setDisplayValidationState, isRefreshingDisplays, displayListError, refreshDisplays, launcher, setLauncher, language, setLanguage, gamingBehaviour, onChangeGamingBehaviour, workBehaviour, setWorkBehaviour, hotkeys, profileHotkeyValidationError, profileControllerValidationError, onHotkeyValidationErrorChange, workModeControllerShortcut, profileControllerShortcut, controllerStatus, captureSuccessButtons, rejectedControllerButtons, onControllerValidationErrorChange, controllerNotice, startControllerCapture, cancelControllerCapture, removeWorkControllerShortcut, removeProfileControllerShortcut, removeWorkHotkey, removeProfileHotkey, changeWorkHotkey, changeProfileHotkey, finishOptions, setFinishOptions, gamingLayout, profileLaunchers, profileHotkeys, activeProfileName, workModeLayout, workModeSavedLayout, onWorkModeDraftChange, requestNavigation, saveAndReturnToDashboard, handleOverwriteConfirm, handleUnsavedSave, handleUnsavedDiscard, setShowOverwriteProfileDialog, setPendingOverwriteProfileAction, setPendingNavigationAction, setShowUnsavedDialog, handleSidebarStepSelect, updateProfileLauncher, updateProfileHotkey, updateProfileControllerShortcut, updateWorkModeHotkey, updateWorkModeControllerShortcut
 }: ProfileSetupPageProps) {
   const { t } = useTranslation();
   const sidebarSteps = activeSteps.map((step) => ({
@@ -116,6 +119,7 @@ export function ProfileSetupPage({
     const stepNumber = resolvedFlowPosition + 1;
     if (currentStep.id === 'welcome') return <WelcomeStep stepNumber={stepIndex + 1} language={language} setLanguage={setLanguage} />;
     if (currentStep.id === 'gaming-display') return <DisplaysStep stepNumber={stepNumber} displays={displays} gamingProfiles={profiles} selectedProfileName={selectedProfileName} prefillFromSelectedProfile={isEditingSection} onDraftChange={displayDraftChange} validationState={displayValidationState} onValidationStateChange={setDisplayValidationState} isRefreshingDisplays={isRefreshingDisplays} displayListError={displayListError} refreshDisplays={refreshDisplays} />;
+    if (currentStep.id === 'work-display') return <DisplaysStep stepNumber={stepNumber} displays={displays} gamingProfiles={[]} selectedProfileName="" prefillFromSelectedProfile={isEditingSection} onDraftChange={() => undefined} validationState={displayValidationState} onValidationStateChange={setDisplayValidationState} isRefreshingDisplays={isRefreshingDisplays} displayListError={displayListError} refreshDisplays={refreshDisplays} displayMode="work" workModeLayout={workModeLayout} workModeSavedLayout={workModeSavedLayout} onWorkModeDraftChange={onWorkModeDraftChange} />;
     if (currentStep.id === 'launcher') return <LauncherStep stepNumber={stepNumber} gamingProfiles={profiles} selectedProfileName={selectedProfileName} launcher={launcher} setLauncher={updateProfileLauncher} />;
     if (currentStep.id === 'profile-behaviour') return <ProfileBehaviourStep stepNumber={stepNumber} gamingProfiles={profiles} selectedProfileName={selectedProfileName} gamingBehaviour={gamingBehaviour} onChangeBehaviourFlag={onChangeGamingBehaviour} />;
     if (currentStep.id === 'work-behaviour') return <WorkBehaviourStep stepNumber={stepNumber} behaviour={workBehaviour} setBehaviour={setWorkBehaviour} />;

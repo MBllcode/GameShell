@@ -429,6 +429,8 @@ public partial class App : System.Windows.Application
         });
 
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IExternalProcessLauncher, WindowsExternalProcessLauncher>();
+        services.AddSingleton<ILauncherProcessService, LauncherProcessService>();
         services.AddSingleton<IWindowsCursorService, WindowsCursorService>();
         services.AddSingleton<IWindowsWindowManagementService, WindowsWindowManagementService>();
         services.AddSingleton<LegacySettingsPropertyMigrator>();

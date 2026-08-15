@@ -10,6 +10,7 @@ import type { BootstrapRoute } from '../../setup/setupRouting';
 type UseSettingsPersistenceOptions = {
   settings: AppSettings | null;
   isSetupComplete: boolean;
+  hasUnsavedChanges: boolean;
   setupMode: SetupMode;
   bootstrapRoute: BootstrapRoute;
   gamingProfilesCount: number;
@@ -24,6 +25,7 @@ type UseSettingsPersistenceOptions = {
   setBootstrapRoute: (value: BootstrapRoute) => void;
   setEditingProfileId: (value: string | null) => void;
   setIsSetupComplete: (value: boolean) => void;
+  setHasUnsavedChanges: (value: boolean) => void;
   setIsSaving: (value: boolean) => void;
   setError: (value: string | null) => void;
   setMessage: (value: string) => void;
@@ -32,6 +34,7 @@ type UseSettingsPersistenceOptions = {
 export function useSettingsPersistence({
   settings,
   isSetupComplete,
+  hasUnsavedChanges,
   setupMode,
   bootstrapRoute,
   gamingProfilesCount,
@@ -46,6 +49,7 @@ export function useSettingsPersistence({
   setBootstrapRoute,
   setEditingProfileId,
   setIsSetupComplete,
+  setHasUnsavedChanges,
   setIsSaving,
   setError,
   setMessage
@@ -71,6 +75,17 @@ export function useSettingsPersistence({
 
     if (gamingProfilesCount === 0) {
       setError(t('setup.requireProfile'));
+      return;
+    }
+
+    const hasPendingSettingsOverride = pendingSettingsOverrideRef.current !== null;
+    if (!hasUnsavedChanges && !hasPendingSettingsOverride) {
+      setSetupMode('None');
+      setBootstrapRoute('Dashboard');
+      setEditingProfileId(null);
+      setHasUnsavedChanges(false);
+      setIsSetupComplete(resolvePostSaveSetupComplete(setupMode, settings?.ui?.isFirstRunCompleted ?? false));
+      setMessage(t('setup.noChangesToSave'));
       return;
     }
 
