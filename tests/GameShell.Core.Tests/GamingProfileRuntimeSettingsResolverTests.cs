@@ -77,6 +77,45 @@ public sealed class GamingProfileRuntimeSettingsResolverTests
     }
 
     [Fact]
+    public void ResolveLayout_NormalizesLegacyProfileToAutoHighest()
+    {
+        var display = new DisplaySettings
+        {
+            GamingProfiles =
+            [
+                new DisplayLayoutProfile
+                {
+                    Name = "TV",
+                    Layout = new DisplayLayoutSnapshot
+                    {
+                        Displays =
+                        [
+                            new DisplayPathSnapshot
+                            {
+                                Identity = new DisplayIdentity { FriendlyName = "TV" },
+                                IsActive = true,
+                                IsPrimary = true,
+                                Width = 3840,
+                                Height = 2160,
+                                RefreshRateNumerator = 60,
+                                RefreshRateDenominator = 1
+                            }
+                        ]
+                    }
+                }
+            ]
+        };
+
+        var result = _resolver.ResolveLayout(display, "TV");
+
+        var target = Assert.Single(result!.Displays);
+        Assert.Equal(3840, target.Width);
+        Assert.Equal(2160, target.Height);
+        Assert.Equal(0u, target.RefreshRateNumerator);
+        Assert.Equal(0u, target.RefreshRateDenominator);
+    }
+
+    [Fact]
     public void ResolveLayout_FallsBackToLegacyLayoutWhenNoProfileResolves()
     {
         var legacyLayout = new DisplayLayoutSnapshot

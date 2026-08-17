@@ -10,6 +10,7 @@
     <AssemblyName>GameShell</AssemblyName>
     <RootNamespace>GameShell.Desktop</RootNamespace>
     <ApplicationIcon>Assets\GameShell.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

@@ -116,7 +116,8 @@ public sealed class GamingProfileRuntimeSettingsResolver
     {
         return profile.DisplayTopology is not null
             ? GamingProfileDisplayTopologyAdapter.ToLegacy(profile.DisplayTopology)
-            : profile.Layout;
+            : GamingProfileDisplayTopologyAdapter.ToLegacy(
+                GamingProfileDisplayTopologyAdapter.FromLegacy(profile.Layout));
     }
 
     private static bool NamesEqual(string? left, string? right)

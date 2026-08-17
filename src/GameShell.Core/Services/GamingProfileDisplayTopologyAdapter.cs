@@ -10,6 +10,7 @@ public static class GamingProfileDisplayTopologyAdapter
         {
             Displays = snapshot.Displays.Select(display => new ProfileDisplayTarget
             {
+                KnownPhysicalDisplayId = display.KnownPhysicalDisplayId,
                 Identity = display.Identity,
                 Enabled = display.IsActive,
                 IsPrimary = display.IsPrimary,
@@ -30,6 +31,7 @@ public static class GamingProfileDisplayTopologyAdapter
             CapturedAt = DateTimeOffset.UtcNow,
             Displays = topology.Displays.Select(display => new DisplayPathSnapshot
             {
+                KnownPhysicalDisplayId = display.KnownPhysicalDisplayId,
                 Identity = display.Identity,
                 IsActive = display.Enabled,
                 IsPrimary = display.IsPrimary,

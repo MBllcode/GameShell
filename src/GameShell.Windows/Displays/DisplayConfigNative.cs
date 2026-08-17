@@ -9,9 +9,11 @@ internal static class DisplayConfigNative
     public const uint DigcfDeviceInterface = 0x00000010;
     public const uint CmLocateDevnodeNormal = 0;
     public const uint CmReenumerateSynch = 0x00000000;
+    public const uint CmDisableUiNotOk = 0x00000002;
     public const int CrSuccess = 0;
     public const int CrAccessDenied = 0x00000033;
     public const int CrNoSuchDevnode = 0x0000000D;
+    public const int CrBufferSmall = 0x0000001A;
     public static readonly Guid GuidDevinterfaceMonitor = new("e6f07b5f-ee97-4a90-b076-33f57bf4eaa7");
     public const uint QdcOnlyActivePaths = 0x00000002;
     public const uint QdcAllPaths = 0x00000001;
@@ -24,6 +26,7 @@ internal static class DisplayConfigNative
     public const uint DisplayConfigPathActive = 0x00000001;
     public const uint DisplayConfigPathModeIdxInvalid = 0xFFFFFFFF;
     public const int ErrorSuccess = 0;
+    public const int ErrorInvalidParameter = 87;
     public const int ErrorInsufficientBuffer = 122;
     public const int CchDeviceName = 32;
     public const int CchFriendlyName = 64;
@@ -141,6 +144,22 @@ internal static class DisplayConfigNative
 
     [DllImport("cfgmgr32.dll")]
     public static extern int CM_Reenumerate_DevNode(uint devInst, uint flags);
+
+    [DllImport("cfgmgr32.dll")]
+    public static extern int CM_Disable_DevNode(uint devInst, uint flags);
+
+    [DllImport("cfgmgr32.dll")]
+    public static extern int CM_Enable_DevNode(uint devInst, uint flags);
+
+    [DllImport("cfgmgr32.dll")]
+    public static extern int CM_Get_Parent(out uint parentDevInst, uint devInst, uint flags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    public static extern int CM_Get_Device_ID(
+        uint devInst,
+        [Out] System.Text.StringBuilder buffer,
+        uint bufferLength,
+        uint flags);
 
     public static void ThrowIfWin32Error(int error, string operation)
     {

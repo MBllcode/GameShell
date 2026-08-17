@@ -23,6 +23,7 @@ public sealed class DisplaySettings
     public string? ActiveGamingProfileName { get; set; }
     public List<GamingProfileConfiguration> GamingProfileConfigurations { get; set; } = [];
     public List<GamingProfileBehaviour> GamingProfileBehaviours { get; set; } = [];
+    public List<KnownPhysicalDisplay> KnownPhysicalDisplays { get; set; } = [];
 }
 
 public sealed class DisplayLayoutProfile
@@ -45,6 +46,9 @@ public enum RefreshPolicy
 
 public sealed class ProfileDisplayTarget
 {
+    // Stable catalog reference. Identity remains as a compatibility/runtime
+    // mirror for older settings and existing display APIs.
+    public string KnownPhysicalDisplayId { get; set; } = string.Empty;
     public DisplayIdentity Identity { get; set; } = new();
     public DisplayCapabilityExpectation? CapabilityExpectation { get; set; }
     public bool Enabled { get; set; }

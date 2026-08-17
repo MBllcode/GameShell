@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
 import { formatCommandTargetMode } from '../../../utils/status';
 import { getModeActionKey, type ModeCommand } from '../../../utils/modes';
-import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
+import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot, ModeResult } from '../../../types/bridge';
 import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 
@@ -36,7 +36,12 @@ export function useDashboardActions(options: Options) {
     setActiveModeAction(getModeActionKey(command)); setError(null); setMessage(t('dashboard.switchingTo', { mode: formatCommandTargetMode(command, t) }));
     try {
       if (saveBeforeRun || hasUnsavedChanges) await saveCurrentSettings(isSetupComplete);
-      const modeResult = await sendBridgeCommand<{ status?: string }>(command, payload);
+      const modeResult = await sendBridgeCommand<ModeResult>(command, payload);
+      if (!modeResult.success) {
+        setMessage('');
+        setError(modeResult.message || t('dashboard.runModeError'));
+        return;
+      }
       if (command === 'enterWorkMode') {
         console.info('[GETSTATUS REQUEST FROM UI]', { timestamp: new Date().toISOString(), source: 'enterWorkMode completion' });
       }
@@ -73,7 +78,10 @@ export function useDashboardActions(options: Options) {
           ? t('dashboard.enterGamingProfileCompleted')
           : t('dashboard.enterGamingModeCompleted');
       setTransientMessage(completionMessage);
-    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : t('dashboard.runModeError')); }
+    } catch (reason: unknown) {
+      setMessage('');
+      setError(reason instanceof Error ? reason.message : t('dashboard.runModeError'));
+    }
     finally { setActiveModeAction(null); }
   }
 

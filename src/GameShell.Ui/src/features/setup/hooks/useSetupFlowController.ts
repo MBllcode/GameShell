@@ -28,6 +28,8 @@ type Options = {
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
   setHotkeys: Dispatch<SetStateAction<HotkeySettingsState>>;
   displays: DisplayDeviceInfo[];
+  selectedConsoleDisplays: DisplayIdentity[];
+  selectedConsoleDisplay: DisplayIdentity | null;
   controllerCapture: ControllerCaptureApi;
 };
 
@@ -41,10 +43,19 @@ export function useSetupFlowController(options: Options) {
   const currentStep = steps[resolvedStepIndex] ?? steps[0];
 
   useEffect(() => {
+    // Discovery refreshes are observational. Console display defaults are
+    // inferred only during first-run; editing screens must never replace a
+    // saved selection with the current Windows observation.
+    if (options.setupMode !== 'FirstRun'
+      || options.selectedConsoleDisplays.length > 0
+      || options.selectedConsoleDisplay !== null) {
+      return;
+    }
+
     const selections = syncActiveDisplaySelections(options.displays);
     options.setSelectedConsoleDisplays(selections.consoleDisplays);
     options.setSelectedConsoleDisplay(selections.primaryDisplay);
-  }, [options.displays]);
+  }, [options.displays, options.selectedConsoleDisplay, options.selectedConsoleDisplays, options.setSelectedConsoleDisplay, options.setSelectedConsoleDisplays]);
 
   useEffect(() => {
     if (options.setupMode === 'FirstRun') {

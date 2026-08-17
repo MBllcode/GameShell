@@ -5,7 +5,8 @@ import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopo
 import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../src/types/bridge.ts';
 
 function identity(name: string): DisplayIdentity {
-  return { monitorDevicePath: `\\\\?\\DISPLAY#${name}`, friendlyName: name, lastKnownFriendlyName: name, edidManufacturerId: 1, edidProductCodeId: name.length, connectorInstance: 1, adapterLuid: 1, targetId: name.length, sourceId: 1, outputTechnology: 'HDMI' };
+  const targetId = [...name].reduce((total, character) => total + character.charCodeAt(0), 0);
+  return { monitorDevicePath: `\\\\?\\DISPLAY#${name}`, friendlyName: name, edidManufacturerId: 1, edidProductCodeId: targetId, connectorInstance: 1, adapterLuid: 1, targetId, sourceId: 1, outputTechnology: 'HDMI' };
 }
 
 function topology(count: number): GamingProfileDisplayTopology {
@@ -70,6 +71,12 @@ test('added displays are enabled and only the first display is primary', () => {
   assert.equal(first.isPrimary, true);
   assert.equal(additional.enabled, true);
   assert.equal(additional.isPrimary, false);
+});
+
+test('topology rejects the same physical display under two friendly names', () => {
+  const value = topology(2);
+  value.displays[1].identity = { ...value.displays[0].identity, friendlyName: 'SAMSUNG' };
+  assert.ok(validateTopology(value).some((error) => error.includes('fizycznego ekranu')));
 });
 
 test('places an additional display beside the existing topology', () => {

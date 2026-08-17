@@ -167,15 +167,33 @@ public sealed class DisplayConfigMapperTests
     }
 
     [Fact]
-    public void IdentityMatcher_PrioritizesMonitorDevicePath()
+    public void IdentityMatcher_reports_conflicting_edid_even_when_monitor_path_matches()
     {
         var saved = Identity(path: "PATH-A", name: "Old Name", manufacturer: 1, product: 2, connector: 3);
         var detected = Identity(path: "PATH-A", name: "New Name", manufacturer: 9, product: 9, connector: 9);
 
         var confidence = DisplayIdentityMatcher.GetMatchConfidence(saved, detected);
 
-        Assert.Equal(DisplayIdentityMatchConfidence.ExactMonitorDevicePath, confidence);
-        Assert.True(DisplayIdentityMatcher.IsReliableMatch(saved, detected));
+        Assert.Equal(DisplayIdentityMatchConfidence.IdentityConflict, confidence);
+        Assert.False(DisplayIdentityMatcher.IsReliableMatch(saved, detected));
+    }
+
+    [Fact]
+    public void IdentityMatcher_does_not_report_conflict_for_a_different_route()
+    {
+        var saved = Identity(path: "PATH-A", name: "Monitor A", manufacturer: 1, product: 2, connector: 3) with
+        {
+            AdapterLuid = 10,
+            TargetId = 1
+        };
+        var detected = Identity(path: "PATH-B", name: "Monitor B", manufacturer: 9, product: 9, connector: 4) with
+        {
+            AdapterLuid = 10,
+            TargetId = 2
+        };
+
+        Assert.Equal(DisplayIdentityMatchConfidence.None, DisplayIdentityMatcher.GetMatchConfidence(saved, detected));
+        Assert.False(DisplayIdentityMatcher.IsSamePhysicalDisplay(saved, detected));
     }
 
     [Fact]

@@ -79,7 +79,8 @@ export function buildSettingsPayload(
         hotkeys: { enterProfile: normalizeHotkeyForDisplay(effectiveGamingProfileHotkeys[profile.name]?.enterProfile ?? savedHotkeys.enterProfile ?? ''), enterWorkMode: '' },
         controllerShortcut: normalizeControllerShortcut(effectiveGamingProfileControllerShortcuts[profile.name] ?? null)
       })),
-      gamingProfileBehaviours: effectiveGamingProfiles.map((profile) => ({ profileName: profile.name, behaviour: effectiveGamingProfileBehaviours[profile.name] ?? savedGamingBehaviour }))
+      gamingProfileBehaviours: effectiveGamingProfiles.map((profile) => ({ profileName: profile.name, behaviour: effectiveGamingProfileBehaviours[profile.name] ?? savedGamingBehaviour })),
+      knownPhysicalDisplays: state.settings?.display?.knownPhysicalDisplays ?? []
     },
     launcher: { type: launcherSettings.type, executablePath: launcherSettings.executablePath, arguments: launcherSettings.arguments, targetDisplayId: state.selectedConsoleDisplay?.monitorDevicePath ?? null },
     gameShell: { ...state.consoleBehaviour, completionDelaySeconds: state.settings?.gameShell.completionDelaySeconds ?? 5 },

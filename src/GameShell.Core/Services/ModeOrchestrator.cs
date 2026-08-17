@@ -29,7 +29,6 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         IDisplayTransitionService displayTransitionService,
         IRuntimeStateService runtimeStateService,
         IGamingProfileTopologyReadinessEvaluator? topologyReadinessEvaluator,
-        IDisplayRecoveryService? displayRecoveryService,
         ILogger<ModeOrchestrator> logger,
         GamingProfileRuntimeSettingsResolver? gamingProfileSettingsResolver = null)
     {
@@ -42,7 +41,6 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             settingsService,
             _gamingProfileSettingsResolver,
             topologyReadinessEvaluator,
-            displayRecoveryService,
             logger);
         _logger = logger;
     }
@@ -53,18 +51,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         IDisplayTransitionService displayTransitionService,
         IRuntimeStateService runtimeStateService,
         ILogger<ModeOrchestrator> logger)
-        : this(settingsService, modeWorkflowService, displayTransitionService, runtimeStateService, null, null, logger)
-    {
-    }
-
-    public ModeOrchestrator(
-        ISettingsService settingsService,
-        IModeWorkflowService modeWorkflowService,
-        IDisplayTransitionService displayTransitionService,
-        IRuntimeStateService runtimeStateService,
-        IGamingProfileTopologyReadinessEvaluator topologyReadinessEvaluator,
-        ILogger<ModeOrchestrator> logger)
-        : this(settingsService, modeWorkflowService, displayTransitionService, runtimeStateService, topologyReadinessEvaluator, null, logger)
+        : this(settingsService, modeWorkflowService, displayTransitionService, runtimeStateService, null, logger)
     {
     }
 
@@ -195,6 +182,10 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         try
         {
             var settings = await _settingsService.LoadAsync(cancellationToken);
+            var runtimeState = await _runtimeStateService.LoadAsync(cancellationToken);
+            var wasInWorkMode = _currentMode == GameShellMode.Work
+                || _state == ModeState.WorkMode
+                || runtimeState.CurrentMode == GameShellMode.Work;
             SetStatus(switchingState, operationName, null, null);
             _logger.LogInformation("{OperationName} [{TransitionId}] started with native DisplayConfig workflow. CurrentState={CurrentState}.", operationName, transitionId, GetState());
 
@@ -222,6 +213,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 var preWorkflowResult = await preWorkflow(settings);
                 if (!preWorkflowResult.Success)
                 {
+                    await RestoreWorkEnvironmentAfterRollbackAsync(settings, wasInWorkMode, cancellationToken, transitionId);
                     stopwatch.Stop();
                     var message = preWorkflowResult.Message ?? $"{operationName} pre-workflow failed.";
                     _logger.LogError("WORK MODE TRANSITION FAILED [Step=pre-display workflow, Message={Message}].", message);
@@ -244,6 +236,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             var transitionResult = await transition(settings);
             if (!transitionResult.Success)
             {
+                await RestoreWorkEnvironmentAfterRollbackAsync(settings, wasInWorkMode, cancellationToken, transitionId);
                 stopwatch.Stop();
                 var message = transitionResult.UserMessage ?? "Nie udało się przełączyć ekranów.";
                 _logger.LogError("WORK MODE TRANSITION FAILED [Step=display transition, ErrorCode={ErrorCode}, Message={Message}, CurrentStateAfterFailure={CurrentStateAfterFailure}].", transitionResult.ErrorCode, message, GetState());
@@ -265,6 +258,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 if (postTransitionResult is not null)
                 {
                     var rollback = await _displayTransitionService.RestorePreviousLayoutAsync(cancellationToken);
+                    await RestoreWorkEnvironmentAfterRollbackAsync(settings, wasInWorkMode, cancellationToken, transitionId);
                     _logger.LogWarning(
                         "WORK MODE TRANSITION [{TransitionId}] postcheck failed. RollbackSuccess={RollbackSuccess}.",
                         transitionId,
@@ -396,6 +390,37 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         finally
         {
             _operationLock.Release();
+        }
+    }
+
+    private async Task RestoreWorkEnvironmentAfterRollbackAsync(
+        AppSettings settings,
+        bool wasInWorkMode,
+        CancellationToken cancellationToken,
+        string transitionId)
+    {
+        if (!wasInWorkMode)
+        {
+            return;
+        }
+
+        try
+        {
+            var workflowResult = await _modeWorkflowService.RunWorkWorkflowAsync(settings, cancellationToken);
+            _logger.LogInformation(
+                "WORK MODE TRANSITION [{TransitionId}] rollback workflow completed. Success={Success}, Message={Message}.",
+                transitionId,
+                workflowResult.Success,
+                workflowResult.Message ?? "(none)");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "WORK MODE TRANSITION [{TransitionId}] rollback workflow failed after display rollback. ExceptionType={ExceptionType}, Message={Message}.",
+                transitionId,
+                ex.GetType().FullName,
+                ex.Message);
         }
     }
 

@@ -59,8 +59,13 @@ public sealed class SettingsService : ISettingsService
                 var primary = await TryLoadValidSettingsAsync(SettingsPath, cancellationToken);
                 if (primary.IsValid)
                 {
+                    if (primary.WasMigrated)
+                    {
+                        await PersistMigratedSettingsAsync(primary.Settings, cancellationToken);
+                    }
+
                     _cachedSettings = primary.Settings;
-                    _cachedLastWriteTimeUtc = lastWriteTimeUtc;
+                    _cachedLastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
                     LogRefreshPolicyHydration(primary.Settings, primary.Settings);
                     _logger.LogDebug(
                         "[SETTINGS LOAD] Path={Path} Result=Success",
@@ -231,11 +236,11 @@ public sealed class SettingsService : ISettingsService
         return json;
     }
 
-    private async Task<(bool IsValid, AppSettings Settings)> TryLoadValidSettingsAsync(string path, CancellationToken cancellationToken)
+    private async Task<(bool IsValid, AppSettings Settings, bool WasMigrated)> TryLoadValidSettingsAsync(string path, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))
         {
-            return (false, new AppSettings());
+            return (false, new AppSettings(), false);
         }
 
         try
@@ -247,13 +252,23 @@ public sealed class SettingsService : ISettingsService
             using var document = JsonDocument.Parse(json);
             var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? new AppSettings();
+            var wasMigrated = AppSettingsValidator.HasLegacyCapabilityData(settings);
             var validated = AppSettingsValidator.Validate(settings);
-            return (true, validated);
+            return (true, validated, wasMigrated);
         }
         catch (Exception)
         {
-            return (false, new AppSettings());
+            return (false, new AppSettings(), false);
         }
+    }
+
+    private async Task PersistMigratedSettingsAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        await BackupCurrentPrimaryAsync(cancellationToken);
+        await WriteAtomicAsync(SettingsPath, SerializeSettings(settings), cancellationToken);
+        _logger.LogInformation(
+            "[SETTINGS MIGRATION] Path={Path} Migration=DisplayCapabilityCatalog Result=Success",
+            SettingsPath);
     }
 
     private static AppSettings CreateDefaultSettings() => new();

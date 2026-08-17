@@ -11,13 +11,16 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
     private static readonly TimeSpan RefreshRateCorrectionDelay = TimeSpan.FromMilliseconds(750);
     private readonly ILogger<WindowsDisplayConfigurationService> _logger;
     private readonly WindowsDisplayTopologyReader _topologyReader;
+    private readonly ISettingsService _settingsService;
 
     public WindowsDisplayConfigurationService(
         ILogger<WindowsDisplayConfigurationService> logger,
-        WindowsDisplayTopologyReader topologyReader)
+        WindowsDisplayTopologyReader topologyReader,
+        ISettingsService settingsService)
     {
         _logger = logger;
         _topologyReader = topologyReader;
+        _settingsService = settingsService;
     }
 
     public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default)
@@ -177,13 +180,13 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         return Task.FromResult(ApplyLayout(normalizedSnapshot, validateOnly: true, cancellationToken));
     }
 
-    public Task<DisplayOperationResult> ApplyLayoutAsync(DisplayLayoutSnapshot snapshot, CancellationToken cancellationToken = default)
+    public async Task<DisplayOperationResult> ApplyLayoutAsync(DisplayLayoutSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         var normalizedSnapshot = DisplayLayoutTopologyNormalizer.NormalizePrimaryOrigin(snapshot);
         var validation = ApplyLayout(normalizedSnapshot, validateOnly: true, cancellationToken);
         if (!validation.Success)
         {
-            return Task.FromResult(validation);
+            return validation;
         }
 
         var result = ApplyLayout(normalizedSnapshot, validateOnly: false, cancellationToken);
@@ -191,11 +194,15 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         {
             foreach (var display in normalizedSnapshot.Displays.Where(display => display.IsActive && display.RefreshRateDenominator == 0))
             {
-                TryApplyHighestRefreshRateForDisplay(display.Identity, cancellationToken);
+                await ApplyAutoHighestRefreshRateAsync(
+                    display.Identity,
+                    display.Width,
+                    display.Height,
+                    cancellationToken);
             }
         }
 
-        return Task.FromResult(result);
+        return result;
     }
 
     public Task<DisplayOperationResult> ActivateOnlyAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
@@ -263,26 +270,59 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             return result;
         }
 
-        if (selected.Count == 1)
+        if (selected.Count == 1
+            && snapshot.Displays.Count == 1
+            && snapshot.Displays[0].RefreshRateDenominator > 0)
         {
-            TryApplyHighestRefreshRateForDisplay(selected[0].Identity, cancellationToken);
+            await ApplyAutoHighestRefreshRateAsync(
+                selected[0].Identity,
+                selected[0].Width,
+                selected[0].Height,
+                cancellationToken);
         }
         return result;
     }
 
-    private void TryApplyHighestRefreshRateForDisplay(DisplayIdentity selectedDisplay, CancellationToken cancellationToken)
+    private async Task ApplyAutoHighestRefreshRateAsync(
+        DisplayIdentity selectedDisplay,
+        int requestedWidth,
+        int requestedHeight,
+        CancellationToken cancellationToken)
+    {
+        var settings = await _settingsService.LoadAsync(cancellationToken);
+        var bestKnown = KnownPhysicalDisplayCatalogService.FindBestKnown(settings.Display, selectedDisplay);
+
+        // BestKnownCapability is historical knowledge only. AutoHighest must select
+        // the highest mode Windows enumerates after the target becomes active,
+        // even when the current inventory is temporarily below that history.
+        if (cancellationToken.WaitHandle.WaitOne(RefreshRateCorrectionDelay))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        TryApplyHighestRefreshRateForDisplay(
+            selectedDisplay,
+            requestedWidth,
+            requestedHeight,
+            "AutoHighestCurrentInventory",
+            bestKnown,
+            cancellationToken);
+    }
+
+    private void TryApplyHighestRefreshRateForDisplay(
+        DisplayIdentity selectedDisplay,
+        int requestedWidth,
+        int requestedHeight,
+        string reason,
+        DisplayCapabilitySnapshot? bestKnown,
+        CancellationToken cancellationToken)
     {
         try
         {
-            if (cancellationToken.WaitHandle.WaitOne(RefreshRateCorrectionDelay))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-
-        var activeTopology = _topologyReader.QueryActive(cancellationToken);
+            var activeTopology = _topologyReader.QueryActive(cancellationToken);
             var activePath = activeTopology.Paths
                 .Where(path => path.IsActive)
-                .FirstOrDefault(path => DisplayIdentityMatcher.IsReliableMatch(selectedDisplay, ToIdentity(path)));
+                .FirstOrDefault(path => DisplayIdentityMatcher.IsSamePhysicalDisplay(selectedDisplay, ToIdentity(path)));
             if (activePath is null)
             {
                 _logger.LogDebug(
@@ -301,17 +341,19 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             }
 
             var modes = EnumerateDisplayModes(activePath.SourceDeviceName);
+            var width = requestedWidth > 0 ? requestedWidth : activePath.Width;
+            var height = requestedHeight > 0 ? requestedHeight : activePath.Height;
             var bestMode = DisplayModeSelector.SelectHighestRefreshMode(
                 modes,
-                checked((uint)activePath.Width),
-                checked((uint)activePath.Height));
+                checked((uint)width),
+                checked((uint)height));
             if (bestMode is null)
             {
                 _logger.LogWarning(
                     "No GDI display mode found for Console display {FriendlyName} at {Width}x{Height}.",
                     activePath.MonitorFriendlyName,
-                    activePath.Width,
-                    activePath.Height);
+                    width,
+                    height);
                 return;
             }
 
@@ -327,6 +369,12 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             }
 
             var modeToApply = bestMode.Value;
+            _logger.LogInformation(
+                "[DISPLAY REFRESH CORRECTION] PhysicalId={PhysicalId} Policy=AutoHighest BestKnown={BestKnown} SelectedRefresh={SelectedRefresh} Reason={Reason}",
+                FormatPhysicalId(selectedDisplay),
+                FormatCapability(bestKnown),
+                $"{modeToApply.PelsWidth}x{modeToApply.PelsHeight}@{modeToApply.DisplayFrequency:0.##}Hz",
+                reason);
             modeToApply.Fields |= DisplayConfigNative.DmBitsPerPel
                 | DisplayConfigNative.DmPelsWidth
                 | DisplayConfigNative.DmPelsHeight
@@ -351,7 +399,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
             }
 
             _logger.LogInformation(
-                "Applied Console display refresh-rate correction. Display: {FriendlyName}, Source: {SourceDeviceName}, Resolution: {Width}x{Height}, Hz: {RefreshHz}.",
+                "Applied display refresh-rate correction. Display: {FriendlyName}, Source: {SourceDeviceName}, Resolution: {Width}x{Height}, Hz: {RefreshHz}.",
                 activePath.MonitorFriendlyName,
                 activePath.SourceDeviceName,
                 modeToApply.PelsWidth,
@@ -360,7 +408,7 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Console refresh-rate correction failed after DisplayConfig apply. Keeping Console Mode active.");
+            _logger.LogWarning(ex, "Display refresh-rate correction failed after DisplayConfig apply. Keeping the display activation active.");
         }
     }
 
@@ -834,6 +882,24 @@ public sealed class WindowsDisplayConfigurationService : IDisplayConfigurationSe
         };
     }
 
+    private static string FormatPhysicalId(DisplayIdentity identity)
+    {
+        return identity.AdapterLuid != 0 && identity.TargetId != 0
+            ? $"{identity.AdapterLuid}:{identity.TargetId}"
+            : identity.MonitorDevicePath;
+    }
+
+    private static string FormatCapability(DisplayCapabilitySnapshot? capability)
+    {
+        return capability is null
+            ? "-"
+            : FormatMode(capability.Width, capability.Height, capability.MaxRefreshRateHz);
+    }
+
+    private static string FormatRefresh(double refreshRate)
+    {
+        return refreshRate > 0 ? $"{refreshRate:0.##}Hz" : "-";
+    }
 
     private static string FormatModes(IReadOnlyList<DisplayModeInfo> modes)
     {

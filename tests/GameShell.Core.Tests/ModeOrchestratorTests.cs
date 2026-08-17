@@ -173,6 +173,29 @@ public sealed class ModeOrchestratorTests
     }
 
     [Fact]
+    public async Task GamingDisplayFailureFromWork_RestoresTheFullWorkWorkflow()
+    {
+        var order = new List<string>();
+        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.Work });
+        var display = new FakeDisplayTransitionService(order)
+        {
+            ConsoleResult = DisplayTransitionResult.Fail("ApplyFailed", "display failed")
+        };
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()),
+            new FakeModeWorkflowService(order),
+            display,
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterGameShellAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal(["post-work"], order);
+        Assert.Equal(GameShellMode.Work, runtime.State.CurrentMode);
+    }
+
+    [Fact]
     public async Task EnterWorkMode_PostWorkflowFailureIsBestEffortAfterDisplaySuccess()
     {
         var order = new List<string>();
@@ -286,7 +309,7 @@ public sealed class ModeOrchestratorTests
     }
 
     [Fact]
-    public async Task EnterProfile_RecoversCapabilityRegressionAfterApplyingProfile()
+    public async Task EnterProfile_AutoHighestBelowBestKnownStillAppliesProfile()
     {
         var settings = new AppSettings
         {
@@ -323,25 +346,22 @@ public sealed class ModeOrchestratorTests
             }
         };
         var display = new FakeDisplayTransitionService();
-        var query = new RecoveringReadinessDisplayQuery();
-        display.OnGaming = () => query.Active = true;
+        var query = new FakeReadinessDisplayQuery();
         var evaluator = new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance);
-        var recovery = new FakeDisplayRecoveryService(query);
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(settings),
             new FakeModeWorkflowService(),
             display,
             new FakeRuntimeStateService(new RuntimeState()),
             evaluator,
-            recovery,
             NullLogger<ModeOrchestrator>.Instance);
 
         var result = await orchestrator.EnterGameShellWithDisplayProfileAsync("KONSOLA");
 
-        Assert.True(result.Success, result.Message);
-        Assert.Equal(1, recovery.AttemptCount);
+        Assert.Equal(ModeResultStatus.Success, result.Status);
+        Assert.True(result.Success);
         Assert.Equal(1, display.GamingCount);
-        Assert.Equal(144, settings.Display.GamingProfiles[0].DisplayTopology!.Displays[0].CapabilityExpectation!.MaxRefreshRateHz);
+        Assert.Equal(144, settings.Display.KnownPhysicalDisplays.Single().BestKnownCapability!.MaxRefreshRateHz);
     }
 
     private sealed class FakeSettingsService : ISettingsService
@@ -428,6 +448,7 @@ public sealed class ModeOrchestratorTests
         }
 
         public DisplayTransitionResult WorkModeResult { get; init; } = DisplayTransitionResult.Ok();
+        public DisplayTransitionResult ConsoleResult { get; init; } = DisplayTransitionResult.Ok();
         public bool BlockUntilCancellation { get; init; }
         public int GamingCount { get; private set; }
         public DisplayLayoutSnapshot? WorkModeLayout { get; private set; }
@@ -439,7 +460,7 @@ public sealed class ModeOrchestratorTests
         {
             GamingCount++;
             OnGaming?.Invoke();
-            return Task.FromResult(DisplayTransitionResult.Ok());
+            return Task.FromResult(ConsoleResult);
         }
 
         public Task<DisplayTransitionResult> EnterGamingModeAsync(
@@ -560,75 +581,4 @@ public sealed class ModeOrchestratorTests
         }
     }
 
-    private sealed class RecoveringReadinessDisplayQuery : IDisplayQueryService
-    {
-        public bool Recovered { get; set; }
-        public bool Active { get; set; }
-
-        public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult<IReadOnlyList<DisplayDeviceInfo>>
-            ([new DisplayDeviceInfo
-            {
-                Name = "S90F",
-                Identity = new DisplayIdentity { FriendlyName = "S90F", AdapterLuid = 1, TargetId = 7, EdidManufacturerId = 123, EdidProductCodeId = 456 },
-                SourceDeviceName = @"\\.\DISPLAY1",
-                AdapterLuid = 1,
-                TargetId = 7,
-                IsEnabled = Active,
-                IsAvailable = true
-            }]);
-        }
-
-        public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new DisplayLayoutSnapshot());
-        }
-
-        public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new DisplayModeQueryResult
-            {
-                Success = true,
-                Modes = Recovered
-                    ? [
-                        new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 60, RefreshRateDenominator = 1 },
-                        new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 144, RefreshRateDenominator = 1 }
-                    ]
-                    : [new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 60, RefreshRateDenominator = 1 }]
-            });
-        }
-    }
-
-    private sealed class FakeDisplayRecoveryService : IDisplayRecoveryService
-    {
-        private readonly RecoveringReadinessDisplayQuery _query;
-
-        public FakeDisplayRecoveryService(RecoveringReadinessDisplayQuery query)
-        {
-            _query = query;
-        }
-
-        public int AttemptCount { get; private set; }
-
-        public Task<DisplayRecoveryAttempt> RecoverAsync(
-            string profileName,
-            ProfileDisplayTarget savedTarget,
-            DisplayDeviceInfo resolvedTarget,
-            IReadOnlyList<DisplayModeInfo> beforeModes,
-            CancellationToken cancellationToken = default)
-        {
-            AttemptCount++;
-            _query.Recovered = true;
-            return Task.FromResult(new DisplayRecoveryAttempt
-            {
-                ProfileName = profileName,
-                SavedTarget = savedTarget,
-                ResolvedTarget = resolvedTarget,
-                Mechanism = "fake",
-                Result = DisplayRecoveryResult.Succeeded,
-                BeforeModes = beforeModes
-            });
-        }
-    }
 }

@@ -100,6 +100,37 @@ public sealed class GamingProfileTopologyReadinessTests
     }
 
     [Fact]
+    public async Task AutoHighest_InactiveTarget_WithBestKnownDoesNotBlockOnHistoricalRefresh()
+    {
+        var query = new FakeDisplayQuery([Device("Generic", 7, isEnabled: false)], _ => throw new InvalidOperationException("inactive target must not query modes"));
+        var topology = new GamingProfileDisplayTopology { Displays = [AutoTarget()] };
+        var displaySettings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay
+                {
+                    PhysicalIdentity = Identity("S90F", 7),
+                    CanonicalFriendlyName = "S90F",
+                    BestKnownCapability = new DisplayCapabilitySnapshot
+                    {
+                        Width = 3840,
+                        Height = 2160,
+                        MaxRefreshRateNumerator = 144,
+                        MaxRefreshRateDenominator = 1
+                    }
+                }
+            ]
+        };
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync("KONSOLA", "KONSOLA", topology, deferInactiveModeValidation: true, displaySettings: displaySettings);
+
+        AssertTarget(result, ProfileDisplayReadiness.ResolvableInactive, ProfileDisplayReadinessReason.TargetInactive);
+        Assert.Equal(144, result.Targets[0].BestKnownCapability!.MaxRefreshRateHz);
+    }
+
+    [Fact]
     public async Task Fixed144_WithOnly60_IsUnavailable()
     {
         var target = AutoTarget();
@@ -172,7 +203,7 @@ public sealed class GamingProfileTopologyReadinessTests
     }
 
     [Fact]
-    public async Task SamePhysicalRouteWithDifferentFriendlyNameAndCapabilityRegression_IsDegradedNotMissing()
+    public async Task AutoHighestBelowBestKnown_IsReadyAndOnlyDiagnostic()
     {
         var target = Target("Model X", 10);
         target.RefreshPolicy = RefreshPolicy.AutoHighest;
@@ -186,13 +217,31 @@ public sealed class GamingProfileTopologyReadinessTests
             LastKnownGoodMaxRefreshDenominator = 1
         };
         var query = new FakeDisplayQuery([Device("Generic Manufacturer", 10)], _ => [Mode(3840, 2160, 60, 1)]);
+        var displaySettings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay
+                {
+                    PhysicalIdentity = target.Identity,
+                    CanonicalFriendlyName = "Model X",
+                    BestKnownCapability = new DisplayCapabilitySnapshot
+                    {
+                        Width = 3840,
+                        Height = 2160,
+                        MaxRefreshRateNumerator = 144,
+                        MaxRefreshRateDenominator = 1
+                    }
+                }
+            ]
+        };
 
         var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
-            .EvaluateAsync("PROFILE", "PROFILE", new GamingProfileDisplayTopology { Displays = [target] });
+            .EvaluateAsync("PROFILE", "PROFILE", new GamingProfileDisplayTopology { Displays = [target] }, displaySettings: displaySettings);
 
         Assert.True(result.Targets[0].ResolvedTarget is not null);
-        Assert.Equal(ProfileDisplayReadiness.Degraded, result.Targets[0].Result);
-        Assert.Equal(ProfileDisplayReadinessReason.CapabilityRegression, result.Targets[0].Reason);
+        Assert.Equal(ProfileDisplayReadiness.Ready, result.Targets[0].Result);
+        Assert.Equal(ProfileDisplayReadinessReason.CapabilityBelowBestKnown, result.Targets[0].Reason);
         Assert.Equal("Generic Manufacturer", result.Targets[0].ResolvedTarget!.Name);
     }
 

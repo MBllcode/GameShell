@@ -20,6 +20,8 @@ import { areTopologiesEqual, getProfileTopology, normalizeCanvasTopology, topolo
 import { createSettingsComparisonKey } from './features/settings/settingsComparison';
 import { resolveWorkingProfileName } from './features/setup/setupRouting';
 
+const FOOTNOTE_ERROR_DURATION_MS = 6000;
+
 export function App() {
   const runtimeState = useAppRuntimeState();
   const { status, setStatus, settings, setSettings, isRemovingProfile, setIsRemovingProfile, activeModeAction, setActiveModeAction } = runtimeState;
@@ -132,10 +134,26 @@ export function App() {
     setLauncher,
     setHotkeys,
     displays,
+    selectedConsoleDisplays,
+    selectedConsoleDisplay,
     controllerCapture
   });
   const { activeSteps, activeStepIndexes, currentStep, resolvedFlowPosition, isNonFirstRunEditingSession, isLastStep, canGoBack } = flow;
   const isModeSwitching = activeModeAction !== null;
+
+  useEffect(() => {
+    if (!error && !status.lastError) return;
+
+    const timer = window.setTimeout(() => {
+      setError(null);
+      setStatus((current) => current.lastError === status.lastError && status.lastError !== null
+        ? { ...current, lastError: null }
+        : current);
+    }, FOOTNOTE_ERROR_DURATION_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [error, setError, setStatus, status.lastError]);
+
   const footerMessage = error || status.lastError || message;
   const canSelectSidebarStep = !isVeryFirstConfiguration && !isSaving;
   const handleWorkModeDraftChange = useCallback((topology: Parameters<typeof topologyToLegacy>[0]) => {

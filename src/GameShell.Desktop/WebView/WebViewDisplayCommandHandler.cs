@@ -41,7 +41,34 @@ internal sealed class WebViewDisplayCommandHandler
     {
         try
         {
-            return await _displayQueryService.GetAvailableDisplaysAsync();
+            var settings = await _settingsService.LoadAsync();
+            var currentDisplays = await _displayQueryService.GetAvailableDisplaysAsync();
+            currentDisplays = await RefreshCurrentModeInventoryAsync(currentDisplays);
+            var merged = KnownPhysicalDisplayCatalogService.Merge(settings.Display, currentDisplays);
+            _logger.LogInformation(
+                "[DISPLAY DISCOVERY MERGE] KnownCount={KnownCount}, ObservationCount={ObservationCount}, LogicalCount={LogicalCount}, DuplicatesCollapsed={DuplicatesCollapsed}",
+                merged.KnownCount,
+                merged.ObservationCount,
+                merged.LogicalCount,
+                merged.DuplicatesCollapsed);
+            foreach (var match in merged.IdentityMatches.Where(match => match.Result is "New" or "Conflict"))
+            {
+                _logger.LogInformation(
+                    "[DISPLAY IDENTITY MATCH] KnownDisplayId={KnownDisplayId}, CanonicalName={CanonicalName}, ObservedName={ObservedName}, AdapterLuid={AdapterLuid}, TargetId={TargetId}, MatchConfidence={MatchConfidence}, Result={Result}",
+                    match.KnownDisplayId,
+                    match.CanonicalName,
+                    match.ObservedName,
+                    match.AdapterLuid,
+                    match.TargetId,
+                    match.MatchConfidence,
+                    match.Result);
+            }
+            if (merged.CatalogChanged)
+            {
+                await _settingsService.SaveAsync(settings);
+            }
+
+            return merged.Displays;
         }
         catch (Exception ex)
         {
@@ -95,7 +122,7 @@ internal sealed class WebViewDisplayCommandHandler
     {
         var identities = WebViewPayloadReader.ReadDisplayIdentities(payload);
         var profileName = WebViewPayloadReader.ReadOptionalProfileName(payload);
-        var available = await _displayQueryService.GetAvailableDisplaysAsync();
+        var available = await GetDisplaysAsync();
         var maxProfileCount = CalculateMaxProfileCount(available.Count);
         var selected = ResolveSelectedDisplays(identities, available);
         var settings = await _settingsService.LoadAsync();
@@ -108,10 +135,10 @@ internal sealed class WebViewDisplayCommandHandler
     public async Task<AppSettings> CaptureGamingLayoutAsync(JsonElement? payload)
     {
         var profileName = WebViewPayloadReader.ReadOptionalProfileName(payload);
-        var available = await _displayQueryService.GetAvailableDisplaysAsync();
+        var available = await GetDisplaysAsync();
         var maxProfileCount = CalculateMaxProfileCount(available.Count);
         var settings = await _settingsService.LoadAsync();
-        var layout = await CaptureDisplayLayoutAsync();
+        var layout = CanonicalizeLayout(await CaptureDisplayLayoutAsync(), available);
         UpsertGamingProfile(settings.Display, profileName, layout, maxProfileCount);
         await _saveAndApplySettingsAsync(settings);
         return settings;
@@ -120,11 +147,12 @@ internal sealed class WebViewDisplayCommandHandler
     public async Task<AppSettings> CapturePrimaryGamingLayoutAsync(JsonElement? payload)
     {
         var profileName = WebViewPayloadReader.ReadOptionalProfileName(payload);
-        var available = await _displayQueryService.GetAvailableDisplaysAsync();
+        var available = await GetDisplaysAsync();
         var maxProfileCount = CalculateMaxProfileCount(available.Count);
         var currentLayout = await CaptureDisplayLayoutAsync();
-        var primaryDisplay = currentLayout.Displays.SingleOrDefault(display => display.IsActive && display.IsPrimary)
-            ?? currentLayout.Displays.SingleOrDefault(display => display.IsActive && display.PositionX == 0 && display.PositionY == 0)
+        var canonicalLayout = CanonicalizeLayout(currentLayout, available);
+        var primaryDisplay = canonicalLayout.Displays.SingleOrDefault(display => display.IsActive && display.IsPrimary)
+            ?? canonicalLayout.Displays.SingleOrDefault(display => display.IsActive && display.PositionX == 0 && display.PositionY == 0)
             ?? throw new InvalidOperationException("Nie udało się ustalić monitora głównego.");
         var settings = await _settingsService.LoadAsync();
         var layout = new DisplayLayoutSnapshot
@@ -155,6 +183,121 @@ internal sealed class WebViewDisplayCommandHandler
         UpsertGamingProfile(settings.Display, profileName, layout, maxProfileCount);
         await _saveAndApplySettingsAsync(settings);
         return settings;
+    }
+
+    private async Task<IReadOnlyList<DisplayDeviceInfo>> RefreshCurrentModeInventoryAsync(
+        IReadOnlyList<DisplayDeviceInfo> displays)
+    {
+        var refreshed = new List<DisplayDeviceInfo>(displays.Count);
+        foreach (var display in displays)
+        {
+            if (!display.IsEnabled || !display.IsAvailable)
+            {
+                refreshed.Add(display);
+                continue;
+            }
+
+            try
+            {
+                var inventory = await _displayQueryService.GetAvailableDisplayModesAsync(display.Identity);
+                var requestedModes = inventory.Modes
+                    .Where(mode => mode.Width == display.Width && mode.Height == display.Height)
+                    .OrderByDescending(mode => mode.RefreshRateHz)
+                    .ToList();
+                var highest = requestedModes.FirstOrDefault();
+                    refreshed.Add(highest is null
+                        ? display
+                        : WithCurrentCapability(display, highest, inventory.Modes));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(
+                    ex,
+                    "[DISPLAY MODE INVENTORY] Refresh failed for PhysicalId={PhysicalId}; keeping DisplayConfig observation.",
+                    FormatPhysicalId(display.Identity));
+                refreshed.Add(display);
+            }
+        }
+
+        return refreshed;
+    }
+
+    private static DisplayDeviceInfo WithCurrentCapability(
+        DisplayDeviceInfo display,
+        DisplayModeInfo capability,
+        IReadOnlyList<DisplayModeInfo> enumeratedModes)
+    {
+        return new DisplayDeviceInfo
+        {
+            Id = display.Id,
+            KnownPhysicalDisplayId = display.KnownPhysicalDisplayId,
+            Name = display.Name,
+            IsPrimary = display.IsPrimary,
+            IsEnabled = display.IsEnabled,
+            IsAvailable = display.IsAvailable,
+            Identity = display.Identity,
+            SourceDeviceName = display.SourceDeviceName,
+            SourceId = display.SourceId,
+            TargetId = display.TargetId,
+            AdapterLuid = display.AdapterLuid,
+            ConnectionTechnology = display.ConnectionTechnology,
+            PositionX = display.PositionX,
+            PositionY = display.PositionY,
+            Width = display.Width,
+            Height = display.Height,
+            Orientation = display.Orientation,
+            RefreshRateNumerator = capability.RefreshRateNumerator,
+            RefreshRateDenominator = capability.RefreshRateDenominator,
+            IsRemembered = display.IsRemembered,
+            CatalogState = display.CatalogState,
+            CurrentObservation = display.CurrentObservation,
+            EnumeratedModes = enumeratedModes,
+            LastKnownGoodCapability = display.LastKnownGoodCapability,
+            LastVerifiedActiveCapability = display.LastVerifiedActiveCapability
+        };
+    }
+
+    private static string FormatPhysicalId(DisplayIdentity identity)
+    {
+        return identity.AdapterLuid != 0 && identity.TargetId != 0
+            ? $"{identity.AdapterLuid}:{identity.TargetId}"
+            : string.IsNullOrWhiteSpace(identity.MonitorDevicePath)
+                ? "fallback"
+                : identity.MonitorDevicePath;
+    }
+
+    private static DisplayLayoutSnapshot CanonicalizeLayout(
+        DisplayLayoutSnapshot layout,
+        IReadOnlyList<DisplayDeviceInfo> available)
+    {
+        return new DisplayLayoutSnapshot
+        {
+            Id = layout.Id,
+            CapturedAt = layout.CapturedAt,
+            Displays = layout.Displays.Select(display =>
+            {
+                var canonical = available.FirstOrDefault(candidate =>
+                    DisplayIdentityMatcher.IsSamePhysicalDisplay(candidate.Identity, display.Identity));
+                return new DisplayPathSnapshot
+                {
+                    Identity = canonical?.Identity ?? display.Identity,
+                    IsActive = display.IsActive,
+                    IsPrimary = display.IsPrimary,
+                    PositionX = display.PositionX,
+                    PositionY = display.PositionY,
+                    Width = display.Width,
+                    Height = display.Height,
+                    Orientation = display.Orientation,
+                    RefreshRateNumerator = display.RefreshRateNumerator,
+                    RefreshRateDenominator = display.RefreshRateDenominator,
+                    SourceId = display.SourceId,
+                    TargetId = display.TargetId,
+                    AdapterLuid = display.AdapterLuid,
+                    SourceDeviceName = display.SourceDeviceName,
+                    ConnectionTechnology = display.ConnectionTechnology
+                };
+            }).ToList()
+        };
     }
 
     public async Task<AppSettings> SetActiveGamingProfileAsync(JsonElement? payload)
@@ -224,7 +367,7 @@ internal sealed class WebViewDisplayCommandHandler
                 throw new InvalidOperationException("Nie wszystkie wybrane ekrany profilu gamingowego są obecnie dostępne.");
             }
 
-            if (selected.Any(existing => IsSameDisplay(existing, match)))
+            if (selected.Any(existing => DisplayIdentityMatcher.IsSamePhysicalDisplay(existing.Identity, match.Identity)))
             {
                 throw new InvalidOperationException("Wybrano ten sam ekran profilu gamingowego więcej niż raz.");
             }
@@ -258,7 +401,7 @@ internal sealed class WebViewDisplayCommandHandler
                 item.Display,
                 item.PositionX,
                 item.PositionY,
-                IsSameDisplay(primary, item.Display))).ToList()
+                DisplayIdentityMatcher.IsSamePhysicalDisplay(primary.Identity, item.Display.Identity))).ToList()
         };
     }
 
@@ -288,6 +431,7 @@ internal sealed class WebViewDisplayCommandHandler
     {
         return new DisplayPathSnapshot
         {
+            KnownPhysicalDisplayId = display.KnownPhysicalDisplayId,
             Identity = display.Identity,
             IsActive = true,
             IsPrimary = isPrimary,
@@ -308,34 +452,7 @@ internal sealed class WebViewDisplayCommandHandler
 
     private static bool MatchesSelectedDisplay(DisplayIdentity selected, DisplayDeviceInfo detected)
     {
-        if (DisplayIdentityMatcher.IsReliableMatch(selected, detected.Identity))
-        {
-            return true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(selected.MonitorDevicePath)
-            && !string.IsNullOrWhiteSpace(detected.Identity.MonitorDevicePath)
-            && string.Equals(selected.MonitorDevicePath, detected.Identity.MonitorDevicePath, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return selected.AdapterLuid != 0
-            && detected.AdapterLuid != 0
-            && selected.AdapterLuid == detected.AdapterLuid
-            && selected.TargetId == detected.TargetId;
-    }
-
-    private static bool IsSameDisplay(DisplayDeviceInfo left, DisplayDeviceInfo right)
-    {
-        if (left.AdapterLuid != 0 && right.AdapterLuid != 0 && left.AdapterLuid == right.AdapterLuid && left.TargetId == right.TargetId)
-        {
-            return true;
-        }
-
-        return !string.IsNullOrWhiteSpace(left.Identity.MonitorDevicePath)
-            && !string.IsNullOrWhiteSpace(right.Identity.MonitorDevicePath)
-            && string.Equals(left.Identity.MonitorDevicePath, right.Identity.MonitorDevicePath, StringComparison.OrdinalIgnoreCase);
+        return DisplayIdentityMatcher.IsSamePhysicalDisplay(selected, detected.Identity);
     }
 
     private static int ResolveDisplayWidth(int width) => width > 0 ? width : 1920;

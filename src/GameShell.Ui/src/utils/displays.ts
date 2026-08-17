@@ -44,6 +44,7 @@ export function getRefreshSelectionState(
 export function topologyFromLegacy(layout: DisplayLayoutSnapshot): GamingProfileDisplayTopology {
   return {
     displays: layout.displays.map((display) => ({
+      knownPhysicalDisplayId: display.knownPhysicalDisplayId,
       identity: display.identity,
       enabled: display.isActive,
       isPrimary: display.isPrimary,
@@ -83,6 +84,7 @@ export function normalizeCanvasTopology(topology: GamingProfileDisplayTopology):
 export function profileTargetFromDisplay(display: DisplayDeviceInfo, fallbackModes: DisplayModeInfo[] = []): ProfileDisplayTarget {
   const mode = fallbackModes.find(candidate => candidate.width === (display.width || display.preferredWidth) && candidate.height === (display.height || display.preferredHeight)) ?? fallbackModes[0];
   return {
+    knownPhysicalDisplayId: display.knownPhysicalDisplayId,
     identity: display.identity,
     enabled: true,
     isPrimary: true,
@@ -115,7 +117,7 @@ export function getTopologyEditorErrors(topology: GamingProfileDisplayTopology, 
 
 export function normalizeTopologyPrimary(topology: GamingProfileDisplayTopology): GamingProfileDisplayTopology {
   const enabled = topology.displays.find((display) => display.enabled && display.isPrimary) ?? topology.displays.find((display) => display.enabled);
-  return { displays: topology.displays.map((display) => ({ ...display, isPrimary: Boolean(enabled && sameIdentity(display.identity, enabled.identity) && display.enabled) })) };
+  return { displays: topology.displays.map((display) => ({ ...display, isPrimary: Boolean(enabled && isSameProfileDisplay(display, enabled) && display.enabled) })) };
 }
 
 export function getProfileTopology(profile: DisplayLayoutProfile): GamingProfileDisplayTopology {
@@ -127,8 +129,9 @@ export function topologyToLegacy(topology: GamingProfileDisplayTopology, observe
     id: `${Date.now()}`,
     capturedAt: new Date().toISOString(),
     displays: topology.displays.map((display) => {
-      const observed = observedDisplays.find((candidate) => sameIdentity(candidate.identity, display.identity));
+      const observed = observedDisplays.find((candidate) => isSamePhysicalDisplay(candidate.identity, display.identity));
       return {
+        knownPhysicalDisplayId: display.knownPhysicalDisplayId,
         identity: display.identity,
         isActive: display.enabled,
         isAvailable: observed?.isAvailable ?? false,
@@ -159,18 +162,22 @@ export function areTopologiesEqual(left: GamingProfileDisplayTopology, right: Ga
 }
 
 const defaultTopologyValidationMessages: Record<string, string> = {
-  'profile.validationMinDisplays': 'Add at least one display.',
-  'profile.validationNoEnabledDisplays': 'Enable at least one display.',
-  'profile.validationSinglePrimary': 'Select exactly one primary display.',
-  'profile.validationDisabledPrimary': 'A disabled display cannot be the primary display.',
-  'profile.validationInvalidResolution': 'Every enabled display must have a valid resolution.',
-  'profile.validationInvalidRefresh': 'Choose a valid fixed refresh rate for this display.'
+  'profile.validationMinDisplays': 'Dodaj co najmniej jeden ekran.',
+  'profile.validationNoEnabledDisplays': 'Włącz co najmniej jeden ekran.',
+  'profile.validationSinglePrimary': 'Wybierz dokładnie jeden główny ekran.',
+  'profile.validationDisabledPrimary': 'Wyłączony ekran nie może być głównym ekranem.',
+  'profile.validationInvalidResolution': 'Każdy włączony ekran musi mieć poprawną rozdzielczość.',
+  'profile.validationInvalidRefresh': 'Wybierz poprawną stałą częstotliwość odświeżania dla tego ekranu.',
+  'profile.validationDuplicateDisplay': 'Tego samego fizycznego ekranu nie można dodać więcej niż raz.'
 };
 
 export function validateTopology(topology: GamingProfileDisplayTopology, translate?: (key: string) => string): string[] {
   const t = translate ?? ((key: string) => defaultTopologyValidationMessages[key] ?? key);
   const errors: string[] = [];
   if (topology.displays.length === 0) errors.push(t('profile.validationMinDisplays'));
+  if (topology.displays.some((display, index) => topology.displays.slice(index + 1).some((candidate) => isSameProfileDisplay(display, candidate)))) {
+    errors.push(t('profile.validationDuplicateDisplay'));
+  }
   const enabled = topology.displays.filter((display) => display.enabled);
   if (enabled.length === 0) errors.push(t('profile.validationNoEnabledDisplays'));
   if (enabled.filter((display) => display.isPrimary).length !== 1) errors.push(t('profile.validationSinglePrimary'));
@@ -180,37 +187,69 @@ export function validateTopology(topology: GamingProfileDisplayTopology, transla
   return errors;
 }
 
+export function isSameProfileDisplay(left: Pick<ProfileDisplayTarget, 'identity' | 'knownPhysicalDisplayId'>, right: Pick<ProfileDisplayTarget, 'identity' | 'knownPhysicalDisplayId'>) {
+  if (left.knownPhysicalDisplayId && right.knownPhysicalDisplayId) {
+    return left.knownPhysicalDisplayId.toLowerCase() === right.knownPhysicalDisplayId.toLowerCase();
+  }
+
+  return isSamePhysicalDisplay(left.identity, right.identity);
+}
+
 export function extractDisplayIdentities(layout: DisplayLayoutSnapshot) {
   return layout.displays.map((display) => display.identity);
 }
 
-export function sameIdentity(left: DisplayIdentity, right: DisplayIdentity) {
+export function isSamePhysicalDisplay(left: DisplayIdentity, right: DisplayIdentity) {
+  if (left.adapterLuid !== 0
+    && right.adapterLuid !== 0
+    && left.targetId !== 0
+    && right.targetId !== 0
+    && left.adapterLuid === right.adapterLuid
+    && left.targetId === right.targetId) {
+    return true;
+  }
+
   const leftPath = left.monitorDevicePath?.trim();
   const rightPath = right.monitorDevicePath?.trim();
   if (leftPath && rightPath && leftPath.toLowerCase() === rightPath.toLowerCase()) {
     return true;
   }
 
-  if (left.adapterLuid !== 0
-    && right.adapterLuid !== 0
-    && left.targetId !== 0
-    && right.targetId !== 0) {
-    return left.adapterLuid === right.adapterLuid
-      && left.targetId === right.targetId;
-  }
-
-  if (left.edidManufacturerId > 0
+  if (left.edidIdsValid !== false
+    && right.edidIdsValid !== false
+    && left.edidManufacturerId > 0
     && right.edidManufacturerId > 0
     && left.edidProductCodeId > 0
     && right.edidProductCodeId > 0
-    && left.connectorInstance > 0
-    && right.connectorInstance > 0) {
-    return left.edidManufacturerId === right.edidManufacturerId
-      && left.edidProductCodeId === right.edidProductCodeId
-      && left.connectorInstance === right.connectorInstance;
+    && left.edidManufacturerId === right.edidManufacturerId
+    && left.edidProductCodeId === right.edidProductCodeId
+    && (left.connectorInstance === 0
+      || right.connectorInstance === 0
+      || left.connectorInstance === right.connectorInstance)) {
+    return true;
   }
 
   return false;
+}
+
+export function deduplicatePhysicalDisplays(displays: DisplayDeviceInfo[]) {
+  return displays.reduce<DisplayDeviceInfo[]>((result, display) => {
+    const existingIndex = result.findIndex((candidate) => isSamePhysicalDisplay(candidate.identity, display.identity));
+    if (existingIndex < 0) {
+      result.push(display);
+      return result;
+    }
+
+    const existing = result[existingIndex];
+    const preferred = existing.isRemembered || !display.isRemembered ? existing : display;
+    const secondary = preferred === existing ? display : existing;
+    result[existingIndex] = {
+      ...preferred,
+      currentObservation: preferred.currentObservation ?? secondary.currentObservation,
+      lastKnownGoodCapability: preferred.lastKnownGoodCapability ?? secondary.lastKnownGoodCapability
+    };
+    return result;
+  }, []);
 }
 
 export function areIdentitySetsEqual(left: DisplayIdentity[], right: DisplayIdentity[]) {
@@ -218,7 +257,7 @@ export function areIdentitySetsEqual(left: DisplayIdentity[], right: DisplayIden
     return false;
   }
 
-  return left.every((identity) => right.some((candidate) => sameIdentity(identity, candidate)));
+  return left.every((identity) => right.some((candidate) => isSamePhysicalDisplay(identity, candidate)));
 }
 
 type TranslationLike = (key: string) => string;

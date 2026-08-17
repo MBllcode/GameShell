@@ -50,7 +50,6 @@ export interface AppStatus {
 export interface DisplayIdentity {
   monitorDevicePath: string;
   friendlyName: string;
-  lastKnownFriendlyName: string;
   edidIdsValid?: boolean;
   edidManufacturerId: number;
   edidProductCodeId: number;
@@ -61,8 +60,47 @@ export interface DisplayIdentity {
   outputTechnology: string;
 }
 
+export interface DisplayCapabilitySnapshot {
+  width: number;
+  height: number;
+  maxRefreshRateNumerator: number;
+  maxRefreshRateDenominator: number;
+  maxRefreshRateHz: number;
+}
+
+export type DisplayCatalogState = 'Current' | 'Degraded' | 'InactiveObservation' | 'Unavailable' | 'IdentityConflict';
+export type DisplayCapabilityState = 'UnknownUntilActive' | 'Available';
+
+export interface CurrentDisplayObservation {
+  identity: DisplayIdentity;
+  currentObservedName: string;
+  currentSourceDeviceName: string;
+  currentConnectionTechnology: string;
+  /** Compatibility with payloads produced by older desktop builds. */
+  currentFriendlyName?: string;
+  currentCapability: DisplayCapabilitySnapshot | null;
+  enumeratedModes: DisplayModeInfo[];
+  capabilityState: DisplayCapabilityState;
+  isActive: boolean;
+  isAvailable: boolean;
+  state: DisplayCatalogState;
+}
+
+export interface KnownPhysicalDisplay {
+  id?: string;
+  physicalIdentity: DisplayIdentity;
+  canonicalFriendlyName: string;
+  optionalUserLabel?: string;
+  bestKnownCapability: DisplayCapabilitySnapshot | null;
+  lastVerifiedActiveCapability?: DisplayCapabilitySnapshot | null;
+  capabilityVerificationSource?: string;
+  /** Legacy settings payload accepted during migration. */
+  lastKnownGoodCapability?: DisplayCapabilitySnapshot | null;
+}
+
 export interface DisplayDeviceInfo {
   id: string;
+  knownPhysicalDisplayId?: string;
   name: string;
   isPrimary: boolean;
   isEnabled: boolean;
@@ -84,6 +122,12 @@ export interface DisplayDeviceInfo {
   currentModeAvailable: boolean;
   preferredWidth: number;
   preferredHeight: number;
+  isRemembered: boolean;
+  catalogState: DisplayCatalogState;
+  currentObservation: CurrentDisplayObservation | null;
+  enumeratedModes: DisplayModeInfo[];
+  lastKnownGoodCapability: DisplayCapabilitySnapshot | null;
+  lastVerifiedActiveCapability?: DisplayCapabilitySnapshot | null;
 }
 
 export interface DisplayModeInfo {
@@ -100,6 +144,7 @@ export interface DisplayModeQueryResult {
 }
 
 export interface DisplayPathSnapshot {
+  knownPhysicalDisplayId?: string;
   identity: DisplayIdentity;
   isActive: boolean;
   isAvailable: boolean;
@@ -141,6 +186,7 @@ export interface GamingProfileDisplayTopology {
 export type RefreshPolicy = 'AutoHighest' | 'Fixed';
 
 export interface ProfileDisplayTarget {
+  knownPhysicalDisplayId?: string;
   identity: DisplayIdentity;
   capabilityExpectation?: DisplayCapabilityExpectation | null;
   enabled: boolean;
@@ -217,6 +263,7 @@ export interface AppSettings {
     activeGamingProfileName?: string | null;
     gamingProfileConfigurations?: GamingProfileConfiguration[];
     gamingProfileBehaviours?: GamingProfileBehaviour[];
+    knownPhysicalDisplays?: KnownPhysicalDisplay[];
   };
   launcher: {
     type: string;

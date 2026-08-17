@@ -14,6 +14,7 @@ public static class AppSettingsValidator
         settings.Display.GamingProfiles ??= [];
         settings.Display.GamingProfileConfigurations ??= [];
         settings.Display.GamingProfileBehaviours ??= [];
+        settings.Display.KnownPhysicalDisplays ??= [];
         settings.Launcher ??= new LauncherSettings();
         settings.GameShell ??= new GameShellSettings();
         settings.Gaming ??= new GamingSettings();
@@ -43,10 +44,18 @@ public static class AppSettingsValidator
         ValidateControllerShortcut(settings.Controller.WorkMode);
 
         NormalizeGamingProfiles(settings.Display);
+        KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings.Display);
+        KnownPhysicalDisplayCatalogService.NormalizeCanonicalNames(settings.Display);
         NormalizeGamingProfileConfigurations(settings.Display, settings.Gaming, settings.Launcher, settings.Hotkeys);
         new ShortcutConflictNormalizer().Normalize(settings);
 
         return settings;
+    }
+
+    public static bool HasLegacyCapabilityData(AppSettings settings)
+    {
+        return settings.Display?.KnownPhysicalDisplays?.Any(known => known.LastKnownGoodCapability is not null) == true
+            || settings.Display?.KnownPhysicalDisplays?.Any(known => string.IsNullOrWhiteSpace(known.Id)) == true;
     }
 
     private static string NormalizeLanguage(string? value)

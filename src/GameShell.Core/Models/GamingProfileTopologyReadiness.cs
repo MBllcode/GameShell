@@ -21,6 +21,7 @@ public enum ProfileDisplayReadinessReason
     InvalidExpectedMode,
     ModeInventoryInvalid,
     CapabilityRegression,
+    CapabilityBelowBestKnown,
     TargetInactive
 }
 
@@ -30,7 +31,8 @@ public sealed class ProfileDisplayTargetReadiness
     public DisplayDeviceInfo? ResolvedTarget { get; init; }
     public DisplayIdentityMatchConfidence PhysicalMatchConfidence { get; init; }
     public IReadOnlyList<DisplayModeInfo> AvailableModes { get; init; } = [];
-    public DisplayCapabilityExpectation? CurrentCapability { get; init; }
+    public DisplayCapabilitySnapshot? CurrentCapability { get; init; }
+    public DisplayCapabilitySnapshot? BestKnownCapability { get; init; }
     public int AvailableModesForRequestedResolution { get; init; }
     public ProfileDisplayReadiness Result { get; init; }
     public ProfileDisplayReadinessReason Reason { get; init; }

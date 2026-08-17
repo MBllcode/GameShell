@@ -298,6 +298,13 @@ public sealed class WebViewBridge
         var settings = payload.Value.Deserialize<AppSettings>(JsonOptions)
             ?? throw new InvalidOperationException("Settings payload is invalid.");
 
+        var persistedSettings = await _settingsService.LoadAsync();
+        if (settings.Display.KnownPhysicalDisplays.Count == 0
+            && persistedSettings.Display.KnownPhysicalDisplays.Count > 0)
+        {
+            settings.Display.KnownPhysicalDisplays = persistedSettings.Display.KnownPhysicalDisplays;
+        }
+
         LogGamingProfileTopologies(settings);
         await SaveAndApplySettingsAsync(settings);
         if (settings.Ui.IsFirstRunCompleted)
@@ -321,8 +328,9 @@ public sealed class WebViewBridge
             foreach (var display in topology.Displays)
             {
                 _logger.LogInformation(
-                    "[GAMING PROFILE TOPOLOGY SAVED] ProfileId={ProfileId}, SavedName={SavedName}, Enabled={Enabled}, Primary={Primary}, Position={PositionX},{PositionY}, Mode={Width}x{Height}@{RefreshRateNumerator}/{RefreshRateDenominator}",
+                    "[DISPLAY PROFILE REFERENCE] Profile={Profile}, KnownDisplayId={KnownDisplayId}, CanonicalName={CanonicalName}, Enabled={Enabled}, Primary={Primary}, Position={PositionX},{PositionY}, Resolution={Width}x{Height}, RefreshPolicy={RefreshPolicy}, FixedRefresh={FixedRefreshNumerator}/{FixedRefreshDenominator}",
                     profile.Name,
+                    display.KnownPhysicalDisplayId,
                     display.Identity.FriendlyName,
                     display.Enabled,
                     display.IsPrimary,
@@ -330,8 +338,9 @@ public sealed class WebViewBridge
                     display.PositionY,
                     display.Width,
                     display.Height,
-                    display.RefreshRateNumerator,
-                    display.RefreshRateDenominator);
+                    display.EffectiveRefreshPolicy,
+                    display.EffectiveFixedRefreshRateNumerator,
+                    display.EffectiveFixedRefreshRateDenominator);
             }
         }
     }
@@ -418,6 +427,7 @@ public sealed class WebViewBridge
 
     private async Task SaveAndApplySettingsAsync(AppSettings settings)
     {
+        GamingProfileTopologyValidator.EnsureValid(settings);
         await _settingsService.SaveAsync(settings);
         _windowsIntegrationService.Apply(settings);
         SettingsSaved?.Invoke(this, EventArgs.Empty);

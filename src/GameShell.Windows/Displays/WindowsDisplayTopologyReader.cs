@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
@@ -30,6 +31,12 @@ public sealed class WindowsDisplayTopologyReader
             var database = QueryTopology(DisplayConfigNative.QdcDatabaseCurrent, "database", cancellationToken);
             var available = QueryAvailable(cancellationToken);
             return MergeTopologies(database, available);
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == DisplayConfigNative.ErrorInvalidParameter)
+        {
+            _logger.LogDebug(
+                "DisplayConfig database topology is unavailable with ERROR_INVALID_PARAMETER. Falling back to all paths.");
+            return QueryAvailable(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -76,13 +83,27 @@ public sealed class WindowsDisplayTopologyReader
 
             var queryPathCount = pathCount;
             var queryModeCount = modeCount;
-            var queryResult = DisplayConfigNative.QueryDisplayConfig(
-                queryFlags,
-                ref queryPathCount,
-                paths,
-                ref queryModeCount,
-                modes,
-                IntPtr.Zero);
+            var currentTopologyId = queryFlags == DisplayConfigNative.QdcDatabaseCurrent
+                ? Marshal.AllocHGlobal(sizeof(uint))
+                : IntPtr.Zero;
+            int queryResult;
+            try
+            {
+                queryResult = DisplayConfigNative.QueryDisplayConfig(
+                    queryFlags,
+                    ref queryPathCount,
+                    paths,
+                    ref queryModeCount,
+                    modes,
+                    currentTopologyId);
+            }
+            finally
+            {
+                if (currentTopologyId != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(currentTopologyId);
+                }
+            }
 
             if (queryResult == DisplayConfigNative.ErrorInsufficientBuffer)
             {
@@ -92,7 +113,18 @@ public sealed class WindowsDisplayTopologyReader
 
             if (queryResult != DisplayConfigNative.ErrorSuccess)
             {
-                _logger.LogError("QueryDisplayConfig failed with Win32 error {ErrorCode}. Attempt: {Attempt}.", queryResult, attempt);
+                if (queryFlags == DisplayConfigNative.QdcDatabaseCurrent
+                    && queryResult == DisplayConfigNative.ErrorInvalidParameter)
+                {
+                    _logger.LogDebug(
+                        "QueryDisplayConfig database query returned ERROR_INVALID_PARAMETER. Attempt: {Attempt}.",
+                        attempt);
+                }
+                else
+                {
+                    _logger.LogError("QueryDisplayConfig failed with Win32 error {ErrorCode}. Attempt: {Attempt}.", queryResult, attempt);
+                }
+
                 DisplayConfigNative.ThrowIfWin32Error(queryResult, nameof(DisplayConfigNative.QueryDisplayConfig));
             }
 
