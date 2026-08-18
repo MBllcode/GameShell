@@ -19,6 +19,19 @@ artifacts\installer\GameShell.exe
 - Tray menu + global hotkeys + single-instance command forwarding.
 - Per-profile launcher, mode behavior, and shortcut configuration in the UI wizard/dashboard.
 
+### Launchers
+
+Profiles can launch:
+
+- Playnite in fullscreen mode through `Playnite.FullscreenApp.exe`.
+- Steam through its Big Picture URI (`steam://open/bigpicture`).
+- The Xbox app through its Windows AppsFolder identity (`Microsoft.GamingApp`).
+
+The Xbox app is currently opened in its normal windowed mode. GameShell does not pass or emulate
+an Xbox-specific fullscreen switch. A future fullscreen implementation would need explicit window
+management after the Xbox app starts; selecting Xbox as a launcher does not currently enable that
+behavior automatically.
+
 ## Domain naming and compatibility
 
 The product model has two user-facing areas: `Work Mode` and configurable `Gaming profiles`.
@@ -82,7 +95,8 @@ If the destination EXE is locked (running process), script writes a timestamped 
 - During hotkey capture (`NASLUCHIWANIE`), registered global hotkeys are temporarily disabled so the UI can validate duplicate combinations locally.
 - A duplicate keyboard or controller shortcut remains visible in a red invalid state with its validation message for 2.8 seconds, then the field returns to its previously saved shortcut (or stays empty when there was no previous assignment). Save and dashboard navigation are blocked while the validation error is active.
 - The final action in the new-profile flow is labeled `Save changes` and persists the profile before returning to the dashboard.
-- `Start with Windows` writes Windows autostart integration, and `Start minimized to tray` now applies on normal app startup.
+- `Start with Windows` uses the current user's HKCU Run entry and does not require administrator privileges; `Start minimized to tray` applies on normal app startup.
+- Taskbar visibility is applied to the primary and secondary Windows taskbars, including taskbar windows nested in the shell window hierarchy.
 - Sidebar navigation rows fill their available container width; their chevrons remain vertically centered and move only horizontally on hover.
 
 ## Current project status
@@ -108,7 +122,3 @@ tests/
 scripts/
 docs/
 ```
-
-## Current dashboard
-
-![Dashboard screenshot](docs/panel-glowny.png)

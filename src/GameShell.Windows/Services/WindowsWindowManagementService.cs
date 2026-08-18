@@ -28,26 +28,48 @@ public sealed class WindowsWindowManagementService : IWindowsWindowManagementSer
     public bool SetTaskbarsVisible(bool visible)
     {
         var command = visible ? SwShow : SwHide;
-        var changed = false;
+        var taskbars = new HashSet<IntPtr>();
 
         var mainTaskbar = FindWindow("Shell_TrayWnd", null);
         if (mainTaskbar != IntPtr.Zero)
         {
-            changed |= ShowWindow(mainTaskbar, command);
+            taskbars.Add(mainTaskbar);
         }
 
-        var secondaryTaskbar = IntPtr.Zero;
-        do
+        EnumWindows((window, _) =>
         {
-            secondaryTaskbar = FindWindowEx(IntPtr.Zero, secondaryTaskbar, "Shell_SecondaryTrayWnd", null);
-            if (secondaryTaskbar != IntPtr.Zero)
+            AddTaskbarWindow(window, taskbars);
+            EnumChildWindows(window, (child, _) =>
             {
-                changed |= ShowWindow(secondaryTaskbar, command);
-            }
+                AddTaskbarWindow(child, taskbars);
+                return true;
+            }, IntPtr.Zero);
+
+            return true;
+        }, IntPtr.Zero);
+
+        var changed = false;
+        foreach (var taskbar in taskbars)
+        {
+            changed |= ShowWindow(taskbar, command);
         }
-        while (secondaryTaskbar != IntPtr.Zero);
 
         return changed;
+    }
+
+    private static void AddTaskbarWindow(IntPtr window, ISet<IntPtr> taskbars)
+    {
+        if (window == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var className = GetWindowClassName(window);
+        if (string.Equals(className, "Shell_TrayWnd", StringComparison.Ordinal)
+            || string.Equals(className, "Shell_SecondaryTrayWnd", StringComparison.Ordinal))
+        {
+            taskbars.Add(window);
+        }
     }
 
     public void CloseVisibleWindows(GameShellSettings behaviour)
@@ -271,6 +293,9 @@ public sealed class WindowsWindowManagementService : IWindowsWindowManagementSer
 
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr lParam);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();

@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Security.Principal;
 using GameShell.Core.Models;
 using Microsoft.Win32;
 using Microsoft.Extensions.Logging;
@@ -14,7 +12,6 @@ namespace GameShell.Desktop.Services;
 /// </summary>
 public sealed class WindowsIntegrationService : IWindowsIntegrationService
 {
-    private const string StartupTaskName = "GameShell - Start with Windows";
     private const string LegacyRunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string LegacyRunValueName = "GameShell";
 
@@ -58,84 +55,40 @@ public sealed class WindowsIntegrationService : IWindowsIntegrationService
 
     private void ApplyStartup(bool enabled, string targetPath, string arguments)
     {
-        if (enabled)
-        {
-            RegisterStartupTask(targetPath, arguments);
-            RemoveLegacyRunValue();
-            return;
-        }
-
-        RemoveStartupTask();
-        RemoveLegacyRunValue();
-    }
-
-    private void RegisterStartupTask(string targetPath, string arguments)
-    {
-        var serviceType = Type.GetTypeFromProgID("Schedule.Service")
-            ?? throw new InvalidOperationException("Windows Task Scheduler is not available.");
-
-        dynamic service = Activator.CreateInstance(serviceType)
-            ?? throw new InvalidOperationException("Windows Task Scheduler could not be created.");
-        service.Connect();
-
-        dynamic rootFolder = service.GetFolder("\\");
-        dynamic taskDefinition = service.NewTask(0);
-        var currentUser = WindowsIdentity.GetCurrent().Name;
-
-        taskDefinition.RegistrationInfo.Description = "Start GameShell when the user signs in.";
-        taskDefinition.Settings.Enabled = true;
-        taskDefinition.Settings.StartWhenAvailable = true;
-        taskDefinition.Settings.AllowDemandStart = true;
-        taskDefinition.Principal.UserId = currentUser;
-        taskDefinition.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
-        taskDefinition.Principal.RunLevel = 1; // TASK_RUNLEVEL_HIGHEST
-
-        dynamic trigger = taskDefinition.Triggers.Create(9); // TASK_TRIGGER_LOGON
-        trigger.UserId = currentUser;
-
-        dynamic action = taskDefinition.Actions.Create(0); // TASK_ACTION_EXEC
-        action.Path = targetPath;
-        action.Arguments = arguments;
-        action.WorkingDirectory = Path.GetDirectoryName(targetPath) ?? AppContext.BaseDirectory;
-
-        rootFolder.RegisterTaskDefinition(
-            StartupTaskName,
-            taskDefinition,
-            6, // TASK_CREATE_OR_UPDATE
-            null,
-            null,
-            3, // TASK_LOGON_INTERACTIVE_TOKEN
-            null);
-
-        _logger.LogInformation(
-            "Windows startup task registered. TaskName={TaskName}, User={User}, TargetPath={TargetPath}, RunLevel=Highest.",
-            StartupTaskName,
-            currentUser,
-            targetPath);
-    }
-
-    private void RemoveStartupTask()
-    {
-        var serviceType = Type.GetTypeFromProgID("Schedule.Service")
-            ?? throw new InvalidOperationException("Windows Task Scheduler is not available.");
-
-        dynamic service = Activator.CreateInstance(serviceType)
-            ?? throw new InvalidOperationException("Windows Task Scheduler could not be created.");
-        service.Connect();
-
-        dynamic rootFolder = service.GetFolder("\\");
         try
         {
-            rootFolder.DeleteTask(StartupTaskName, 0);
-            _logger.LogInformation("Windows startup task removed. TaskName={TaskName}.", StartupTaskName);
+            if (enabled)
+            {
+                RegisterLegacyRunValue(targetPath, arguments);
+                return;
+            }
+
+            RemoveLegacyRunValue();
         }
-        catch (COMException ex) when (
-            ex.HResult == unchecked((int)0x8004130F)
-            || ex.HResult == unchecked((int)0x80070002))
+        catch (Exception exception)
         {
-            // The task is already absent.
+            _logger.LogError(
+                exception,
+                "Windows startup integration could not be updated for the current user."
+            );
         }
     }
+
+    private void RegisterLegacyRunValue(string targetPath, string arguments)
+    {
+        using var runKey = Registry.CurrentUser.CreateSubKey(LegacyRunKeyPath, writable: true)
+            ?? throw new InvalidOperationException("The current-user startup registry key could not be opened.");
+        var command = string.IsNullOrWhiteSpace(arguments)
+            ? $"\"{targetPath}\""
+            : $"\"{targetPath}\" {arguments}";
+        runKey.SetValue(LegacyRunValueName, command, RegistryValueKind.String);
+        _logger.LogInformation(
+            "Windows startup registered in HKCU Run. ValueName={ValueName}, Command={Command}.",
+            LegacyRunValueName,
+            command);
+    }
+
+
 
     private static void RemoveLegacyRunValue()
     {

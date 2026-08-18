@@ -23,7 +23,17 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
         "cmd",
         "conhost",
         "wininit",
-        "csrss"
+        "csrss",
+        "dwm",
+        "sihost",
+        "ShellExperienceHost",
+        "StartMenuExperienceHost",
+        "SearchHost",
+        "RuntimeBroker",
+        "ApplicationFrameHost",
+        "TextInputHost",
+        "msedge",
+        "msedgewebview2"
     };
 
     private static readonly TimeSpan CandidateStabilizationWindow = TimeSpan.FromSeconds(2);
@@ -78,7 +88,7 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
             "unknown",
             "unknown",
             FindLauncherProcessId(),
-            normalizedNames.Length == 0 ? "no configured game names" : "monitor started");
+            normalizedNames.Length == 0 ? "auto foreground game detection" : "monitor started");
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -213,6 +223,11 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
             processNames = _processNames;
         }
 
+        if (processNames.Length == 0)
+        {
+            return FindForegroundGame();
+        }
+
         foreach (var processName in processNames)
         {
             try
@@ -241,6 +256,44 @@ public sealed class WindowsGameSessionMonitor : IGameSessionMonitor, IDisposable
         }
 
         return null;
+    }
+
+    private static GameProcessInfo? FindForegroundGame()
+    {
+        var foregroundWindow = GetForegroundWindow();
+        if (foregroundWindow == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        GetWindowThreadProcessId(foregroundWindow, out var processId);
+        if (processId == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById((int)processId);
+            if (!IsLikelyGameCandidate(process))
+            {
+                return null;
+            }
+
+            return new GameProcessInfo(process.Id, process.ProcessName);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
     }
 
     private static bool IsLikelyGameCandidate(Process process)
