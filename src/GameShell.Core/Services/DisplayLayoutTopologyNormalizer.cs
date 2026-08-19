@@ -18,6 +18,7 @@ public static class DisplayLayoutTopologyNormalizer
             CapturedAt = snapshot.CapturedAt,
             Displays = snapshot.Displays.Select(display => new DisplayPathSnapshot
             {
+                KnownPhysicalDisplayId = display.KnownPhysicalDisplayId,
                 Identity = display.Identity,
                 IsActive = display.IsActive,
                 IsPrimary = display.IsPrimary,

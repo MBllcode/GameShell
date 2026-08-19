@@ -109,6 +109,31 @@ public sealed class DisplayTransitionServiceTests
     }
 
     [Fact]
+    public async Task EnterWorkMode_AppliesLayoutWhenOnlyPrimaryDisplayDiffers()
+    {
+        var work = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", 1920, 0, 2560, 1440));
+        var gaming = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080),
+            Path("Monitor B", "PATH-B", 1920, 0, 2560, 1440, isPrimary: true));
+        var query = new FakeDisplayQueryService(gaming);
+        var runtime = new FakeRuntimeStateService(new RuntimeState
+        {
+            CurrentMode = GameShellMode.GamingProfile,
+            WorkReturnLayout = work
+        });
+        var applier = new FakeDisplayLayoutApplicationService(query);
+        var service = CreateService(query, applier, runtime);
+
+        var result = await service.EnterWorkModeAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(1, applier.ApplyCount);
+        Assert.True(DisplayLayoutVerifier.MatchesSnapshot(work, query.Current));
+    }
+
+    [Fact]
     public async Task EnterWorkMode_FallsBackToPreviousDisplayLayoutWhenWorkReturnLayoutIsMissing()
     {
         var work = Snapshot(
@@ -178,7 +203,7 @@ public sealed class DisplayTransitionServiceTests
     }
 
     [Fact]
-    public void MatchesSnapshot_IgnoresRefreshRateAndPrimaryDifferences()
+    public void MatchesSnapshot_RequiresSamePrimaryButIgnoresRefreshRateDifferences()
     {
         var expected = Snapshot(
             Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
@@ -203,7 +228,42 @@ public sealed class DisplayTransitionServiceTests
             }).ToList()
         };
 
+        Assert.False(DisplayLayoutVerifier.MatchesSnapshot(expected, actual));
+
+        actual = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", 1920, 0, 2560, 1440));
+        actual = new DisplayLayoutSnapshot
+        {
+            Displays = actual.Displays.Select(display => new DisplayPathSnapshot
+            {
+                Identity = display.Identity,
+                IsActive = display.IsActive,
+                IsPrimary = display.IsPrimary,
+                PositionX = display.PositionX,
+                PositionY = display.PositionY,
+                Width = display.Width,
+                Height = display.Height,
+                Orientation = display.Orientation,
+                RefreshRateNumerator = 144000,
+                RefreshRateDenominator = 1000
+            }).ToList()
+        };
+
         Assert.True(DisplayLayoutVerifier.MatchesSnapshot(expected, actual));
+    }
+
+    [Fact]
+    public void MatchesActiveDisplaySet_RejectsDifferentPrimary()
+    {
+        var expected = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", 1920, 0, 2560, 1440));
+        var actual = Snapshot(
+            Path("Monitor A", "PATH-A", 0, 0, 1920, 1080),
+            Path("Monitor B", "PATH-B", 1920, 0, 2560, 1440, isPrimary: true));
+
+        Assert.False(DisplayLayoutVerifier.MatchesActiveDisplaySet(expected, actual));
     }
 
     [Fact]
@@ -214,8 +274,8 @@ public sealed class DisplayTransitionServiceTests
             Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440),
             Path("Monitor C", "PATH-C", 1920, 0, 1920, 1080));
         var actual = Snapshot(
-            Path("Monitor A", "PATH-A", 2560, 0, 1920, 1080),
-            Path("Monitor B", "PATH-B", 0, 0, 2560, 1440, isPrimary: true),
+            Path("Monitor A", "PATH-A", 2560, 0, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", 0, 0, 2560, 1440),
             Path("Monitor C", "PATH-C", 4480, 0, 1920, 1080));
 
         Assert.True(DisplayLayoutVerifier.MatchesSnapshot(expected, actual));
@@ -229,8 +289,8 @@ public sealed class DisplayTransitionServiceTests
             Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440),
             Path("Monitor C", "PATH-C", 1920, 0, 1920, 1080));
         var actual = Snapshot(
-            Path("Monitor A", "PATH-A", 200, 120, 1920, 1080),
-            Path("Monitor B", "PATH-B", -2300, 120, 2560, 1440, isPrimary: true),
+            Path("Monitor A", "PATH-A", 200, 120, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", -2300, 120, 2560, 1440),
             Path("Monitor C", "PATH-C", 2100, 120, 1920, 1080));
 
         Assert.True(DisplayLayoutVerifier.MatchesActiveDisplaySet(expected, actual));
@@ -244,8 +304,8 @@ public sealed class DisplayTransitionServiceTests
             Path("Monitor B", "PATH-B", -2560, 0, 2560, 1440),
             Path("Monitor C", "PATH-C", 1920, 0, 1920, 1080));
         var actual = Snapshot(
-            Path("Monitor A", "PATH-A", 10, 10, 1920, 1080),
-            Path("Monitor B", "PATH-B", -2550, 10, 2560, 1440, isPrimary: true),
+            Path("Monitor A", "PATH-A", 10, 10, 1920, 1080, isPrimary: true),
+            Path("Monitor B", "PATH-B", -2550, 10, 2560, 1440),
             Path("Monitor C", "PATH-C", 1930, 10, 1920, 1080),
             Path("Virtual Display", "PATH-VIRTUAL", 3850, 10, 1024, 768));
 

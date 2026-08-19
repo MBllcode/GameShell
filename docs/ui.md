@@ -79,7 +79,7 @@ To jest aktywny standard UI dla GameShell. Nizsze, historyczne notatki zostaly u
 - Resolver kolizji nie pozwala zakonczyc drag z dodatnim overlapem; dotykajace krawedzie i narożniki sa poprawne. Animacje wejscia/przejscia respektuja `prefers-reduced-motion`.
 - Primary moze byc wizualnie ustawiony w dowolnym miejscu. Dopiero snapshot runtime jest normalizowany do primary `0,0`, bez przesuwania draftu w edytorze.
 - Przed wywolaniem DisplayConfig topology runtime sprawdza jeden primary, rozmiary, overlap i unikalnosc fizycznych targetow. Bledna geometria zatrzymuje apply z opisem wewnetrznego bledu.
-- Readiness profilu nie opiera obecności fizycznego ekranu na `FriendlyName`; nazwa jest tylko informacją diagnostyczną. Przy tym samym route, ale słabszym handshake, runtime raportuje `Degraded/CapabilityRegression` i uruchamia istniejący bounded recovery.
+- Readiness profilu nie opiera obecności fizycznego ekranu na `FriendlyName`; nazwa jest tylko informacją diagnostyczną. `AutoHighest` po aktywacji korzysta ze świeżego active mode inventory i wybiera najwyższy aktualnie dostępny tryb. Niższe bieżące capability względem historycznego `BestKnownCapability` jest informacją diagnostyczną, nie błędem ani automatycznym recovery.
 - Diagnostyke apply czytamy z logu `[DISPLAY TOPOLOGY APPLY]`; wspolrzedne w tym logu sa wspolrzednymi przekazanymi do Windows, nie pikselami canvasa.
 - Pole `Odświeżanie` zachowuje szerokosc i geometrie pozostalych pol, ale uzywa `appearance: none`, prawego paddingu `38px` oraz wlasnego subtelnego chevrona ustawionego `13px` od prawej ramki. Chevron ma `pointer-events: none`, a tekst opcji nie nachodzi na niego.
 

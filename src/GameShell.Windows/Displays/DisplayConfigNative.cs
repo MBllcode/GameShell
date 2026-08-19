@@ -6,15 +6,6 @@ namespace GameShell.Windows.Displays;
 internal static class DisplayConfigNative
 {
     public const uint DigcfPresent = 0x00000002;
-    public const uint DigcfDeviceInterface = 0x00000010;
-    public const uint CmLocateDevnodeNormal = 0;
-    public const uint CmReenumerateSynch = 0x00000000;
-    public const uint CmDisableUiNotOk = 0x00000002;
-    public const int CrSuccess = 0;
-    public const int CrAccessDenied = 0x00000033;
-    public const int CrNoSuchDevnode = 0x0000000D;
-    public const int CrBufferSmall = 0x0000001A;
-    public static readonly Guid GuidDevinterfaceMonitor = new("e6f07b5f-ee97-4a90-b076-33f57bf4eaa7");
     public const uint QdcOnlyActivePaths = 0x00000002;
     public const uint QdcAllPaths = 0x00000001;
     public const uint QdcDatabaseCurrent = 0x00000004;
@@ -92,75 +83,6 @@ internal static class DisplayConfigNative
         uint dwflags,
         IntPtr lParam);
 
-    [DllImport("setupapi.dll", SetLastError = true)]
-    public static extern IntPtr SetupDiGetClassDevs(
-        ref Guid classGuid,
-        string? enumerator,
-        IntPtr hwndParent,
-        uint flags);
-
-    [DllImport("setupapi.dll", SetLastError = true)]
-    public static extern bool SetupDiEnumDeviceInterfaces(
-        IntPtr deviceInfoSet,
-        IntPtr deviceInfoData,
-        ref Guid interfaceClassGuid,
-        uint memberIndex,
-        IntPtr deviceInterfaceData);
-
-    [DllImport("setupapi.dll", SetLastError = true)]
-    public static extern bool SetupDiGetDeviceInterfaceDetail(
-        IntPtr deviceInfoSet,
-        IntPtr deviceInterfaceData,
-        IntPtr deviceInterfaceDetailData,
-        uint deviceInterfaceDetailDataSize,
-        out uint requiredSize,
-        IntPtr deviceInfoData);
-
-    [DllImport("setupapi.dll", SetLastError = true)]
-    public static extern bool SetupDiGetDeviceInterfaceDetail(
-        IntPtr deviceInfoSet,
-        IntPtr deviceInterfaceData,
-        IntPtr deviceInterfaceDetailData,
-        uint deviceInterfaceDetailDataSize,
-        out uint requiredSize,
-        ref SetupDeviceInfoData deviceInfoData);
-
-    [DllImport("setupapi.dll", SetLastError = true)]
-    public static extern bool SetupDiGetDeviceInstanceId(
-        IntPtr deviceInfoSet,
-        ref SetupDeviceInfoData deviceInfoData,
-        [Out] char[] deviceInstanceId,
-        uint deviceInstanceIdSize,
-        out uint requiredSize);
-
-    [DllImport("setupapi.dll", SetLastError = true)]
-    public static extern bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
-
-    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
-    public static extern int CM_Locate_DevNode(
-        out uint devInst,
-        string deviceInstanceId,
-        uint flags);
-
-    [DllImport("cfgmgr32.dll")]
-    public static extern int CM_Reenumerate_DevNode(uint devInst, uint flags);
-
-    [DllImport("cfgmgr32.dll")]
-    public static extern int CM_Disable_DevNode(uint devInst, uint flags);
-
-    [DllImport("cfgmgr32.dll")]
-    public static extern int CM_Enable_DevNode(uint devInst, uint flags);
-
-    [DllImport("cfgmgr32.dll")]
-    public static extern int CM_Get_Parent(out uint parentDevInst, uint devInst, uint flags);
-
-    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
-    public static extern int CM_Get_Device_ID(
-        uint devInst,
-        [Out] System.Text.StringBuilder buffer,
-        uint bufferLength,
-        uint flags);
-
     public static void ThrowIfWin32Error(int error, string operation)
     {
         if (error != ErrorSuccess)
@@ -168,20 +90,6 @@ internal static class DisplayConfigNative
             throw new Win32Exception(error, $"{operation} failed with Win32 error {error}.");
         }
     }
-}
-
-[StructLayout(LayoutKind.Sequential)]
-internal struct SetupDeviceInfoData
-{
-    public uint Size;
-    public Guid ClassGuid;
-    public uint DevInst;
-    public IntPtr Reserved;
-
-    public static SetupDeviceInfoData Create() => new()
-    {
-        Size = (uint)Marshal.SizeOf<SetupDeviceInfoData>()
-    };
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -421,6 +329,15 @@ internal struct DisplayDevice
 
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
     public string DeviceKey;
+
+    public static DisplayDevice Create() => new()
+    {
+        Cb = (uint)Marshal.SizeOf<DisplayDevice>(),
+        DeviceName = string.Empty,
+        DeviceString = string.Empty,
+        DeviceId = string.Empty,
+        DeviceKey = string.Empty
+    };
 }
 
 [Flags]

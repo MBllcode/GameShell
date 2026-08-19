@@ -122,6 +122,16 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             await Task.CompletedTask;
         }, cancellationToken);
 
+        await TryStepAsync("hide taskbars after display transition", warnings, async () =>
+        {
+            if (behaviour.HideTaskbar)
+            {
+                // SetDisplayConfig can recreate or rebind a secondary taskbar. Run the
+                // same idempotent hide pass after the new topology is active as well.
+                await RetryAsync(() => _windowManagementService.SetTaskbarsVisible(false), cancellationToken);
+            }
+        }, cancellationToken);
+
         await TryStepAsync("start launcher", warnings, async () =>
         {
             if (behaviour.StartLauncher)
@@ -149,7 +159,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             if (behaviour.StartLauncher && behaviour.BringLauncherToForeground)
             {
                 await Task.Delay(1500, cancellationToken);
-                BringLauncherToForeground(settings, launcherProcessId);
+                await BringLauncherToForegroundAsync(settings, launcherProcessId, cancellationToken);
             }
         }, cancellationToken);
 
@@ -320,29 +330,53 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         return _launcherProcessService.StartStandardUser(settings.Launcher);
     }
 
-    private void BringLauncherToForeground(AppSettings settings, int? launcherProcessId)
+    private async Task BringLauncherToForegroundAsync(
+        AppSettings settings,
+        int? launcherProcessId,
+        CancellationToken cancellationToken)
     {
-        using var process = GetProcess(launcherProcessId);
-        var targetProcess = process;
-        if (targetProcess is null || targetProcess.HasExited || targetProcess.MainWindowHandle == IntPtr.Zero)
-        {
-            targetProcess = FindLauncherProcess(settings);
-        }
+        // Shell activation returns explorer.exe for XboxApp. Resolve the actual
+        // application window instead of focusing the shell process that launched it.
+        var attempts = settings.Launcher.Type.Equals("XboxApp", StringComparison.OrdinalIgnoreCase)
+            ? 12
+            : 1;
 
-        if (targetProcess is null || targetProcess.MainWindowHandle == IntPtr.Zero)
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
-            return;
-        }
+            using var process = GetProcess(launcherProcessId);
+            var targetProcess = settings.Launcher.Type.Equals("XboxApp", StringComparison.OrdinalIgnoreCase)
+                ? FindLauncherProcess(settings)
+                : process;
 
-        try
-        {
-            _windowManagementService.RestoreAndFocus(targetProcess.MainWindowHandle);
-        }
-        finally
-        {
-            if (!ReferenceEquals(targetProcess, process))
+            if (targetProcess is null || targetProcess.HasExited || targetProcess.MainWindowHandle == IntPtr.Zero)
             {
-                targetProcess.Dispose();
+                targetProcess = FindLauncherProcess(settings);
+            }
+
+            if (targetProcess is not null && !targetProcess.HasExited && targetProcess.MainWindowHandle != IntPtr.Zero)
+            {
+                try
+                {
+                    if (settings.Launcher.Type.Equals("XboxApp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _windowManagementService.MoveWindowToPrimaryDisplay(targetProcess.MainWindowHandle);
+                    }
+
+                    _windowManagementService.RestoreAndFocus(targetProcess.MainWindowHandle);
+                    return;
+                }
+                finally
+                {
+                    if (!ReferenceEquals(targetProcess, process))
+                    {
+                        targetProcess.Dispose();
+                    }
+                }
+            }
+
+            if (attempt + 1 < attempts)
+            {
+                await Task.Delay(300, cancellationToken);
             }
         }
     }
@@ -386,6 +420,8 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         yield return "steam";
         yield return "Xbox";
         yield return "XboxPcApp";
+        yield return "XboxPcAppFT";
+        yield return "GamingApp";
         yield return "GamingServicesUI";
 
         if (settings.Launcher.Type.Equals("Playnite", StringComparison.OrdinalIgnoreCase))
@@ -401,6 +437,9 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         {
             yield return "Xbox";
             yield return "XboxPcApp";
+            yield return "XboxPcAppFT";
+            yield return "GamingApp";
+            yield return "ApplicationFrameHost";
             yield return "GamingServicesUI";
         }
 

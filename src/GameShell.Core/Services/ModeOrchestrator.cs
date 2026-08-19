@@ -111,13 +111,15 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     private Task<ModeResult> RunGamingModeAsync(string? profileName, CancellationToken cancellationToken = default)
     {
+        GamingProfileTransitionPreparation? preparation = null;
         return RunModeAsync(
             operationName: "Enter Gaming Profile",
             switchingState: ModeState.SwitchingToConsole,
             completedState: ModeState.GameShell,
             transition: settings => _displayTransitionService.EnterGamingModeAsync(
-                _gamingProfileSettingsResolver.ResolveLayout(settings.Display, profileName),
+                preparation?.TargetLayout ?? _gamingProfileSettingsResolver.ResolveLayout(settings.Display, profileName),
                 GetConsoleDisplays(settings),
+                preparation?.ProfileName ?? profileName,
                 cancellationToken),
             preWorkflow: settings => _modeWorkflowService.PrepareGamingWorkflowAsync(
                 _gamingProfileSettingsResolver.BuildEffectiveSettings(settings, profileName),
@@ -131,7 +133,14 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 .ResolveBehaviour(settings.Display, settings.Gaming, profileName).CompletionDelaySeconds),
             runtimeMode: GameShellMode.GamingProfile,
             cancellationToken,
-            preTransitionGate: settings => _gamingProfileReadinessCoordinator.CheckBeforeTransitionAsync(settings, profileName, cancellationToken),
+            preTransitionGate: async settings =>
+            {
+                preparation = await _gamingProfileReadinessCoordinator.PrepareBeforeTransitionAsync(
+                    settings,
+                    profileName,
+                    cancellationToken);
+                return preparation.BlockedResult;
+            },
             postTransitionGate: settings => _gamingProfileReadinessCoordinator.CheckAfterTransitionAsync(settings, profileName, cancellationToken));
     }
 

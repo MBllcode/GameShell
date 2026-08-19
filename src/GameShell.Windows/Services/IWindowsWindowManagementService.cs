@@ -19,4 +19,6 @@ public interface IWindowsWindowManagementService
     void MinimizeExplorerWindows();
 
     void RestoreAndFocus(IntPtr windowHandle);
+
+    bool MoveWindowToPrimaryDisplay(IntPtr windowHandle);
 }

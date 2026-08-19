@@ -253,7 +253,36 @@ public sealed class SettingsService : ISettingsService
             var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? new AppSettings();
             var wasMigrated = AppSettingsValidator.HasLegacyCapabilityData(settings);
+            var knownDisplaysBeforeValidation = settings.Display.KnownPhysicalDisplays
+                .Select(known => (known.Id, known.CanonicalFriendlyName, known.PhysicalIdentity))
+                .ToList();
             var validated = AppSettingsValidator.Validate(settings);
+            if (wasMigrated && knownDisplaysBeforeValidation.Count > validated.Display.KnownPhysicalDisplays.Count)
+            {
+                var remainingIds = validated.Display.KnownPhysicalDisplays
+                    .Select(known => known.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var removedRecords = knownDisplaysBeforeValidation
+                    .Where(known => !remainingIds.Contains(known.Id))
+                    .ToList();
+                var removed = removedRecords
+                    .Select(known => known.CanonicalFriendlyName)
+                    .Where(name => !string.IsNullOrWhiteSpace(name));
+                var survivors = removedRecords
+                    .SelectMany(removedRecord => validated.Display.KnownPhysicalDisplays
+                        .Where(known => (known.HistoricalIdentities ?? [])
+                            .Any(identity => Equals(identity, removedRecord.PhysicalIdentity))))
+                    .DistinctBy(known => known.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(known => known.CanonicalFriendlyName)
+                    .Where(name => !string.IsNullOrWhiteSpace(name));
+                _logger.LogInformation(
+                    "[KNOWN DISPLAY RECONCILIATION] Before={Before} After={After} Merged={Merged} Survivor={Survivor} Removed={Removed} Reason=StrongIdentityEvidence",
+                    knownDisplaysBeforeValidation.Count,
+                    validated.Display.KnownPhysicalDisplays.Count,
+                    knownDisplaysBeforeValidation.Count - validated.Display.KnownPhysicalDisplays.Count,
+                    string.Join(", ", survivors.DefaultIfEmpty("-")),
+                    string.Join(", ", removed));
+            }
             return (true, validated, wasMigrated);
         }
         catch (Exception)

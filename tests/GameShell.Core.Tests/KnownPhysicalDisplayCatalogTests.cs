@@ -345,9 +345,499 @@ public sealed class KnownPhysicalDisplayCatalogTests
         Assert.Null(known.BestKnownCapability);
     }
 
+    [Fact]
+    public void Changed_adapter_luid_with_same_monitor_path_reuses_known_display_and_learns_route_alias()
+    {
+        var saved = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-A"
+        };
+        var observed = saved with
+        {
+            FriendlyName = "S90F",
+            AdapterLuid = 65813
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                Id = "known-s90f",
+                PhysicalIdentity = saved,
+                CanonicalFriendlyName = "S90F"
+            }]
+        };
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(settings, [CreateDisplay(observed, 60)]);
+
+        Assert.Single(result.Displays);
+        Assert.Equal("known-s90f", result.Displays[0].KnownPhysicalDisplayId);
+        Assert.Equal(DisplayIdentityMatchConfidence.ExactMonitorDevicePath, result.IdentityMatches.Single().MatchConfidence);
+        Assert.Contains(observed, settings.KnownPhysicalDisplays.Single().HistoricalIdentities);
+    }
+
+    [Fact]
+    public void Later_degraded_observation_with_missing_metadata_resolves_through_historical_route()
+    {
+        var saved = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-A"
+        };
+        var changedRoute = saved with { AdapterLuid = 65813 };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                PhysicalIdentity = saved,
+                CanonicalFriendlyName = "S90F",
+                HistoricalIdentities = [changedRoute]
+            }]
+        };
+        var degraded = changedRoute with
+        {
+            FriendlyName = "SAMSUNG",
+            MonitorDevicePath = string.Empty,
+            EdidIdsValid = false,
+            EdidManufacturerId = 0,
+            EdidProductCodeId = 0,
+            ConnectorInstance = 0
+        };
+
+        var match = DisplayIdentityMatcher.ResolveKnownDisplay(settings.KnownPhysicalDisplays.Single(), degraded);
+
+        Assert.True(match.IsMatch);
+        Assert.Equal(DisplayIdentityMatchConfidence.HistoricalRouteAlias, match.MatchConfidence);
+        Assert.True(match.MissingMetadata);
+        Assert.False(match.HasConflict);
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(settings, [CreateDisplay(degraded, 60, isEnabled: false)]);
+        Assert.Single(result.Displays);
+        Assert.Equal("S90F", result.Displays[0].Name);
+    }
+
+    [Fact]
+    public void Valid_conflicting_edid_does_not_merge_even_when_route_alias_exists()
+    {
+        var saved = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-A"
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                PhysicalIdentity = saved,
+                CanonicalFriendlyName = "S90F",
+                HistoricalIdentities = [saved with { AdapterLuid = 65813 }]
+            }]
+        };
+        var conflicting = saved with
+        {
+            FriendlyName = "OTHER",
+            AdapterLuid = 65813,
+            EdidProductCodeId = 999
+        };
+
+        var match = DisplayIdentityMatcher.ResolveKnownDisplay(settings.KnownPhysicalDisplays.Single(), conflicting);
+
+        Assert.False(match.IsMatch);
+        Assert.True(match.HasConflict);
+        Assert.Equal(DisplayIdentityMatchConfidence.IdentityConflict, match.MatchConfidence);
+    }
+
+    [Fact]
+    public void Reconciliation_collapses_duplicate_known_display_and_repoints_profile()
+    {
+        var originalIdentity = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-A"
+        };
+        var alias = originalIdentity with { AdapterLuid = 65813 };
+        var duplicate = new KnownPhysicalDisplay
+        {
+            Id = "duplicate",
+            PhysicalIdentity = alias,
+            CanonicalFriendlyName = "SAMSUNG"
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay
+                {
+                    Id = "original",
+                    PhysicalIdentity = originalIdentity,
+                    HistoricalIdentities = [alias],
+                    CanonicalFriendlyName = "S90F"
+                },
+                duplicate
+            ],
+            GamingProfiles =
+            [
+                new DisplayLayoutProfile
+                {
+                    Name = "KONSOLA",
+                    DisplayTopology = new GamingProfileDisplayTopology
+                    {
+                        Displays = [new ProfileDisplayTarget
+                        {
+                            KnownPhysicalDisplayId = "original",
+                            Identity = originalIdentity,
+                            Enabled = true
+                        }]
+                    }
+                },
+                new DisplayLayoutProfile
+                {
+                    Name = "TEST",
+                    DisplayTopology = new GamingProfileDisplayTopology
+                    {
+                        Displays = [new ProfileDisplayTarget
+                        {
+                            KnownPhysicalDisplayId = "duplicate",
+                            Identity = alias,
+                            Enabled = true
+                        }]
+                    }
+                }
+            ]
+        };
+
+        Assert.True(KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings));
+
+        Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal("original", settings.KnownPhysicalDisplays.Single().Id);
+        var consoleTarget = settings.GamingProfiles.Single(profile => profile.Name == "KONSOLA").DisplayTopology!.Displays.Single();
+        var testTarget = settings.GamingProfiles.Single(profile => profile.Name == "TEST").DisplayTopology!.Displays.Single();
+        Assert.Equal("original", consoleTarget.KnownPhysicalDisplayId);
+        Assert.Equal("original", testTarget.KnownPhysicalDisplayId);
+        Assert.Equal("S90F", testTarget.Identity.FriendlyName);
+    }
+
+    [Fact]
+    public void Discovery_with_known_route_alias_keeps_three_logical_displays()
+    {
+        var tvSaved = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-TV"
+        };
+        var tvRoute = tvSaved with { AdapterLuid = 65813 };
+        var dell = CreateIdentity("DELL") with
+        {
+            TargetId = 1,
+            MonitorDevicePath = "PATH-DELL",
+            EdidProductCodeId = 1001
+        };
+        var pl = CreateIdentity("PL3480WQ") with
+        {
+            TargetId = 2,
+            MonitorDevicePath = "PATH-PL",
+            EdidProductCodeId = 1002
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay { Id = "dell", PhysicalIdentity = dell, CanonicalFriendlyName = "DELL" },
+                new KnownPhysicalDisplay { Id = "pl", PhysicalIdentity = pl, CanonicalFriendlyName = "PL3480WQ" },
+                new KnownPhysicalDisplay { Id = "tv", PhysicalIdentity = tvSaved, HistoricalIdentities = [tvRoute], CanonicalFriendlyName = "S90F" }
+            ]
+        };
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(settings,
+        [
+            CreateDisplay(dell, 60),
+            CreateDisplay(pl, 60),
+            CreateDisplay(tvRoute with
+            {
+                FriendlyName = "SAMSUNG",
+                MonitorDevicePath = string.Empty,
+                EdidIdsValid = false,
+                EdidManufacturerId = 0,
+                EdidProductCodeId = 0,
+                ConnectorInstance = 0
+            }, 60, isEnabled: false)
+        ]);
+
+        Assert.Equal(3, result.LogicalCount);
+        Assert.Equal(3, settings.KnownPhysicalDisplays.Count);
+        Assert.Equal(3, result.MatchedCount);
+        Assert.Equal(0, result.DuplicatesCollapsed);
+        Assert.Contains(result.Displays, display => display.Name == "S90F" && display.KnownPhysicalDisplayId == "tv");
+    }
+
+    [Fact]
+    public void Polluted_catalog_keeps_profile_survivor_when_route_and_product_metadata_changed()
+    {
+        var original = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = @"\\?\DISPLAY#SAM78B7#5&197e7451&1&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            EdidProductCodeId = 30903,
+            OutputTechnology = "HDMI"
+        };
+        var duplicateIdentity = original with
+        {
+            FriendlyName = "SAMSUNG",
+            AdapterLuid = 65813,
+            MonitorDevicePath = @"\\?\DISPLAY#SAM77F2#5&197e7451&1&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            EdidProductCodeId = 30706
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay
+                {
+                    Id = "A",
+                    PhysicalIdentity = original,
+                    CanonicalFriendlyName = "S90F",
+                    BestKnownCapability = Capability(3840, 2160, 144)
+                },
+                new KnownPhysicalDisplay
+                {
+                    Id = "B",
+                    PhysicalIdentity = duplicateIdentity,
+                    CanonicalFriendlyName = "SAMSUNG"
+                }
+            ],
+            GamingProfiles =
+            [new DisplayLayoutProfile
+            {
+                Name = "CONSOLE",
+                DisplayTopology = new GamingProfileDisplayTopology
+                {
+                    Displays = [new ProfileDisplayTarget
+                    {
+                        KnownPhysicalDisplayId = "A",
+                        Identity = original,
+                        Enabled = true
+                    }]
+                }
+            }]
+        };
+
+        Assert.True(KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings));
+        Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal("A", settings.KnownPhysicalDisplays.Single().Id);
+        Assert.Equal("S90F", settings.KnownPhysicalDisplays.Single().CanonicalFriendlyName);
+        Assert.Contains(duplicateIdentity, settings.KnownPhysicalDisplays.Single().HistoricalIdentities);
+
+        var current = KnownPhysicalDisplayCatalogService.Merge(
+            settings,
+            [CreateDisplay(duplicateIdentity, 60, isEnabled: false)]);
+
+        Assert.Single(current.Displays);
+        Assert.Equal("A", current.Displays.Single().KnownPhysicalDisplayId);
+        Assert.Equal("S90F", current.Displays.Single().Name);
+    }
+
+    [Fact]
+    public void Strong_replug_alias_wins_over_stale_conflicting_historical_alias()
+    {
+        var original = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = @"\\?\DISPLAY#SAM78B7#5&197e7451&1&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            EdidProductCodeId = 30903,
+            OutputTechnology = "HDMI"
+        };
+        var degraded = original with
+        {
+            FriendlyName = "SAMSUNG",
+            AdapterLuid = 65813,
+            MonitorDevicePath = @"\\?\DISPLAY#SAM77F2#5&197e7451&1&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            EdidProductCodeId = 30706
+        };
+        var replugged = original with { AdapterLuid = 65643 };
+        var known = new KnownPhysicalDisplay
+        {
+            Id = "tv",
+            PhysicalIdentity = original,
+            CanonicalFriendlyName = "S90F",
+            HistoricalIdentities = [degraded],
+            BestKnownCapability = Capability(3840, 2160, 144)
+        };
+
+        var match = DisplayIdentityMatcher.ResolveKnownDisplay(known, replugged);
+
+        Assert.True(match.IsMatch);
+        Assert.False(match.HasConflict);
+        Assert.Equal(DisplayIdentityMatchConfidence.ExactMonitorDevicePath, match.MatchConfidence);
+
+        var settings = new DisplaySettings { KnownPhysicalDisplays = [known] };
+        var result = KnownPhysicalDisplayCatalogService.Merge(settings, [CreateDisplay(replugged, 144)]);
+        Assert.Equal(1, result.LogicalCount);
+        Assert.Single(settings.KnownPhysicalDisplays);
+
+        _ = KnownPhysicalDisplayCatalogService.RecordHealthyObservation(
+            settings,
+            replugged,
+            Capability(3840, 2160, 144),
+            out var update);
+
+        Assert.Equal("Kept", update.Action);
+        Assert.Equal(144, settings.KnownPhysicalDisplays.Single().BestKnownCapability?.MaxRefreshRateHz);
+        Assert.Contains(replugged, settings.KnownPhysicalDisplays.Single().HistoricalIdentities);
+    }
+
+    [Fact]
+    public void Catalog_reconciliation_keeps_original_profile_record_and_merges_replug_route()
+    {
+        var original = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-S90F",
+            EdidProductCodeId = 30903,
+            OutputTechnology = "HDMI"
+        };
+        var degraded = original with
+        {
+            FriendlyName = "SAMSUNG",
+            AdapterLuid = 65813,
+            MonitorDevicePath = "PATH-SAMSUNG",
+            EdidProductCodeId = 30706
+        };
+        var replugged = original with { AdapterLuid = 65643 };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay
+                {
+                    Id = "original",
+                    PhysicalIdentity = original,
+                    HistoricalIdentities = [degraded],
+                    CanonicalFriendlyName = "S90F",
+                    BestKnownCapability = Capability(3840, 2160, 144)
+                },
+                new KnownPhysicalDisplay
+                {
+                    Id = "duplicate",
+                    PhysicalIdentity = replugged,
+                    CanonicalFriendlyName = "S90F"
+                }
+            ],
+            GamingProfiles =
+            [new DisplayLayoutProfile
+            {
+                Name = "CONSOLE",
+                DisplayTopology = new GamingProfileDisplayTopology
+                {
+                    Displays = [new ProfileDisplayTarget
+                    {
+                        KnownPhysicalDisplayId = "original",
+                        Identity = original,
+                        Enabled = true
+                    }]
+                }
+            }]
+        };
+
+        Assert.True(KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings));
+
+        var survivor = Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal("original", survivor.Id);
+        Assert.Equal("S90F", survivor.CanonicalFriendlyName);
+        Assert.Equal(144, survivor.BestKnownCapability?.MaxRefreshRateHz);
+        Assert.Contains(replugged, survivor.HistoricalIdentities);
+
+        var current = KnownPhysicalDisplayCatalogService.Merge(
+            settings,
+            [CreateDisplay(replugged, 144, isEnabled: false)]);
+        Assert.Equal(1, current.LogicalCount);
+        Assert.Equal("original", current.Displays.Single().KnownPhysicalDisplayId);
+        Assert.Equal("S90F", current.Displays.Single().Name);
+    }
+
+    [Fact]
+    public void Normalization_promotes_richer_historical_route_when_primary_route_is_incomplete()
+    {
+        var incomplete = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 0,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-S90F",
+            EdidIdsValid = true,
+            EdidProductCodeId = 30903
+        };
+        var route = incomplete with { AdapterLuid = 65643 };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                Id = "tv",
+                PhysicalIdentity = incomplete,
+                CanonicalFriendlyName = "S90F",
+                HistoricalIdentities = [route],
+                BestKnownCapability = Capability(3840, 2160, 144)
+            }]
+        };
+
+        Assert.True(KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings));
+        Assert.Equal(65643, settings.KnownPhysicalDisplays.Single().PhysicalIdentity.AdapterLuid);
+        Assert.Contains(incomplete, settings.KnownPhysicalDisplays.Single().HistoricalIdentities);
+        Assert.Equal(144, settings.KnownPhysicalDisplays.Single().BestKnownCapability?.MaxRefreshRateHz);
+    }
+
+    [Fact]
+    public void Different_manufacturer_and_stable_device_identity_are_not_reconciled()
+    {
+        var left = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-A",
+            EdidManufacturerId = 11596,
+            EdidProductCodeId = 30903,
+            OutputTechnology = "HDMI"
+        };
+        var right = left with
+        {
+            FriendlyName = "OTHER",
+            AdapterLuid = 65813,
+            MonitorDevicePath = "PATH-B",
+            EdidManufacturerId = 9999,
+            EdidProductCodeId = 1
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay { Id = "A", PhysicalIdentity = left, HistoricalIdentities = [], CanonicalFriendlyName = "S90F", BestKnownCapability = Capability(3840, 2160, 144), LastVerifiedActiveCapability = Capability(3840, 2160, 144) },
+                new KnownPhysicalDisplay { Id = "B", PhysicalIdentity = right, HistoricalIdentities = [], CanonicalFriendlyName = "OTHER" }
+            ]
+        };
+
+        Assert.False(KnownPhysicalDisplayCatalogService.HasKnownDisplayReconciliationCandidates(settings));
+        Assert.False(KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings));
+        Assert.Equal(2, settings.KnownPhysicalDisplays.Count);
+    }
+
     private static DisplayDeviceInfo CreateDisplay(string name, uint refresh, bool isEnabled = true)
     {
-        var identity = CreateIdentity(name);
+        return CreateDisplay(CreateIdentity(name), refresh, isEnabled);
+    }
+
+    private static DisplayDeviceInfo CreateDisplay(DisplayIdentity identity, uint refresh, bool isEnabled = true)
+    {
+        var name = identity.FriendlyName;
         return new DisplayDeviceInfo
         {
             Name = name,

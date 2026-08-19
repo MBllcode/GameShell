@@ -20,7 +20,6 @@ public enum ProfileDisplayReadinessReason
     AmbiguousIdentity,
     InvalidExpectedMode,
     ModeInventoryInvalid,
-    CapabilityRegression,
     CapabilityBelowBestKnown,
     TargetInactive
 }
@@ -43,6 +42,7 @@ public sealed class GamingProfileTopologyReadiness
     public string ProfileId { get; init; } = string.Empty;
     public string ProfileName { get; init; } = string.Empty;
     public IReadOnlyList<ProfileDisplayTargetReadiness> Targets { get; init; } = [];
+    public bool IdentityCatalogChanged { get; init; }
     public bool IsReady => Targets.All(target => target.Result is ProfileDisplayReadiness.Ready or ProfileDisplayReadiness.ResolvableInactive or ProfileDisplayReadiness.Disabled);
     public string ProfileResult => IsReady ? "Ready" : "Blocked";
 }

@@ -55,7 +55,9 @@ public static class AppSettingsValidator
     public static bool HasLegacyCapabilityData(AppSettings settings)
     {
         return settings.Display?.KnownPhysicalDisplays?.Any(known => known.LastKnownGoodCapability is not null) == true
-            || settings.Display?.KnownPhysicalDisplays?.Any(known => string.IsNullOrWhiteSpace(known.Id)) == true;
+            || settings.Display?.KnownPhysicalDisplays?.Any(known => string.IsNullOrWhiteSpace(known.Id)) == true
+            || settings.Display is not null
+                && KnownPhysicalDisplayCatalogService.HasKnownDisplayReconciliationCandidates(settings.Display);
     }
 
     private static string NormalizeLanguage(string? value)

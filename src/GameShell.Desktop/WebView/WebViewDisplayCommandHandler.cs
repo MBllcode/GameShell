@@ -51,15 +51,21 @@ internal sealed class WebViewDisplayCommandHandler
                 merged.ObservationCount,
                 merged.LogicalCount,
                 merged.DuplicatesCollapsed);
-            foreach (var match in merged.IdentityMatches.Where(match => match.Result is "New" or "Conflict"))
+            foreach (var match in merged.IdentityMatches)
             {
                 _logger.LogInformation(
-                    "[DISPLAY IDENTITY MATCH] KnownDisplayId={KnownDisplayId}, CanonicalName={CanonicalName}, ObservedName={ObservedName}, AdapterLuid={AdapterLuid}, TargetId={TargetId}, MatchConfidence={MatchConfidence}, Result={Result}",
+                    "[DISPLAY IDENTITY MATCH] KnownDisplayId={KnownDisplayId}, CanonicalName={CanonicalName}, ObservedName={ObservedName}, SavedAdapterLuid={SavedAdapterLuid}, ObservedAdapterLuid={ObservedAdapterLuid}, TargetId={TargetId}, MonitorDevicePathMatch={MonitorDevicePathMatch}, EdidMatch={EdidMatch}, HistoricalRouteMatch={HistoricalRouteMatch}, MissingMetadata={MissingMetadata}, ConflictingMetadata={ConflictingMetadata}, MatchConfidence={MatchConfidence}, Result={Result}",
                     match.KnownDisplayId,
                     match.CanonicalName,
                     match.ObservedName,
+                    match.SavedAdapterLuid,
                     match.AdapterLuid,
                     match.TargetId,
+                    match.MonitorDevicePathMatch,
+                    match.EdidMatch,
+                    match.HistoricalRouteMatch,
+                    match.MissingMetadata,
+                    match.ConflictingMetadata,
                     match.MatchConfidence,
                     match.Result);
             }

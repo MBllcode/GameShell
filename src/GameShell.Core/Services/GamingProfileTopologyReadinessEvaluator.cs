@@ -28,10 +28,17 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
     {
         var inventory = await _displayQueryService.GetAvailableDisplaysAsync(cancellationToken);
         var targets = new List<ProfileDisplayTargetReadiness>(topology.Displays.Count);
+        var identityCatalogChanged = false;
 
         foreach (var savedTarget in topology.Displays)
         {
-            var readiness = await EvaluateTargetAsync(savedTarget, inventory, cancellationToken, deferInactiveModeValidation, displaySettings);
+            var readiness = await EvaluateTargetAsync(
+                savedTarget,
+                inventory,
+                cancellationToken,
+                deferInactiveModeValidation,
+                displaySettings,
+                () => identityCatalogChanged = true);
             targets.Add(readiness);
             _logger.LogInformation(
                 "[DISPLAY PHYSICAL MATCH] SavedName={SavedName} CurrentName={CurrentName} SavedAdapterLuid={SavedAdapterLuid} CurrentAdapterLuid={CurrentAdapterLuid} SavedTargetId={SavedTargetId} CurrentTargetId={CurrentTargetId} Connector={Connector} EdidIdsValid={EdidIdsValid} PhysicalMatch={PhysicalMatch} MatchConfidence={MatchConfidence} ResolvedSource={ResolvedSource}",
@@ -54,16 +61,6 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
                 savedTarget.EffectiveRefreshPolicy,
                 readiness.Result,
                 readiness.Reason);
-            if (readiness.Reason == ProfileDisplayReadinessReason.CapabilityRegression)
-            {
-                _logger.LogInformation(
-                    "[DISPLAY CAPABILITY CATALOG] PhysicalId={PhysicalId} CanonicalName={CanonicalName} PreviousBest={PreviousBest} Observed={Observed} NewBest={NewBest} Action=IgnoredDegraded",
-                    FormatPhysicalId(readiness.ResolvedTarget?.Identity ?? savedTarget.Identity),
-                    savedTarget.Identity.FriendlyName,
-                    FormatCapability(readiness.BestKnownCapability),
-                    FormatCapability(readiness.CurrentCapability),
-                    FormatCapability(readiness.BestKnownCapability));
-            }
             _logger.LogInformation(
                 "[{Phase}] ProfileId={ProfileId} ProfileName={ProfileName} SavedName={SavedName} Enabled={Enabled} ResolvedName={ResolvedName} Active={Active} Available={Available} RequestedMode={RequestedMode} AvailableModesForRequestedResolution={AvailableModesForRequestedResolution} Result={Result} Reason={Reason}",
                 deferInactiveModeValidation ? "PROFILE TOPOLOGY PRECHECK" : "PROFILE TOPOLOGY POSTCHECK",
@@ -84,7 +81,8 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
         {
             ProfileId = profileId,
             ProfileName = profileName,
-            Targets = targets
+            Targets = targets,
+            IdentityCatalogChanged = identityCatalogChanged
         };
         _logger.LogInformation(
             "[{Phase}] ProfileId={ProfileId} ProfileName={ProfileName} ProfileResult={ProfileResult}",
@@ -100,7 +98,8 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
         IReadOnlyList<DisplayDeviceInfo> inventory,
         CancellationToken cancellationToken,
         bool deferInactiveModeValidation,
-        DisplaySettings? displaySettings)
+        DisplaySettings? displaySettings,
+        Action onIdentityCatalogChanged)
     {
         if (!savedTarget.Enabled)
         {
@@ -132,7 +131,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
             };
         }
 
-        var resolution = Resolve(savedTarget, inventory);
+        var resolution = Resolve(savedTarget, inventory, displaySettings);
         if (resolution.IsAmbiguous)
         {
             return new ProfileDisplayTargetReadiness
@@ -153,6 +152,27 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
             };
         }
 
+        if (displaySettings is not null
+            && resolution.Known is not null
+            && resolution.Match.IsMatch
+            && KnownPhysicalDisplayCatalogService.RecordIdentityObservation(displaySettings, resolution.Target.Identity))
+        {
+            onIdentityCatalogChanged();
+        }
+
+        if (!resolution.Target.IsEnabled && resolution.Target.IsAvailable && deferInactiveModeValidation)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
+                BestKnownCapability = FindBestKnown(displaySettings, resolution.Target.Identity),
+                Result = ProfileDisplayReadiness.ResolvableInactive,
+                Reason = ProfileDisplayReadinessReason.TargetInactive
+            };
+        }
+
         if (!resolution.Target.IsAvailable)
         {
             return new ProfileDisplayTargetReadiness
@@ -163,19 +183,6 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
                 BestKnownCapability = FindBestKnown(displaySettings, resolution.Target.Identity),
                 Result = ProfileDisplayReadiness.Missing,
                 Reason = ProfileDisplayReadinessReason.PhysicalTargetMissing
-            };
-        }
-
-        if (deferInactiveModeValidation && !resolution.Target.IsEnabled && resolution.Target.IsAvailable)
-        {
-            return new ProfileDisplayTargetReadiness
-            {
-                SavedTarget = savedTarget,
-                ResolvedTarget = resolution.Target,
-                PhysicalMatchConfidence = resolution.Confidence,
-                BestKnownCapability = FindBestKnown(displaySettings, resolution.Target.Identity),
-                Result = ProfileDisplayReadiness.ResolvableInactive,
-                Reason = ProfileDisplayReadinessReason.TargetInactive
             };
         }
 
@@ -240,6 +247,20 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
             && currentCapability is not null
             && currentCapability.MaxRefreshRateHz + RefreshToleranceHz < bestKnownCapability!.MaxRefreshRateHz;
 
+        if (capabilityBelowBestKnown && resolution.Target.IsEnabled)
+        {
+            _logger.LogInformation(
+                "[DISPLAY CAPABILITY DEGRADATION] KnownDisplayId={KnownDisplayId} CanonicalName={CanonicalName} ObservedName={ObservedName} RequestedResolution={RequestedResolution} BestKnownRefresh={BestKnownRefresh} CurrentMaxRefresh={CurrentMaxRefresh} CurrentModeCount={CurrentModeCount} BestKnownModeCount={BestKnownModeCount} State=DegradedCurrentCapability Action=UseCurrentAvailableMode",
+                resolution.Known?.Id ?? savedTarget.KnownPhysicalDisplayId,
+                resolution.Known?.CanonicalFriendlyName ?? savedTarget.Identity.FriendlyName,
+                resolution.Target.Name,
+                $"{savedTarget.Width}x{savedTarget.Height}",
+                FormatRefresh(bestKnownCapability?.MaxRefreshRateHz ?? 0),
+                FormatRefresh(currentCapability?.MaxRefreshRateHz ?? 0),
+                modeQuery.Modes.Count,
+                "unknown");
+        }
+
         return new ProfileDisplayTargetReadiness
         {
             SavedTarget = savedTarget,
@@ -260,16 +281,44 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
 
     private static IdentityResolution Resolve(
         ProfileDisplayTarget savedTarget,
-        IReadOnlyList<DisplayDeviceInfo> inventory)
+        IReadOnlyList<DisplayDeviceInfo> inventory,
+        DisplaySettings? displaySettings)
     {
-        if (!string.IsNullOrWhiteSpace(savedTarget.KnownPhysicalDisplayId))
+        var known = displaySettings is null
+            ? null
+            : KnownPhysicalDisplayCatalogService.FindKnownById(displaySettings, savedTarget.KnownPhysicalDisplayId)
+                ?? KnownPhysicalDisplayCatalogService.FindKnownByIdentity(displaySettings, savedTarget.Identity);
+
+        if (known is not null)
         {
             var referenced = inventory
-                .Where(device => string.Equals(device.KnownPhysicalDisplayId, savedTarget.KnownPhysicalDisplayId, StringComparison.OrdinalIgnoreCase))
+                .Select(device => new
+                {
+                    Device = device,
+                    Match = string.Equals(device.KnownPhysicalDisplayId, known.Id, StringComparison.OrdinalIgnoreCase)
+                        ? new DisplayIdentityMatchResult(
+                            DisplayIdentityMatchConfidence.ExactMonitorDevicePath,
+                            true,
+                            false,
+                            false,
+                            true,
+                            false,
+                            false)
+                        : DisplayIdentityMatcher.ResolveKnownDisplay(known, device.Identity),
+                    Score = DisplayIdentityMatcher.GetStableIdentityScore(known, device.Identity)
+                })
+                .Where(candidate => candidate.Match.IsMatch)
+                .OrderByDescending(candidate => candidate.Match.MatchConfidence)
+                .ThenByDescending(candidate => candidate.Score)
                 .ToList();
             if (referenced.Count == 1)
             {
-                return new IdentityResolution(referenced[0], false, DisplayIdentityMatchConfidence.AdapterAndTargetRoute);
+                return new IdentityResolution(
+                    referenced[0].Device,
+                    false,
+                    referenced[0].Match.MatchConfidence,
+                    known,
+                    referenced[0].Match);
             }
 
             if (referenced.Count > 1)
@@ -301,7 +350,14 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
             .Where(candidate => candidate.Confidence == highestConfidence && candidate.Score == highestScore)
             .ToList();
         return highest.Count == 1
-            ? new IdentityResolution(highest[0].Device, false, highest[0].Confidence)
+            ? new IdentityResolution(highest[0].Device, false, highest[0].Confidence, null, new DisplayIdentityMatchResult(
+                highest[0].Confidence,
+                true,
+                false,
+                false,
+                false,
+                false,
+                false))
             : new IdentityResolution(null, true);
     }
 
@@ -373,6 +429,11 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
             : $"{capability.Width}x{capability.Height}@{capability.MaxRefreshRateHz:0.##}";
     }
 
+    private static string FormatRefresh(double refreshRate)
+    {
+        return refreshRate > 0 ? refreshRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : "unknown";
+    }
+
     private static string FormatPhysicalId(DisplayIdentity identity)
     {
         return identity.AdapterLuid != 0 && identity.TargetId != 0
@@ -393,5 +454,7 @@ public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopo
     private readonly record struct IdentityResolution(
         DisplayDeviceInfo? Target = null,
         bool IsAmbiguous = false,
-        DisplayIdentityMatchConfidence Confidence = DisplayIdentityMatchConfidence.None);
+        DisplayIdentityMatchConfidence Confidence = DisplayIdentityMatchConfidence.None,
+        KnownPhysicalDisplay? Known = null,
+        DisplayIdentityMatchResult Match = null!);
 }

@@ -19,6 +19,29 @@ artifacts\installer\GameShell.exe
 - Tray menu + global hotkeys + single-instance command forwarding.
 - Per-profile launcher, mode behavior, and shortcut configuration in the UI wizard/dashboard.
 
+### Display identity and capability model
+
+Display configuration separates three concerns:
+
+- `KnownPhysicalDisplay` is the persistent logical identity. Its canonical name
+  is stable and its identity history can contain multiple Windows route aliases
+  for the same physical target.
+- Profile display entries store only profile-local settings such as enabled,
+  primary, position, resolution, refresh policy and optional fixed refresh.
+- Runtime observations are transient Windows inventory data and never create a
+  second logical display merely because the friendly name, adapter LUID or
+  available mode list changed.
+
+`BestKnownCapability` belongs to the known physical display. It is historical
+diagnostic information, not a minimum requirement for `AutoHighest`. After a
+target is activated, GameShell enumerates the currently available active modes
+and selects the highest mode exposed by Windows. It never forces a historical
+mode that is not currently enumerated.
+
+GameShell does not automatically reset monitor devices, GPUs, HDMI inputs or
+TV power. If Windows exposes a reduced mode inventory, hardware/link
+renegotiation may be required outside the application.
+
 ### Launchers
 
 Profiles can launch:
@@ -122,3 +145,12 @@ tests/
 scripts/
 docs/
 ```
+
+## Repository preparation
+
+The repository is currently prepared for a future private GitHub repository,
+but no remote or publishing action is performed by the build/package scripts.
+Before the first push, follow [the private repository checklist](docs/github-private-repository.md)
+and review the complete working tree, generated artifacts and settings-related
+files. Runtime settings are stored under `%LOCALAPPDATA%\GameShell`, not in the
+repository; generated binaries under `artifacts\installer` are ignored.

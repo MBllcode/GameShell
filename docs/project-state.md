@@ -9,11 +9,27 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Monitor sesji Windows jest teraz bardziej ostrożny: filtruje procesy launchera/systemowe, czeka na stabilizację kandydata przed `GameActive`, i loguje realne przejścia `candidate observed -> stabilized -> exited`.
 - Recovery Playnite nie jest zbyt agresywnie rozbudowywany: loguje stan aktywacji i działa tylko po potwierdzeniu prawdziwego cyklu `GameExited`/`ReturningToLauncher`, bez dodatkowych mechanizmów focus bez dowodu runtime.
 
+## Aktualny model ekranów
+
+- `KnownPhysicalDisplay` jest jedyną trwałą logical identity ekranu. `CanonicalName` jest ustawiana przy pierwszym świadomym zapisaniu i nie zmienia się przy kolejnych nazwach z Windows.
+- Obserwacje Windows są chwilowe. Zmiana friendly name, adapter LUID, aktywności lub listy trybów nie tworzy drugiego ekranu.
+- Jeden znany ekran może zachować wiele historycznych aliasów trasy, np. różne `AdapterLuid + TargetId` po restarcie sterownika lub replug HDMI. Resolver oraz reconciler katalogu działają wspólnie dla discovery, readiness i migracji.
+- `BestKnownCapability` i `LastVerifiedActiveCapability` należą do `KnownPhysicalDisplay`, a nie do trasy ani profilu. Słabsza obserwacja nie obniża zapamiętanego maksimum.
+- Profile przechowują referencję do znanego ekranu oraz własne ustawienia: enabled, primary, pozycję, rozdzielczość i `RefreshPolicy`/`FixedRefresh`.
+- Ostatnia walidacja na realnym TV potwierdziła po replug: `KnownCount=3`, `ObservationCount=3`, `LogicalCount=3`, dopasowanie istniejącego S90F oraz `BestKnown=144` z akcją `Kept`. Profil CONSOLE osiągnął `Ready` i `LauncherActive` z AutoHighest 144 Hz.
+
+## Capability i recovery HDMI
+
+- `AutoHighest` po aktywacji wykonuje świeże active mode inventory i wybiera najwyższy aktualnie enumerowany tryb. `BestKnownCapability` jest wiedzą historyczną/diagnostyczną, nie wymaganym minimum.
+- Gdy aktywny ekran wystawia tylko niższy tryb, profil może pozostać `Ready` i użyć bieżącego trybu; logowana jest informacja `[DISPLAY CAPABILITY DEGRADATION]` z akcją `UseCurrentAvailableMode`.
+- `Fixed` pozostaje ścisłe: żądany tryb musi być obecny w świeżym inventory po aktywacji.
+- Nie ma automatycznego monitor disable/enable, reenumeracji devnode, restartu GPU, poleceń DDC/CI, CEC ani sterowania TV w normalnym przejściu profilu. Eksperymentalne recovery HDMI nie jest częścią produkcyjnego flow.
+
 ## Ostatnia iteracja zmian
 
-- Rozpoczeto etapowy refactor architektoniczny: audyt zapisano w `docs/architecture-audit.md`; wydzielono resolver profili gamingowych, koordynator readiness/recovery, router komend WebView, migrator starego JSON, parser hotkeyow oraz serwisy Windows integration/cursor. Zachowanie DisplayConfig/CCD pozostalo bez zmian.
+- Rozpoczeto etapowy refactor architektoniczny: audyt zapisano w `docs/architecture-audit.md`; wydzielono resolver profili gamingowych, koordynator readiness, router komend WebView, migrator starego JSON, parser hotkeyow oraz serwisy Windows integration/cursor. Zachowanie DisplayConfig/CCD pozostalo bez zmian.
 - Uruchamianie launcherow ma wspolny adapter standard-user: `NativeModeWorkflowService` i `WindowsLauncherRecoveryStrategy` korzystaja z `ILauncherProcessService`, a token/process creation pozostaje w `GameShell.Windows`. Elevated GameShell nie przekazuje juz swojego tokena do Playnite; blad startu zwracany jest kontrolowanie bez silent elevated fallbacku.
-- Po kolejnych slice'ach `ModeOrchestrator` ma 477 linii zamiast 808, `WebViewBridge` 915 zamiast 1154, `WindowsDisplayConfigurationService` 871 zamiast 1249, `App` 795 zamiast 864, a `SettingsService` 290 zamiast 333; testy .NET obejmuja `140/140` przypadkow.
+- Po kolejnych slice'ach `ModeOrchestrator` ma 477 linii zamiast 808, `WebViewBridge` 915 zamiast 1154, `WindowsDisplayConfigurationService` 871 zamiast 1249, `App` 795 zamiast 864, a `SettingsService` 290 zamiast 333; aktualny zestaw testów .NET obejmuje `191/191` przypadków.
 - `WindowsDisplayTopologyReader` odpowiada za odczyt/retry/mapowanie topologii DisplayConfig, a `WebViewPayloadReader` za stateless parsing payloadow WebView. Zadna produkcyjna klasa C# nie przekracza obecnie 1000 linii.
 - `SingleInstanceCommandHost` przejal rejestracje named events, marshalowanie callbackow do WPF Dispatcher oraz cleanup z `App`; `App` nadal wybiera komendy i zachowuje polityke lifecycle.
 - `WebViewDisplayCommandHandler` przejal inventory ekranow, capture layoutu, zapisy profili ekranow, display testy i walidacje wyboru ekranow z `WebViewBridge`; bridge pozostaje granica transportu WebView2.
@@ -23,7 +39,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Przejrzano sugestie `LibraryImport` dla P/Invoke. `DllImport` pozostaje celowo w aktualnej warstwie DisplayConfig/Win32: struktury maja wrazliwy layout ABI, fixed native buffers i tablice o rozmiarze runtime. Migracja nie jest bledem do naprawy; ewentualna migracja prostych wywolan wymaga osobnego testowanego slice'a.
 - `ShortcutConflictNormalizer` przejal normalizacje i usuwanie konfliktow skrotow z `AppSettingsValidator`, a `ControllerShortcutMatcher` przejal czyste dopasowanie kombinacji i hold duration z pollingu SDL.
 - Audio nie jest obecnie obslugiwane przez produkt i zostalo usuniete z kontraktow, persistence, DI, WebView oraz UI (`IAudioDeviceService`, `WindowsAudioDeviceService`, audio DTO/commands). Windows domyslnie zarzadza audio niezaleznie od GameShell; stare pola audio w JSON sa ignorowane przy odczycie.
-- Po tych slice'ach `App` ma 459 linii, `TrayHost` 213, `WebViewBridge` 485, `WebViewDisplayCommandHandler` 449, `SdlControllerShortcutService` 655, a najwieksza produkcyjna klasa ma 871 linii. Testy .NET: `142/142`.
+- Po tych slice'ach `App` ma 459 linii, `TrayHost` 213, `WebViewBridge` 485, `WebViewDisplayCommandHandler` 449, `SdlControllerShortcutService` 655, a najwieksza produkcyjna klasa ma 871 linii. Aktualny zestaw testów .NET: `191/191`.
 - `WindowsWindowManagementService` przejal operacje Win32 dla ikon pulpitu, taskbarow, okien Explorera, minimalizacji i foreground launchera. `NativeModeWorkflowService` zachowuje kolejnosc krokow, cancellation, warning aggregation i polityke procesow launchera; ma teraz 506 linii zamiast 808.
 - Uzupełniono flow setupu i walidację kolejnych kroków: `WelcomeStep`, `DisplaysStep`, `LauncherStep`, `ProfileBehaviourStep`, `WorkBehaviourStep`, `AppBehaviourStep` oraz `ControllerStep` są spójne pod względem lokalnych błędów, deterministycznego zapisu draftu oraz bezpieczniejszej nawigacji po pierwszej konfiguracji.
 - Draft konfiguracji ekranów jest teraz commitowany przed przejściem dalej i przed zapisaniem profilu, co zapobiega sytuacjom, w których UI zapisuje stale snapshot bez pełnej, znormalizowanej geometrii.
@@ -31,8 +47,9 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Zajęta kombinacja klawiatury lub kontrolera pozostaje tymczasowo widoczna na czerwono wraz z komunikatem walidacyjnym przez `2,8 s`; następnie pole wraca do poprzednio zapisanego skrótu albo pozostaje puste. Błąd blokuje zapis oraz wyjście do dashboardu i może pojawić się ponownie przy kolejnej próbie.
 - Końcowy przycisk flow dodawania profilu ma etykietę `Zapisz zmiany`; jego działanie zapisuje nowy profil i dopiero potem wraca do dashboardu.
 - Readiness profilu rozdziela obecność fizycznego route od bieżącej capability handshake. Dopasowanie nie wymaga `FriendlyName`: preferowane są `AdapterLuid + TargetId`, stabilna ścieżka monitora oraz poprawne EDID/connector fields; nazwy pozostają diagnostyczne i nie ma aliasów Samsung/S90F.
-- `ProfileDisplayTarget` może przechowywać osobne `CapabilityExpectation` z rozdzielczością i last-known-good maximum refresh. Przy `AutoHighest` niższe aktualne maksimum daje `Degraded/CapabilityRegression`, a oczekiwanie jest aktualizowane wyłącznie po zdrowej obserwacji i nigdy nie jest obniżane przez słabszy handshake.
-- Po rozpoznaniu fizycznego targetu recovery jest uruchamiane również dla `CapabilityRegression`; po bounded recovery capability jest ponownie odczytywana. Aktywacja jest kontynuowana tylko po wyniku `Ready`.
+- `BestKnownCapability` należy do globalnego `KnownPhysicalDisplay` i jest wyłącznie historyczną wiedzą diagnostyczną. Nie jest minimalnym kontraktem dla `AutoHighest`, a chwilowa obserwacja inactive nie obniża tej wartości.
+- `AutoHighest` najpierw aktywuje target, potem odczytuje świeże active mode inventory i wybiera najwyższy aktualnie enumerowany tryb dla zapisanej rozdzielczości. Jeśli bieżące active capability jest niższe od historycznego maksimum, profil pozostaje `Ready`, a runtime zapisuje tylko `[DISPLAY CAPABILITY DEGRADATION]` z akcją `UseCurrentAvailableMode`.
+- GameShell nie wykonuje automatycznej renegocjacji HDMI ani recovery devnode/GPU/TV. Jeśli Windows wystawi zredukowany zestaw trybów, aplikacja nie wymusza niedostępnego trybu; hardware/link renegotiation może wymagać działania poza GameShell.
 - Diagnostyka readiness zapisuje `[DISPLAY PHYSICAL MATCH]` oraz `[DISPLAY CAPABILITY READINESS]` z nazwami, route, EDID validity, capability i powodem wyniku.
 - Zachowanie startu i autostartu jest spójne w zwykłym starcie i scenariuszach fallbackowych: `Start with Windows` i `Start minimized to tray` są zastosowane w ścieżce runtime, a nie tylko w dekoracji UI.
 - Aktualna dokumentacja UI jest utrzymywana w `docs/ui.md` jako aktywny standard zgodny z obecnym green-v2 theme, motion systemem i zasadami dla sidebaru, profili i walidacji.
@@ -100,7 +117,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Przywracanie layoutu ekranow i glowna zmiana stanu sa krytyczne. Zamkniecie launchera, taskbary i ikony pulpitu sa best-effort; bounded timeout launchera jest ostrzezeniem i nie przerywa Work Mode.
 - Duplikaty aktywacji sa odrzucane, przejscia sa serializowane, a bledy sa logowane i koncza sie stanem `Faulted`, z mozliwoscia ponowienia komendy.
 - Runtime snapshot Work Mode jest skladany atomowo przez `ModeCommandService`: `CurrentMode=Work`, `SessionState=Idle`, `ActiveProfileName=null` i `ActiveLauncher=null`. Udany `enterWorkMode` emituje `statusChanged`, a frontend renderuje stan przede wszystkim z tego snapshotu.
-- `ConsoleSessionManager` uniewaznia `SessionGeneration` przy wyjsciu z sesji gamingowej. Opoznione callbacki monitora i recovery sa ignorowane, gdy stan nie jest juz `GameActive`/`ReturningToLauncher`, wiec nie moga przywrocic `LauncherActive` po Work Mode.
+- `ConsoleSessionManager` uniewaznia `SessionGeneration` przy wyjsciu z sesji gamingowej. Opoznione callbacki monitora sa ignorowane, gdy stan nie jest juz `GameActive`/`ReturningToLauncher`, wiec nie moga przywrocic `LauncherActive` po Work Mode.
 - Wejscie do Work Mode z dashboardu i z pada korzysta z tego samego `IModeCommandService`. Skrot SDL3 uruchamia komendę z watku pollingu, dlatego `WebViewBridge.NotifyStatusChanged` musi publikowac event przez WPF Dispatcher; bez tego backend zmienial stan, ale WebView2 nie odswiezal sidebara.
 - Przy diagnostyce przeplywu uzywamy logow `[WORKMODE REQUEST]`, `[WORKMODE SESSION COMMIT]`, `[WORKMODE BACKEND COMMIT]`, `[STATUSCHANGED EMIT]`, `[STATUSCHANGED RECEIVED]`, `[GETSTATUS RESPONSE]`, `[UI STATUS RECEIVED]` i `[DASHBOARD RUNTIME STATE]`. Log aplikacji jest w `%LOCALAPPDATA%\GameShell\Logs\gameshell-yyyy-MM-dd.log`.
 - `IGameSessionMonitor` jest osobnym kontraktem. Implementacja Windows sprawdza tylko jawnie skonfigurowane `Gaming.GameProcessNames`; pusta lista oznacza brak heurystycznego wykrywania gry.
@@ -165,7 +182,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - `SettingsService` zapisuje ustawienia atomowo: serializacja i walidacja odbywaja sie przed otwarciem pliku docelowego, nastepnie tworzony jest plik `.tmp`, flush do dysku i `File.Move` na miejsce `settings.json`.
 - Backup `.bak` jest aktualizowany w bezpiecznej sekwencji; przy niepoprawnym albo uszkodzonym `settings.json` loader preferuje poprawny backup zamiast resetu do pierwszego uruchomienia.
 - Pliki z uszkodzeniem sa zachowywane jako kopie `.corrupt-<timestamp>` z zachowaniem diagnostyki, a w przypadku braku poprawnego glownego pliku i backupu system tworzy domyslne ustawienia dopiero po potwierdzeniu, ze brak bezpiecznego odzyskania.
-- Weryfikacja: `SettingsServiceTests` obejmuje migracje i zapis nazw kanonicznych; `dotnet test GameShell.sln` 140/140, 0 failed.
+- Weryfikacja: `SettingsServiceTests` obejmuje migracje i zapis nazw kanonicznych; aktualnie `dotnet test GameShell.sln` przechodzi `191/191`, 0 failed.
 
 ## Desktop host i runtime
 
@@ -186,7 +203,7 @@ Aktualne, robocze podsumowanie stanu projektu.
 - Pakowanie EXE: `./package.ps1`
 - Finalny artefakt: `artifacts/installer/GameShell.exe`
 - Jesli EXE jest zablokowany, `package.ps1` tworzy fallback `GameShell-<timestamp>.exe`.
-- Ostatnia walidacja tego etapu: `dotnet test GameShell.sln` -> `140/140` passed, testy UI refaktoryzowanych obszarow -> `37/37` passed, `npm run test:encoding`, `npm run build` oraz build .NET wykonane bez bledow; bundle UI skopiowano do WPF `wwwroot` przez `build.ps1`.
+- Ostatnia walidacja katalogu ekranów i readiness: `dotnet test GameShell.sln` -> `191/191` passed; build .NET oraz ręczny runtime na realnym TV również zostały zweryfikowane. Bundle UI jest kopiowany do WPF `wwwroot` przez `build.ps1`.
 
 ## Utrzymanie repo
 

@@ -20,6 +20,7 @@ public partial class App : System.Windows.Application
     private const string ConsoleModeCommandEventName = @"Local\GameShell.Desktop.Command.ConsoleMode";
     private const string GamingProfileCommandEventName = @"Local\GameShell.Desktop.Command.GamingProfile";
     private const string WorkCommandEventName = @"Local\GameShell.Desktop.Command.Work";
+    private const string DisplayCapabilityDiagnosticCommandEventName = @"Local\GameShell.Desktop.Command.DisplayCapabilityDiagnostic";
 
     private ServiceProvider? _serviceProvider;
     private Mutex? _singleInstanceMutex;
@@ -30,6 +31,7 @@ public partial class App : System.Windows.Application
     private ISettingsService? _settingsService;
     private IModeCommandService? _modeCommandService;
     private IDisplayTransitionService? _displayTransitionService;
+    private IDisplayCapabilityDiagnostic? _displayCapabilityDiagnostic;
     private GamingProfileRuntimeSettingsResolver? _gamingProfileSettingsResolver;
     private GlobalHotkeyHost? _hotkeyHost;
     private TrayHost? _trayHost;
@@ -61,6 +63,7 @@ public partial class App : System.Windows.Application
         _settingsService = _serviceProvider.GetRequiredService<ISettingsService>();
         _modeCommandService = _serviceProvider.GetRequiredService<IModeCommandService>();
         _displayTransitionService = _serviceProvider.GetRequiredService<IDisplayTransitionService>();
+        _displayCapabilityDiagnostic = _serviceProvider.GetRequiredService<IDisplayCapabilityDiagnostic>();
         _gamingProfileSettingsResolver = _serviceProvider.GetRequiredService<GamingProfileRuntimeSettingsResolver>();
         var startupSettings = await _settingsService.LoadAsync();
         RegisterCommandEvents();
@@ -98,6 +101,13 @@ public partial class App : System.Windows.Application
         RegisterCommandEvent(ConsoleModeCommandEventName, async () => await RunCommandAsync(service => service.EnterGameShellAsync()));
         RegisterCommandEvent(GamingProfileCommandEventName, RunGamingCommandAsync);
         RegisterCommandEvent(WorkCommandEventName, async () => await RunCommandAsync(service => service.EnterWorkModeAsync()));
+        RegisterCommandEvent(DisplayCapabilityDiagnosticCommandEventName, async () =>
+        {
+            if (_displayCapabilityDiagnostic is not null)
+            {
+                await _displayCapabilityDiagnostic.RunAsync("CONSOLE");
+            }
+        });
     }
 
     private MainWindow EnsureMainWindow()
@@ -382,6 +392,9 @@ public partial class App : System.Windows.Application
             ConsoleModeCommandEventName => RunCommandAsync(service => service.EnterGameShellAsync()),
             GamingProfileCommandEventName => RunGamingCommandAsync(),
             WorkCommandEventName => RunCommandAsync(service => service.EnterWorkModeAsync()),
+            DisplayCapabilityDiagnosticCommandEventName => _displayCapabilityDiagnostic is null
+                ? Task.CompletedTask
+                : _displayCapabilityDiagnostic.RunAsync("CONSOLE"),
             _ => Task.CompletedTask
         };
     }
@@ -417,6 +430,11 @@ public partial class App : System.Windows.Application
             return WorkCommandEventName;
         }
 
+        if (args.Any(arg => arg.Equals("--display-capability-diagnostic", StringComparison.OrdinalIgnoreCase)))
+        {
+            return DisplayCapabilityDiagnosticCommandEventName;
+        }
+
         return null;
     }
 
@@ -445,6 +463,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IDisplayQueryService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayConfigurationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayLayoutApplicationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
+        services.AddSingleton<IDisplayCapabilityDiagnostic, DisplayCapabilityDiagnostic>();
         services.AddSingleton<IDisplayTransitionService, DisplayTransitionService>();
         services.AddSingleton<IModeOrchestrator, ModeOrchestrator>();
         services.AddSingleton<IGameSessionMonitor, WindowsGameSessionMonitor>();

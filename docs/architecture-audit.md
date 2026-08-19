@@ -145,8 +145,8 @@ the definition of done for infrastructure changes.
 - `GamingProfileRuntimeSettingsResolver` extracted profile selection, topology
   conversion and effective launcher/behaviour resolution from `ModeOrchestrator`.
   Desktop hotkey selection now uses the same Core policy instead of duplicating it.
-- `GamingProfileReadinessCoordinator` extracted readiness gates, bounded recovery,
-  reason messages and last-known-good capability updates. `ModeOrchestrator` now
+- `GamingProfileReadinessCoordinator` extracted readiness gates, reason messages
+  and last-known-good capability updates. `ModeOrchestrator` now
   owns the transition pipeline and status, while the coordinator owns readiness.
 - `WebViewCommandRouter` extracted command allow-list and dispatch from the WebView2
   transport boundary. Command names and response JSON are unchanged.
@@ -204,7 +204,7 @@ the definition of done for infrastructure changes.
   owns step ordering, cancellation, warning aggregation and launcher process policy.
 - Focused tests were added for profile resolution, WebView routing, legacy settings
   migration, hotkey parsing and controller shortcut matching. Current .NET test
-  result: `142/142` passed.
+  result: `191/191` passed.
 
 ## Current class-size checkpoint
 

@@ -131,6 +131,66 @@ public sealed class GamingProfileTopologyReadinessTests
     }
 
     [Fact]
+    public async Task InactiveObservationWithChangedAdapterLuidResolvesThroughKnownRouteHistory()
+    {
+        var savedIdentity = Identity("S90F", 4352) with
+        {
+            AdapterLuid = 65578,
+            MonitorDevicePath = "PATH-A"
+        };
+        var currentIdentity = savedIdentity with
+        {
+            FriendlyName = "SAMSUNG",
+            AdapterLuid = 65813,
+            MonitorDevicePath = string.Empty,
+            EdidIdsValid = false,
+            EdidManufacturerId = 0,
+            EdidProductCodeId = 0,
+            ConnectorInstance = 0
+        };
+        var known = new KnownPhysicalDisplay
+        {
+            Id = "known-tv",
+            PhysicalIdentity = savedIdentity,
+            CanonicalFriendlyName = "S90F",
+            HistoricalIdentities = [savedIdentity with { AdapterLuid = 65813, MonitorDevicePath = "PATH-A" }],
+            BestKnownCapability = new DisplayCapabilitySnapshot
+            {
+                Width = 3840,
+                Height = 2160,
+                MaxRefreshRateNumerator = 144,
+                MaxRefreshRateDenominator = 1
+            }
+        };
+        var settings = new DisplaySettings { KnownPhysicalDisplays = [known] };
+        var target = AutoTarget();
+        target.Identity = savedIdentity;
+        target.KnownPhysicalDisplayId = known.Id;
+        var current = new DisplayDeviceInfo
+        {
+            Name = "SAMSUNG",
+            Identity = currentIdentity,
+            TargetId = 4352,
+            AdapterLuid = 65813,
+            IsEnabled = false,
+            IsAvailable = true
+        };
+        var query = new FakeDisplayQuery([current], _ => throw new InvalidOperationException("inactive target must not query modes"));
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance)
+            .EvaluateAsync(
+                "KONSOLA",
+                "KONSOLA",
+                new GamingProfileDisplayTopology { Displays = [target] },
+                deferInactiveModeValidation: true,
+                displaySettings: settings);
+
+        AssertTarget(result, ProfileDisplayReadiness.ResolvableInactive, ProfileDisplayReadinessReason.TargetInactive);
+        Assert.Equal(DisplayIdentityMatchConfidence.HistoricalRouteAlias, result.Targets[0].PhysicalMatchConfidence);
+        Assert.True(result.IdentityCatalogChanged);
+    }
+
+    [Fact]
     public async Task Fixed144_WithOnly60_IsUnavailable()
     {
         var target = AutoTarget();

@@ -33,10 +33,25 @@ public sealed class GamingProfileReadinessCoordinator
         string? requestedProfileName,
         CancellationToken cancellationToken)
     {
+        var preparation = await PrepareBeforeTransitionAsync(settings, requestedProfileName, cancellationToken);
+        return preparation.BlockedResult;
+    }
+
+    public async Task<GamingProfileTransitionPreparation> PrepareBeforeTransitionAsync(
+        AppSettings settings,
+        string? requestedProfileName,
+        CancellationToken cancellationToken)
+    {
         var profile = ResolveProfileWithTopology(settings, requestedProfileName);
         if (_evaluator is null || profile is null)
         {
-            return null;
+            return new GamingProfileTransitionPreparation
+            {
+                ProfileName = profile?.Name ?? requestedProfileName ?? string.Empty,
+                TargetLayout = profile is null
+                    ? _profileResolver.ResolveLayout(settings.Display, requestedProfileName)
+                    : GamingProfileDisplayTopologyAdapter.ToLegacy(profile.DisplayTopology!)
+            };
         }
 
         await EnsureCapabilityCatalogMigratedAsync(settings, cancellationToken);
@@ -48,22 +63,58 @@ public sealed class GamingProfileReadinessCoordinator
             cancellationToken,
             deferInactiveModeValidation: true,
             displaySettings: settings.Display);
+        if (readiness.IdentityCatalogChanged)
+        {
+            await _settingsService.SaveAsync(settings, cancellationToken);
+        }
         _logger.LogInformation(
             "[PROFILE TOPOLOGY PRECHECK] Profile={Profile} Result={Result}",
             profile.Name,
             readiness.ProfileResult);
 
-        if (readiness.IsReady)
+        if (!readiness.IsReady)
         {
-            return null;
+            var blockedTarget = FindBlockedTarget(readiness);
+            return new GamingProfileTransitionPreparation
+            {
+                ProfileName = profile.Name,
+                BlockedResult = new ModeResult
+                {
+                    Status = ModeResultStatus.InvalidConfiguration,
+                    CurrentState = ModeState.Error,
+                    Message = BuildPrecheckMessage(blockedTarget)
+                }
+            };
         }
 
-        var blockedTarget = FindBlockedTarget(readiness);
-        return new ModeResult
+        var targetLayout = BuildResolvedTargetLayout(readiness);
+        var expectedDisplayCount = profile.DisplayTopology!.Displays.Count(target => target.Enabled);
+        if (targetLayout.Displays.Count != expectedDisplayCount)
         {
-            Status = ModeResultStatus.InvalidConfiguration,
-            CurrentState = ModeState.Error,
-            Message = BuildPrecheckMessage(blockedTarget)
+            _logger.LogError(
+                "[DISPLAY TRANSITION INVARIANT] TargetTopologyMismatch Profile={Profile} ExpectedDisplayCount={ExpectedDisplayCount} ActualDisplayCount={ActualDisplayCount} TargetDisplays={TargetDisplays}",
+                profile.Name,
+                expectedDisplayCount,
+                targetLayout.Displays.Count,
+                FormatDisplays(targetLayout));
+            return new GamingProfileTransitionPreparation
+            {
+                ProfileName = profile.Name,
+                BlockedResult = new ModeResult
+                {
+                    Status = ModeResultStatus.Failed,
+                    CurrentState = ModeState.Error,
+                    Message = "TargetTopologyMismatch"
+                }
+            };
+        }
+
+        return new GamingProfileTransitionPreparation
+        {
+            ProfileName = profile.Name,
+            TargetLayout = targetLayout,
+            ExpectedDisplayCount = expectedDisplayCount,
+            Readiness = readiness
         };
     }
 
@@ -86,6 +137,10 @@ public sealed class GamingProfileReadinessCoordinator
             profile.DisplayTopology!,
             cancellationToken,
             displaySettings: settings.Display);
+        if (readiness.IdentityCatalogChanged)
+        {
+            await _settingsService.SaveAsync(settings, cancellationToken);
+        }
         if (readiness.IsReady)
         {
             await UpdateBestKnownCapabilitiesAsync(settings, profile, readiness, cancellationToken);
@@ -105,6 +160,48 @@ public sealed class GamingProfileReadinessCoordinator
     {
         var profile = _profileResolver.ResolveProfile(settings.Display, requestedProfileName);
         return profile?.DisplayTopology is null ? null : profile;
+    }
+
+    private static DisplayLayoutSnapshot BuildResolvedTargetLayout(
+        GamingProfileTopologyReadiness readiness)
+    {
+        var displays = readiness.Targets
+            .Where(target => target.SavedTarget.Enabled)
+            .Select(target => new DisplayPathSnapshot
+            {
+                KnownPhysicalDisplayId = target.SavedTarget.KnownPhysicalDisplayId,
+                Identity = target.ResolvedTarget?.Identity ?? target.SavedTarget.Identity,
+                IsActive = true,
+                IsPrimary = target.SavedTarget.IsPrimary,
+                PositionX = target.SavedTarget.PositionX,
+                PositionY = target.SavedTarget.PositionY,
+                Width = target.SavedTarget.Width,
+                Height = target.SavedTarget.Height,
+                Orientation = target.SavedTarget.Orientation,
+                RefreshRateNumerator = target.SavedTarget.EffectiveRefreshPolicy == RefreshPolicy.Fixed
+                    ? target.SavedTarget.EffectiveFixedRefreshRateNumerator
+                    : 0,
+                RefreshRateDenominator = target.SavedTarget.EffectiveRefreshPolicy == RefreshPolicy.Fixed
+                    ? target.SavedTarget.EffectiveFixedRefreshRateDenominator
+                    : 0,
+                SourceId = target.ResolvedTarget?.SourceId ?? 0,
+                TargetId = target.ResolvedTarget?.Identity.TargetId ?? target.SavedTarget.Identity.TargetId,
+                AdapterLuid = target.ResolvedTarget?.Identity.AdapterLuid ?? target.SavedTarget.Identity.AdapterLuid,
+                SourceDeviceName = target.ResolvedTarget?.SourceDeviceName ?? string.Empty,
+                ConnectionTechnology = target.ResolvedTarget?.ConnectionTechnology ?? string.Empty
+            })
+            .ToList();
+
+        return DisplayLayoutTopologyNormalizer.NormalizePrimaryOrigin(new DisplayLayoutSnapshot
+        {
+            Displays = displays
+        });
+    }
+
+    private static string FormatDisplays(DisplayLayoutSnapshot layout)
+    {
+        return string.Join(", ", layout.Displays.Select(display =>
+            $"{display.Identity.FriendlyName}({display.Identity.AdapterLuid}:{display.Identity.TargetId})"));
     }
 
     private async Task UpdateBestKnownCapabilitiesAsync(
@@ -212,4 +309,13 @@ public sealed class GamingProfileReadinessCoordinator
             ? "?"
             : ((double)target.RefreshRateNumerator / target.RefreshRateDenominator).ToString("0.##", CultureInfo.InvariantCulture);
     }
+}
+
+public sealed class GamingProfileTransitionPreparation
+{
+    public string ProfileName { get; init; } = string.Empty;
+    public DisplayLayoutSnapshot? TargetLayout { get; init; }
+    public int ExpectedDisplayCount { get; init; }
+    public GamingProfileTopologyReadiness? Readiness { get; init; }
+    public ModeResult? BlockedResult { get; init; }
 }

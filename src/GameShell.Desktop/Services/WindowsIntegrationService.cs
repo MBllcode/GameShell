@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using GameShell.Core.Models;
 using Microsoft.Win32;
 using Microsoft.Extensions.Logging;
@@ -37,20 +38,55 @@ public sealed class WindowsIntegrationService : IWindowsIntegrationService
             AppContext.BaseDirectory);
 
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "GameShellShortcut.ico");
-        ApplyShortcut(
+        TryApplyShortcut(
             Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
             "GameShell.lnk",
             settings.Startup.CreateDesktopShortcut,
             startupRegistration.ShortcutTargetPath,
             startupRegistration.ShortcutArguments,
             iconPath);
-        ApplyShortcut(
+        TryApplyShortcut(
             Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
             Path.Combine("Programs", "GameShell.lnk"),
             settings.Startup.CreateStartMenuShortcut,
             startupRegistration.ShortcutTargetPath,
             startupRegistration.ShortcutArguments,
             iconPath);
+    }
+
+    private void TryApplyShortcut(
+        string baseDirectory,
+        string relativeShortcutPath,
+        bool enabled,
+        string targetPath,
+        string arguments,
+        string iconPath)
+    {
+        try
+        {
+            ApplyShortcut(baseDirectory, relativeShortcutPath, enabled, targetPath, arguments, iconPath);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Windows shortcut could not be updated without elevation. Path={ShortcutPath}. Startup registration remains active.",
+                Path.Combine(baseDirectory, relativeShortcutPath));
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Windows shortcut could not be updated. Path={ShortcutPath}. Startup registration remains active.",
+                Path.Combine(baseDirectory, relativeShortcutPath));
+        }
+        catch (COMException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Windows shortcut COM update failed. Path={ShortcutPath}. Startup registration remains active.",
+                Path.Combine(baseDirectory, relativeShortcutPath));
+        }
     }
 
     private void ApplyStartup(bool enabled, string targetPath, string arguments)

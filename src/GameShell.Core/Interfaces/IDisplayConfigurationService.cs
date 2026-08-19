@@ -68,6 +68,15 @@ public interface IDisplayTransitionService
     Task<DisplayTransitionResult> EnterGamingModeAsync(
         DisplayLayoutSnapshot? gamingLayout,
         IReadOnlyCollection<DisplayIdentity>? fallbackConsoleDisplays,
+        string? profileName,
+        CancellationToken cancellationToken = default)
+    {
+        return EnterGamingModeAsync(gamingLayout, fallbackConsoleDisplays?.FirstOrDefault(), cancellationToken);
+    }
+
+    Task<DisplayTransitionResult> EnterGamingModeAsync(
+        DisplayLayoutSnapshot? gamingLayout,
+        IReadOnlyCollection<DisplayIdentity>? fallbackConsoleDisplays,
         CancellationToken cancellationToken = default)
     {
         return EnterGamingModeAsync(gamingLayout, fallbackConsoleDisplays?.FirstOrDefault(), cancellationToken);

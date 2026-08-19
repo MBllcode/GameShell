@@ -26,6 +26,17 @@ public static class DisplayLayoutVerifier
             return true;
         }
 
+        var expectedPrimary = expectedActive.FirstOrDefault(display => display.IsPrimary);
+        if (expectedPrimary is not null)
+        {
+            var actualPrimary = actualActive.FirstOrDefault(display => display.IsPrimary);
+            if (actualPrimary is null
+                || !DisplayIdentityMatcher.IsReliableMatch(expectedPrimary.Identity, actualPrimary.Identity))
+            {
+                return false;
+            }
+        }
+
         int? offsetX = null;
         int? offsetY = null;
 
@@ -64,6 +75,17 @@ public static class DisplayLayoutVerifier
         if (actualActive.Count > 0 && !actualActive.Any(display => display.IsPrimary))
         {
             return false;
+        }
+
+        var expectedPrimary = expectedActive.FirstOrDefault(display => display.IsPrimary);
+        if (expectedPrimary is not null)
+        {
+            var actualPrimary = actualActive.FirstOrDefault(display => display.IsPrimary);
+            if (actualPrimary is null
+                || !DisplayIdentityMatcher.IsReliableMatch(expectedPrimary.Identity, actualPrimary.Identity))
+            {
+                return false;
+            }
         }
 
         return expectedActive.All(expectedDisplay =>

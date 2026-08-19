@@ -10,6 +10,10 @@ public sealed class WindowsWindowManagementService : IWindowsWindowManagementSer
     private const int SwShow = 5;
     private const int SwMinimize = 6;
     private const int SwRestore = 9;
+    private const uint MonitorInfoPrimary = 1;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
     private const int WmClose = 0x0010;
     private const int ClassNameBufferSize = 256;
 
@@ -216,6 +220,61 @@ public sealed class WindowsWindowManagementService : IWindowsWindowManagementSer
         SetForegroundWindow(windowHandle);
     }
 
+    public bool MoveWindowToPrimaryDisplay(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        // UWP windows can still report their minimized bounds while the shell
+        // activation is settling. Restore before calculating the target position.
+        ShowWindow(windowHandle, SwRestore);
+        if (!GetWindowRect(windowHandle, out var windowRect))
+        {
+            return false;
+        }
+
+        var primaryWorkArea = FindPrimaryWorkArea();
+        if (primaryWorkArea is null)
+        {
+            return false;
+        }
+
+        var width = Math.Max(0, windowRect.Right - windowRect.Left);
+        var height = Math.Max(0, windowRect.Bottom - windowRect.Top);
+        var x = primaryWorkArea.Value.Left + Math.Max(0, (primaryWorkArea.Value.Width - width) / 2);
+        var y = primaryWorkArea.Value.Top + Math.Max(0, (primaryWorkArea.Value.Height - height) / 2);
+
+        return SetWindowPos(
+            windowHandle,
+            IntPtr.Zero,
+            x,
+            y,
+            0,
+            0,
+            SwpNoSize | SwpNoZOrder | SwpNoActivate);
+    }
+
+    private static Rect? FindPrimaryWorkArea()
+    {
+        Rect? primaryWorkArea = null;
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (monitor, _, _, _) =>
+        {
+            var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (GetMonitorInfo(monitor, ref info)
+                && (info.Flags & MonitorInfoPrimary) != 0)
+            {
+                primaryWorkArea = info.WorkArea;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return primaryWorkArea;
+    }
+
     private static IntPtr FindDesktopShellView()
     {
         var progman = FindWindow("Progman", null);
@@ -289,6 +348,29 @@ public sealed class WindowsWindowManagementService : IWindowsWindowManagementSer
             ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
+    private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, IntPtr clipRect, IntPtr data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+
+        public int Width => Right - Left;
+        public int Height => Bottom - Top;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+        public Rect MonitorArea;
+        public Rect WorkArea;
+        public uint Flags;
+    }
+
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [DllImport("user32.dll")]
@@ -317,6 +399,29 @@ public sealed class WindowsWindowManagementService : IWindowsWindowManagementSer
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr windowHandle, out Rect rectangle);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(
+        IntPtr windowHandle,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumDisplayMonitors(
+        IntPtr hdc,
+        IntPtr clipRect,
+        MonitorEnumProc callback,
+        IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo monitorInfo);
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr windowHandle, int message, IntPtr wParam, IntPtr lParam);

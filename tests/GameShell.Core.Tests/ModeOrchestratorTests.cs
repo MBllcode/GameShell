@@ -361,7 +361,109 @@ public sealed class ModeOrchestratorTests
         Assert.Equal(ModeResultStatus.Success, result.Status);
         Assert.True(result.Success);
         Assert.Equal(1, display.GamingCount);
+        Assert.Single(display.GamingLayout!.Displays);
+        Assert.Equal("S90F", display.GamingLayout.Displays[0].Identity.FriendlyName);
+        Assert.Equal(1, display.GamingLayout.Displays[0].Identity.AdapterLuid);
+        Assert.Equal((uint)7, display.GamingLayout.Displays[0].Identity.TargetId);
         Assert.Equal(144, settings.Display.KnownPhysicalDisplays.Single().BestKnownCapability!.MaxRefreshRateHz);
+    }
+
+    [Fact]
+    public async Task EnterProfile_UsesResolvedInactiveObservationAsTransitionTarget()
+    {
+        var savedIdentity = new DisplayIdentity
+        {
+            FriendlyName = "S90F",
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-S90F",
+            EdidIdsValid = true,
+            EdidManufacturerId = 11596,
+            EdidProductCodeId = 30903,
+            OutputTechnology = "HDMI"
+        };
+        var currentIdentity = savedIdentity with
+        {
+            FriendlyName = "SAMSUNG",
+            AdapterLuid = 65813,
+            MonitorDevicePath = "PATH-SAMSUNG",
+            EdidProductCodeId = 30706
+        };
+        var settings = new AppSettings
+        {
+            Display =
+            {
+                KnownPhysicalDisplays =
+                [
+                    new KnownPhysicalDisplay
+                    {
+                        Id = "known-s90f",
+                        PhysicalIdentity = savedIdentity,
+                        HistoricalIdentities = [currentIdentity],
+                        CanonicalFriendlyName = "S90F",
+                        BestKnownCapability = new DisplayCapabilitySnapshot
+                        {
+                            Width = 3840,
+                            Height = 2160,
+                            MaxRefreshRateNumerator = 144,
+                            MaxRefreshRateDenominator = 1
+                        },
+                        LastVerifiedActiveCapability = new DisplayCapabilitySnapshot
+                        {
+                            Width = 3840,
+                            Height = 2160,
+                            MaxRefreshRateNumerator = 144,
+                            MaxRefreshRateDenominator = 1
+                        }
+                    }
+                ],
+                GamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "CONSOLE",
+                        DisplayTopology = new GamingProfileDisplayTopology
+                        {
+                            Displays =
+                            [
+                                new ProfileDisplayTarget
+                                {
+                                    KnownPhysicalDisplayId = "known-s90f",
+                                    Identity = savedIdentity,
+                                    Enabled = true,
+                                    IsPrimary = true,
+                                    PositionX = 0,
+                                    PositionY = 0,
+                                    Width = 3840,
+                                    Height = 2160,
+                                    RefreshPolicy = RefreshPolicy.AutoHighest
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        };
+        var display = new FakeDisplayTransitionService();
+        var query = new HistoricalAliasReadinessDisplayQuery(currentIdentity);
+        var evaluator = new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance);
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(settings),
+            new FakeModeWorkflowService(),
+            display,
+            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.Work }),
+            evaluator,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterGameShellWithDisplayProfileAsync("CONSOLE");
+
+        Assert.True(result.Success);
+        var target = Assert.Single(display.GamingLayout!.Displays);
+        Assert.Equal("SAMSUNG", target.Identity.FriendlyName);
+        Assert.Equal(65813, target.Identity.AdapterLuid);
+        Assert.Equal((uint)4352, target.Identity.TargetId);
+        Assert.Equal(@"\\.\DISPLAY1", target.SourceDeviceName);
+        Assert.True(target.IsPrimary);
     }
 
     private sealed class FakeSettingsService : ISettingsService
@@ -451,6 +553,7 @@ public sealed class ModeOrchestratorTests
         public DisplayTransitionResult ConsoleResult { get; init; } = DisplayTransitionResult.Ok();
         public bool BlockUntilCancellation { get; init; }
         public int GamingCount { get; private set; }
+        public DisplayLayoutSnapshot? GamingLayout { get; private set; }
         public DisplayLayoutSnapshot? WorkModeLayout { get; private set; }
         public Action? OnGaming { get; set; }
 
@@ -469,6 +572,7 @@ public sealed class ModeOrchestratorTests
             CancellationToken cancellationToken = default)
         {
             GamingCount++;
+            GamingLayout = gamingLayout;
             OnGaming?.Invoke();
             return Task.FromResult(DisplayTransitionResult.Ok());
         }
@@ -577,6 +681,53 @@ public sealed class ModeOrchestratorTests
             {
                 Success = true,
                 Modes = [new DisplayModeInfo { Width = 3840, Height = 2160, RefreshRateNumerator = 60, RefreshRateDenominator = 1 }]
+            });
+        }
+    }
+
+    private sealed class HistoricalAliasReadinessDisplayQuery : IDisplayQueryService
+    {
+        private readonly DisplayIdentity _currentIdentity;
+
+        public HistoricalAliasReadinessDisplayQuery(DisplayIdentity currentIdentity)
+        {
+            _currentIdentity = currentIdentity;
+        }
+
+        public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<DisplayDeviceInfo>>
+            ([new DisplayDeviceInfo
+            {
+                Name = "SAMSUNG",
+                Identity = _currentIdentity,
+                SourceDeviceName = @"\\.\DISPLAY1",
+                AdapterLuid = _currentIdentity.AdapterLuid,
+                TargetId = _currentIdentity.TargetId,
+                IsEnabled = false,
+                IsAvailable = true,
+                Width = 3840,
+                Height = 2160
+            }]);
+        }
+
+        public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DisplayLayoutSnapshot());
+        }
+
+        public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DisplayModeQueryResult
+            {
+                Success = true,
+                Modes = [new DisplayModeInfo
+                {
+                    Width = 3840,
+                    Height = 2160,
+                    RefreshRateNumerator = 60,
+                    RefreshRateDenominator = 1
+                }]
             });
         }
     }

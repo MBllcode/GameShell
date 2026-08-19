@@ -90,6 +90,15 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         IReadOnlyCollection<DisplayIdentity>? fallbackConsoleDisplays,
         CancellationToken cancellationToken = default)
     {
+        return await EnterGamingModeAsync(gamingLayout, fallbackConsoleDisplays, null, cancellationToken);
+    }
+
+    public async Task<DisplayTransitionResult> EnterGamingModeAsync(
+        DisplayLayoutSnapshot? gamingLayout,
+        IReadOnlyCollection<DisplayIdentity>? fallbackConsoleDisplays,
+        string? profileName,
+        CancellationToken cancellationToken = default)
+    {
         if (gamingLayout is null)
         {
             return await EnterConsoleModeAsync(fallbackConsoleDisplays, cancellationToken);
@@ -98,7 +107,7 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         var activeDisplays = gamingLayout.Displays.Where(display => display.IsActive).ToList();
         if (activeDisplays.Count == 1 && activeDisplays[0].RefreshRateDenominator == 0)
         {
-            return await EnterSingleDisplayGamingModeAsync(activeDisplays[0].Identity, cancellationToken);
+            return await EnterSingleDisplayGamingModeAsync(activeDisplays[0], profileName, cancellationToken);
         }
 
         return await RunModeTransitionAsync(
@@ -108,27 +117,34 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
                 || DisplayLayoutVerifier.MatchesActiveDisplaySet(gamingLayout, actual),
             cancellationToken,
             verificationAttempts: MultiDisplayVerificationAttempts,
-            allowApplyWhenValidationFails: true);
+            allowApplyWhenValidationFails: true,
+            profileName: profileName);
     }
 
     private async Task<DisplayTransitionResult> EnterSingleDisplayGamingModeAsync(
-        DisplayIdentity targetDisplay,
+        DisplayPathSnapshot targetDisplay,
+        string? profileName,
         CancellationToken cancellationToken)
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
 
+        LogDisplayTransitionRequest(profileName, current, new DisplayLayoutSnapshot
+        {
+            Displays = [targetDisplay]
+        }, current);
+
         state.PreviousDisplayLayout = current;
         EnsureWorkReturnLayout(state, current);
         await _runtimeStateService.SaveAsync(state, cancellationToken);
 
-        var apply = await _layoutService.ActivateOnlyAsync([targetDisplay], cancellationToken);
+        var apply = await _layoutService.ActivateOnlyAsync([targetDisplay.Identity], cancellationToken);
         if (!apply.Success)
         {
             return await RollBackAsync(state, "ApplyFailed", apply.Message, cancellationToken);
         }
 
-        if (!await WaitForLayoutAsync(actual => DisplayLayoutVerifier.IsConsoleLayout(actual, [targetDisplay]), "GamingSingle", cancellationToken))
+        if (!await WaitForLayoutAsync(actual => DisplayLayoutVerifier.IsConsoleLayout(actual, [targetDisplay.Identity]), "GamingSingle", cancellationToken))
         {
             return await RollBackAsync(state, "VerificationFailed", "Nie udało się potwierdzić docelowego układu ekranów.", cancellationToken);
         }
@@ -233,11 +249,13 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         CancellationToken cancellationToken,
         bool captureWorkReturnLayout = true,
         int verificationAttempts = VerificationAttempts,
-        bool allowApplyWhenValidationFails = false)
+        bool allowApplyWhenValidationFails = false,
+        string? profileName = null)
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         var current = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
         var target = await buildTargetLayout(current);
+        LogDisplayTransitionRequest(profileName, current, target, current);
 
         if (DisplayLayoutVerifier.MatchesSnapshot(target, current)
             && targetMode is not (GameShellMode.Console or GameShellMode.GamingProfile))
@@ -288,6 +306,46 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         state.CurrentMode = targetMode;
         await _runtimeStateService.SaveAsync(state, cancellationToken);
         return DisplayTransitionResult.Ok();
+    }
+
+    private void LogDisplayTransitionRequest(
+        string? profileName,
+        DisplayLayoutSnapshot currentLayout,
+        DisplayLayoutSnapshot targetLayout,
+        DisplayLayoutSnapshot rollbackLayout)
+    {
+        var current = FormatLayoutDisplays(currentLayout);
+        var target = FormatLayoutDisplays(targetLayout);
+        var rollback = FormatLayoutDisplays(rollbackLayout);
+        _logger.LogInformation(
+            "[DISPLAY TRANSITION REQUEST] ProfileId={ProfileId} ProfileName={ProfileName} CurrentLayoutDisplays=[{CurrentLayoutDisplays}] TargetLayoutDisplays=[{TargetLayoutDisplays}] RollbackLayoutDisplays=[{RollbackLayoutDisplays}]",
+            profileName ?? "-",
+            profileName ?? "-",
+            current,
+            target,
+            rollback);
+
+        foreach (var display in targetLayout.Displays.Where(display => display.IsActive))
+        {
+            _logger.LogInformation(
+                "[DISPLAY TRANSITION TARGET] Profile={Profile} Display={Display} ObservedName={ObservedName} ResolvedSource={ResolvedSource} AdapterLuid={AdapterLuid} TargetId={TargetId} Resolution={Width}x{Height} Primary={Primary} RefreshPolicy={RefreshPolicy}",
+                profileName ?? "-",
+                display.Identity.FriendlyName,
+                display.Identity.FriendlyName,
+                display.SourceDeviceName,
+                display.Identity.AdapterLuid,
+                display.Identity.TargetId,
+                display.Width,
+                display.Height,
+                display.IsPrimary,
+                display.RefreshRateDenominator == 0 ? RefreshPolicy.AutoHighest : RefreshPolicy.Fixed);
+        }
+    }
+
+    private static string FormatLayoutDisplays(DisplayLayoutSnapshot layout)
+    {
+        return string.Join(", ", layout.Displays.Where(display => display.IsActive).Select(display =>
+            $"{display.Identity.FriendlyName}({display.Identity.AdapterLuid}:{display.Identity.TargetId})"));
     }
 
     private async Task<DisplayTransitionResult> RestoreWorkLayoutAsync(

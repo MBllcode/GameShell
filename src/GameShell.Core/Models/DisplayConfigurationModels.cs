@@ -16,6 +16,7 @@ public enum DisplayIdentityMatchConfidence
     EdidProduct,
     EdidProductAndConnector,
     AdapterAndTargetRoute,
+    HistoricalRouteAlias,
     ExactMonitorDevicePath,
     IdentityConflict
 }
@@ -103,6 +104,7 @@ public sealed class KnownPhysicalDisplay
     public DisplayIdentity PhysicalIdentity { get; set; } = new();
     public string CanonicalFriendlyName { get; set; } = string.Empty;
     public string OptionalUserLabel { get; set; } = string.Empty;
+    public List<DisplayIdentity> HistoricalIdentities { get; set; } = [];
     public DisplayCapabilitySnapshot? BestKnownCapability { get; set; }
     public DisplayCapabilitySnapshot? LastVerifiedActiveCapability { get; set; }
     public string CapabilityVerificationSource { get; set; } = string.Empty;

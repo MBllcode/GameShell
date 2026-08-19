@@ -14,7 +14,17 @@ public static class KnownPhysicalDisplayCatalogService
         DisplayIdentity identity)
     {
         var known = settings.KnownPhysicalDisplays?
-            .FirstOrDefault(candidate => DisplayIdentityMatcher.IsSamePhysicalDisplay(candidate.PhysicalIdentity, identity));
+            .Select(candidate => new
+            {
+                Candidate = candidate,
+                Match = DisplayIdentityMatcher.ResolveKnownDisplay(candidate, identity),
+                Score = DisplayIdentityMatcher.GetStableIdentityScore(candidate, identity)
+            })
+            .Where(candidate => candidate.Match.IsMatch)
+            .OrderByDescending(candidate => candidate.Match.MatchConfidence)
+            .ThenByDescending(candidate => candidate.Score)
+            .Select(candidate => candidate.Candidate)
+            .FirstOrDefault();
         return known is null ? null : GetBestKnown(known);
     }
 
@@ -32,10 +42,15 @@ public static class KnownPhysicalDisplayCatalogService
                 string.Equals(candidate.Id, knownPhysicalDisplayId, StringComparison.OrdinalIgnoreCase));
     }
 
+    public static KnownPhysicalDisplay? FindKnownByIdentity(DisplaySettings settings, DisplayIdentity identity)
+    {
+        return FindKnown(settings, identity);
+    }
+
     public static bool MigrateLegacyProfileCapabilities(DisplaySettings settings)
     {
         settings.KnownPhysicalDisplays ??= [];
-        var changed = NormalizeKnownDisplays(settings.KnownPhysicalDisplays);
+        var changed = NormalizeKnownDisplays(settings);
 
         foreach (var profile in settings.GamingProfiles ?? [])
         {
@@ -140,7 +155,7 @@ public static class KnownPhysicalDisplayCatalogService
         out CapabilityCatalogUpdate update)
     {
         settings.KnownPhysicalDisplays ??= [];
-        var changed = NormalizeKnownDisplays(settings.KnownPhysicalDisplays);
+        var changed = NormalizeKnownDisplays(settings);
         var known = FindKnown(settings, physicalIdentity);
         if (known is null)
         {
@@ -160,7 +175,7 @@ public static class KnownPhysicalDisplayCatalogService
 
         var previous = GetBestKnown(known);
         var previousVerified = GetVerifiedActive(known);
-        changed |= EnsureCanonicalName(known, physicalIdentity.FriendlyName);
+        changed |= RecordIdentityObservation(known, physicalIdentity);
         update = new CapabilityCatalogUpdate(previous, previous, previous is null ? "Initialized" : "Kept");
         if (IsBetterCapability(observed, previous))
         {
@@ -184,7 +199,7 @@ public static class KnownPhysicalDisplayCatalogService
         IReadOnlyList<DisplayDeviceInfo> currentDisplays)
     {
         settings.KnownPhysicalDisplays ??= [];
-        var changed = NormalizeKnownDisplays(settings.KnownPhysicalDisplays);
+        var changed = NormalizeKnownDisplays(settings);
         var knownDisplays = settings.KnownPhysicalDisplays;
         var currentMatches = new Dictionary<KnownPhysicalDisplay, DisplayDeviceInfo>();
         var conflictedDisplays = new HashSet<KnownPhysicalDisplay>();
@@ -196,7 +211,8 @@ public static class KnownPhysicalDisplayCatalogService
 
         foreach (var current in currentDisplays)
         {
-            var known = FindKnown(settings, current.Identity);
+            var knownMatch = FindKnownMatch(settings, current.Identity);
+            var known = knownMatch?.Known;
             if (known is null)
             {
                 var conflict = FindIdentityConflict(settings, current.Identity);
@@ -243,9 +259,18 @@ public static class KnownPhysicalDisplayCatalogService
                     ResolveFriendlyName(current),
                     current.Identity.AdapterLuid,
                     current.Identity.TargetId,
-                    DisplayIdentityMatcher.GetMatchConfidence(known.PhysicalIdentity, current.Identity),
-                    "Matched"));
-                changed |= EnsureCanonicalName(known, ResolveFriendlyName(current));
+                    knownMatch!.Match.MatchConfidence,
+                    "MatchedExisting")
+                {
+                    SavedAdapterLuid = known.PhysicalIdentity.AdapterLuid,
+                    SavedTargetId = known.PhysicalIdentity.TargetId,
+                    MonitorDevicePathMatch = knownMatch.Match.MonitorDevicePathMatch,
+                    EdidMatch = knownMatch.Match.EdidMatch,
+                    HistoricalRouteMatch = knownMatch.Match.HistoricalRouteMatch,
+                    MissingMetadata = knownMatch.Match.MissingMetadata,
+                    ConflictingMetadata = knownMatch.Match.HasConflict
+                });
+                changed |= RecordIdentityObservation(known, current.Identity);
                 var enrichedIdentity = EnrichIdentity(known.PhysicalIdentity, current.Identity, ResolveFriendlyName(known));
                 if (!Equals(enrichedIdentity, known.PhysicalIdentity))
                 {
@@ -287,20 +312,32 @@ public static class KnownPhysicalDisplayCatalogService
 
     private static KnownPhysicalDisplay? FindKnown(DisplaySettings settings, DisplayIdentity identity)
     {
-        return settings.KnownPhysicalDisplays.FirstOrDefault(candidate =>
-            DisplayIdentityMatcher.IsSamePhysicalDisplay(candidate.PhysicalIdentity, identity));
+        return FindKnownMatch(settings, identity)?.Known;
+    }
+
+    private static KnownDisplayMatch? FindKnownMatch(DisplaySettings settings, DisplayIdentity identity)
+    {
+        return settings.KnownPhysicalDisplays
+            .Select(candidate => new KnownDisplayMatch(
+                candidate,
+                DisplayIdentityMatcher.ResolveKnownDisplay(candidate, identity),
+                DisplayIdentityMatcher.GetStableIdentityScore(candidate, identity)))
+            .Where(candidate => candidate.Match.IsMatch)
+            .OrderByDescending(candidate => candidate.Match.MatchConfidence)
+            .ThenByDescending(candidate => candidate.Score)
+            .FirstOrDefault();
     }
 
     private static KnownPhysicalDisplay? FindIdentityConflict(DisplaySettings settings, DisplayIdentity identity)
     {
         return settings.KnownPhysicalDisplays.FirstOrDefault(candidate =>
-            DisplayIdentityMatcher.GetMatchConfidence(candidate.PhysicalIdentity, identity)
-                == DisplayIdentityMatchConfidence.IdentityConflict);
+            DisplayIdentityMatcher.ResolveKnownDisplay(candidate, identity).HasConflict);
     }
 
-    private static bool NormalizeKnownDisplays(List<KnownPhysicalDisplay> knownDisplays)
+    private static bool NormalizeKnownDisplays(DisplaySettings settings)
     {
         var changed = false;
+        var knownDisplays = settings.KnownPhysicalDisplays;
         var result = new List<KnownPhysicalDisplay>();
         var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in knownDisplays)
@@ -310,6 +347,9 @@ public static class KnownPhysicalDisplayCatalogService
                 changed = true;
                 continue;
             }
+
+            candidate.HistoricalIdentities ??= [];
+            changed |= PromoteRicherPhysicalIdentity(candidate);
 
             if (string.IsNullOrWhiteSpace(candidate.Id) || !usedIds.Add(candidate.Id))
             {
@@ -336,43 +376,24 @@ public static class KnownPhysicalDisplayCatalogService
 
             changed |= EnsureCanonicalName(candidate, candidate.PhysicalIdentity.FriendlyName);
 
-            var existing = result.FirstOrDefault(item =>
-                DisplayIdentityMatcher.IsSamePhysicalDisplay(item.PhysicalIdentity, candidate.PhysicalIdentity));
-            if (existing is null)
+            var existingIndex = result.FindIndex(item =>
+                DisplayIdentityMatcher.CanReconcileKnownDisplays(item, candidate));
+            if (existingIndex < 0)
             {
                 result.Add(candidate);
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(existing.CanonicalFriendlyName)
-                && !string.IsNullOrWhiteSpace(candidate.CanonicalFriendlyName))
+            var existing = result[existingIndex];
+            var survivor = ChooseSurvivor(settings, existing, candidate);
+            var removed = ReferenceEquals(survivor, existing) ? candidate : existing;
+            MergeKnownData(survivor, removed);
+            changed |= RepointReferences(settings, removed.Id, survivor);
+            if (ReferenceEquals(survivor, candidate))
             {
-                existing.CanonicalFriendlyName = candidate.CanonicalFriendlyName;
-                changed = true;
+                result[existingIndex] = candidate;
             }
 
-            if (string.IsNullOrWhiteSpace(existing.OptionalUserLabel)
-                && !string.IsNullOrWhiteSpace(candidate.OptionalUserLabel))
-            {
-                existing.OptionalUserLabel = candidate.OptionalUserLabel;
-                changed = true;
-            }
-
-            if (IsBetterCapability(GetBestKnown(candidate), GetBestKnown(existing)))
-            {
-                existing.BestKnownCapability = GetBestKnown(candidate);
-            }
-
-            if (IsBetterCapability(GetVerifiedActive(candidate), GetVerifiedActive(existing)))
-            {
-                existing.LastVerifiedActiveCapability = GetVerifiedActive(candidate);
-                existing.CapabilityVerificationSource = candidate.CapabilityVerificationSource;
-            }
-
-            existing.PhysicalIdentity = EnrichIdentity(
-                existing.PhysicalIdentity,
-                candidate.PhysicalIdentity,
-                ResolveFriendlyName(existing));
             changed = true;
         }
 
@@ -383,6 +404,83 @@ public static class KnownPhysicalDisplayCatalogService
         }
 
         return changed;
+    }
+
+    public static bool HasKnownDisplayReconciliationCandidates(DisplaySettings settings)
+    {
+        var knownDisplays = settings.KnownPhysicalDisplays ?? [];
+        for (var left = 0; left < knownDisplays.Count; left++)
+        {
+            for (var right = left + 1; right < knownDisplays.Count; right++)
+            {
+                if (DisplayIdentityMatcher.CanReconcileKnownDisplays(knownDisplays[left], knownDisplays[right]))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static KnownPhysicalDisplay ChooseSurvivor(
+        DisplaySettings settings,
+        KnownPhysicalDisplay existing,
+        KnownPhysicalDisplay candidate)
+    {
+        var existingReferenced = IsKnownDisplayReferenced(settings, existing.Id);
+        var candidateReferenced = IsKnownDisplayReferenced(settings, candidate.Id);
+        if (existingReferenced != candidateReferenced)
+        {
+            return existingReferenced ? existing : candidate;
+        }
+
+        var existingRichness = GetKnownDisplayRichness(existing);
+        var candidateRichness = GetKnownDisplayRichness(candidate);
+        if (existingRichness != candidateRichness)
+        {
+            return existingRichness > candidateRichness ? existing : candidate;
+        }
+
+        // The catalog list is persisted in creation order. When all stronger
+        // signals are equal, keep the earlier record so canonical naming and
+        // existing references remain stable. Reconciliation already runs in a
+        // deterministic order, so choosing the existing item is deterministic.
+        return existing;
+    }
+
+    private static int GetKnownDisplayRichness(KnownPhysicalDisplay known)
+    {
+        var score = (known.PhysicalIdentity.AdapterLuid != 0 ? 1 : 0)
+            + (known.PhysicalIdentity.TargetId != 0 ? 1 : 0)
+            + (!string.IsNullOrWhiteSpace(known.PhysicalIdentity.MonitorDevicePath) ? 2 : 0)
+            + (HasValidEdid(known.PhysicalIdentity) ? 2 : 0)
+            + (known.PhysicalIdentity.ConnectorInstance != 0 ? 1 : 0)
+            + (known.HistoricalIdentities?.Count ?? 0) * 2;
+        if (GetBestKnown(known) is not null)
+        {
+            score += 3;
+        }
+
+        if (GetVerifiedActive(known) is not null)
+        {
+            score += 2;
+        }
+
+        return score;
+    }
+
+    private static bool IsKnownDisplayReferenced(DisplaySettings settings, string knownId)
+    {
+        if (string.IsNullOrWhiteSpace(knownId))
+        {
+            return false;
+        }
+
+        return (settings.GamingProfiles ?? []).Any(profile =>
+            (profile.DisplayTopology?.Displays ?? []).Any(target => string.Equals(target.KnownPhysicalDisplayId, knownId, StringComparison.OrdinalIgnoreCase))
+            || (profile.Layout?.Displays ?? []).Any(display => string.Equals(display.KnownPhysicalDisplayId, knownId, StringComparison.OrdinalIgnoreCase)))
+            || (settings.GamingLayout?.Displays ?? []).Any(display => string.Equals(display.KnownPhysicalDisplayId, knownId, StringComparison.OrdinalIgnoreCase));
     }
 
     private static DisplayDeviceInfo CreateMergedDisplay(KnownPhysicalDisplay known, DisplayDeviceInfo current, bool identityConflict)
@@ -580,6 +678,207 @@ public static class KnownPhysicalDisplayCatalogService
         };
     }
 
+    public static bool RecordIdentityObservation(
+        DisplaySettings settings,
+        DisplayIdentity observedIdentity)
+    {
+        var known = FindKnown(settings, observedIdentity);
+        return known is not null && RecordIdentityObservation(known, observedIdentity);
+    }
+
+    private static bool RecordIdentityObservation(
+        KnownPhysicalDisplay known,
+        DisplayIdentity observedIdentity)
+    {
+        var match = DisplayIdentityMatcher.ResolveKnownDisplay(known, observedIdentity);
+        if (!match.IsMatch)
+        {
+            return false;
+        }
+
+        known.HistoricalIdentities ??= [];
+        if (known.PhysicalIdentity.Equals(observedIdentity)
+            || known.HistoricalIdentities.Any(identity => identity.Equals(observedIdentity)))
+        {
+            return false;
+        }
+
+        known.HistoricalIdentities.Add(observedIdentity);
+        return true;
+    }
+
+    private static void MergeKnownData(
+        KnownPhysicalDisplay survivor,
+        KnownPhysicalDisplay removed)
+    {
+        survivor.HistoricalIdentities ??= [];
+        AddHistoricalIdentity(survivor, removed.PhysicalIdentity);
+        foreach (var identity in removed.HistoricalIdentities ?? [])
+        {
+            AddHistoricalIdentity(survivor, identity);
+        }
+
+        survivor.PhysicalIdentity = EnrichIdentity(
+            survivor.PhysicalIdentity,
+            removed.PhysicalIdentity,
+            ResolveFriendlyName(survivor));
+        if (string.IsNullOrWhiteSpace(survivor.CanonicalFriendlyName))
+        {
+            survivor.CanonicalFriendlyName = removed.CanonicalFriendlyName;
+        }
+
+        if (string.IsNullOrWhiteSpace(survivor.OptionalUserLabel))
+        {
+            survivor.OptionalUserLabel = removed.OptionalUserLabel;
+        }
+
+        if (IsBetterCapability(GetBestKnown(removed), GetBestKnown(survivor)))
+        {
+            survivor.BestKnownCapability = GetBestKnown(removed);
+        }
+
+        if (IsBetterCapability(GetVerifiedActive(removed), GetVerifiedActive(survivor)))
+        {
+            survivor.LastVerifiedActiveCapability = GetVerifiedActive(removed);
+            survivor.CapabilityVerificationSource = removed.CapabilityVerificationSource;
+        }
+
+        if (string.IsNullOrWhiteSpace(survivor.CapabilityVerificationSource))
+        {
+            survivor.CapabilityVerificationSource = removed.CapabilityVerificationSource;
+        }
+    }
+
+    private static void AddHistoricalIdentity(
+        KnownPhysicalDisplay known,
+        DisplayIdentity identity)
+    {
+        if (known.PhysicalIdentity.Equals(identity)
+            || known.HistoricalIdentities.Any(existing => existing.Equals(identity)))
+        {
+            return;
+        }
+
+        known.HistoricalIdentities.Add(identity);
+    }
+
+    private static bool RepointReferences(
+        DisplaySettings settings,
+        string duplicateId,
+        KnownPhysicalDisplay replacement)
+    {
+        if (string.IsNullOrWhiteSpace(duplicateId)
+            || string.Equals(duplicateId, replacement.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var changed = false;
+        var canonicalIdentity = CanonicalIdentity(replacement);
+        foreach (var profile in settings.GamingProfiles ?? [])
+        {
+            foreach (var target in profile.DisplayTopology?.Displays ?? [])
+            {
+                if (!string.Equals(target.KnownPhysicalDisplayId, duplicateId, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                target.KnownPhysicalDisplayId = replacement.Id;
+                target.Identity = canonicalIdentity;
+                changed = true;
+            }
+
+            if (profile.Layout is not null)
+            {
+                var layoutChanged = false;
+                var displays = profile.Layout.Displays.Select(display =>
+                {
+                    if (!string.Equals(display.KnownPhysicalDisplayId, duplicateId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return display;
+                    }
+
+                    changed = true;
+                    layoutChanged = true;
+                    return new DisplayPathSnapshot
+                    {
+                        KnownPhysicalDisplayId = replacement.Id,
+                        Identity = canonicalIdentity,
+                        IsActive = display.IsActive,
+                        IsPrimary = display.IsPrimary,
+                        PositionX = display.PositionX,
+                        PositionY = display.PositionY,
+                        Width = display.Width,
+                        Height = display.Height,
+                        Orientation = display.Orientation,
+                        RefreshRateNumerator = display.RefreshRateNumerator,
+                        RefreshRateDenominator = display.RefreshRateDenominator,
+                        SourceId = display.SourceId,
+                        TargetId = display.TargetId,
+                        AdapterLuid = display.AdapterLuid,
+                        SourceDeviceName = display.SourceDeviceName,
+                        ConnectionTechnology = display.ConnectionTechnology
+                    };
+                }).ToList();
+                if (layoutChanged)
+                {
+                    profile.Layout = new DisplayLayoutSnapshot
+                    {
+                        Id = profile.Layout.Id,
+                        CapturedAt = profile.Layout.CapturedAt,
+                        Displays = displays
+                    };
+                }
+            }
+        }
+
+        if (settings.GamingLayout is not null)
+        {
+            var gamingLayoutChanged = false;
+            var displays = settings.GamingLayout.Displays.Select(display =>
+            {
+                if (!string.Equals(display.KnownPhysicalDisplayId, duplicateId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return display;
+                }
+
+                changed = true;
+                gamingLayoutChanged = true;
+                return new DisplayPathSnapshot
+                {
+                    KnownPhysicalDisplayId = replacement.Id,
+                    Identity = canonicalIdentity,
+                    IsActive = display.IsActive,
+                    IsPrimary = display.IsPrimary,
+                    PositionX = display.PositionX,
+                    PositionY = display.PositionY,
+                    Width = display.Width,
+                    Height = display.Height,
+                    Orientation = display.Orientation,
+                    RefreshRateNumerator = display.RefreshRateNumerator,
+                    RefreshRateDenominator = display.RefreshRateDenominator,
+                    SourceId = display.SourceId,
+                    TargetId = display.TargetId,
+                    AdapterLuid = display.AdapterLuid,
+                    SourceDeviceName = display.SourceDeviceName,
+                    ConnectionTechnology = display.ConnectionTechnology
+                };
+            }).ToList();
+            if (gamingLayoutChanged)
+            {
+                settings.GamingLayout = new DisplayLayoutSnapshot
+                {
+                    Id = settings.GamingLayout.Id,
+                    CapturedAt = settings.GamingLayout.CapturedAt,
+                    Displays = displays
+                };
+            }
+        }
+
+        return changed;
+    }
+
     private static string ResolveFriendlyName(KnownPhysicalDisplay known)
     {
         return !string.IsNullOrWhiteSpace(known.OptionalUserLabel)
@@ -604,6 +903,38 @@ public static class KnownPhysicalDisplayCatalogService
 
         known.CanonicalFriendlyName = candidateName.Trim();
         return true;
+    }
+
+    private static bool PromoteRicherPhysicalIdentity(KnownPhysicalDisplay known)
+    {
+        var current = known.PhysicalIdentity;
+        var preferred = new[] { current }
+            .Concat(known.HistoricalIdentities ?? [])
+            .OrderByDescending(GetIdentityMetadataScore)
+            .First();
+        if (ReferenceEquals(preferred, current) || Equals(preferred, current))
+        {
+            return false;
+        }
+
+        var canonicalName = string.IsNullOrWhiteSpace(known.CanonicalFriendlyName)
+            ? preferred.FriendlyName
+            : known.CanonicalFriendlyName;
+        known.PhysicalIdentity = preferred with
+        {
+            FriendlyName = canonicalName
+        };
+        AddHistoricalIdentity(known, current);
+        return true;
+    }
+
+    private static int GetIdentityMetadataScore(DisplayIdentity identity)
+    {
+        return (identity.AdapterLuid != 0 && identity.TargetId != 0 ? 4 : 0)
+            + (!string.IsNullOrWhiteSpace(identity.MonitorDevicePath) ? 3 : 0)
+            + (HasValidEdid(identity) ? 3 : 0)
+            + (identity.ConnectorInstance != 0 ? 1 : 0)
+            + (!string.IsNullOrWhiteSpace(identity.OutputTechnology) ? 1 : 0);
     }
 
     private static string ResolveFriendlyName(DisplayDeviceInfo display)
@@ -726,6 +1057,13 @@ public static class KnownPhysicalDisplayCatalogService
             || identity.EdidIdsValid && identity.EdidManufacturerId != 0 && identity.EdidProductCodeId != 0;
     }
 
+    private static bool HasValidEdid(DisplayIdentity identity)
+    {
+        return identity.EdidIdsValid
+            && identity.EdidManufacturerId != 0
+            && identity.EdidProductCodeId != 0;
+    }
+
     private static string NewKnownDisplayId() => Guid.NewGuid().ToString("N");
 
     private static string BuildIdentityKey(DisplayIdentity identity)
@@ -763,7 +1101,21 @@ public sealed record DisplayIdentityMatchRecord(
     long AdapterLuid,
     uint TargetId,
     DisplayIdentityMatchConfidence MatchConfidence,
-    string Result);
+    string Result)
+{
+    public long SavedAdapterLuid { get; init; }
+    public uint SavedTargetId { get; init; }
+    public bool MonitorDevicePathMatch { get; init; }
+    public bool EdidMatch { get; init; }
+    public bool HistoricalRouteMatch { get; init; }
+    public bool MissingMetadata { get; init; }
+    public bool ConflictingMetadata { get; init; }
+}
+
+internal sealed record KnownDisplayMatch(
+    KnownPhysicalDisplay Known,
+    DisplayIdentityMatchResult Match,
+    int Score);
 
 public sealed record CapabilityCatalogUpdate(
     DisplayCapabilitySnapshot? PreviousBest,
