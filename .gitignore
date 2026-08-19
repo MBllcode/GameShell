@@ -6,6 +6,7 @@ dist/
 *.user
 *.suo
 *.log
+docs/
+scripts/
+artifacts/
 src/GameShell.Ui/tsconfig.tsbuildinfo
-artifacts/installer/GameShell-*.exe
-artifacts/installer/GameShell.exe

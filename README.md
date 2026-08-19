@@ -150,7 +150,7 @@ docs/
 
 The repository is currently prepared for a future private GitHub repository,
 but no remote or publishing action is performed by the build/package scripts.
-Before the first push, follow [the private repository checklist](docs/github-private-repository.md)
-and review the complete working tree, generated artifacts and settings-related
-files. Runtime settings are stored under `%LOCALAPPDATA%\GameShell`, not in the
-repository; generated binaries under `artifacts\installer` are ignored.
+Before the first push, review the complete working tree, generated artifacts
+and settings-related files. Runtime settings are stored under
+`%LOCALAPPDATA%\GameShell`, not in the repository; generated files under
+`artifacts\` are ignored.
