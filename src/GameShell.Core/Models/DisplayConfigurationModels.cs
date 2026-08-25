@@ -62,6 +62,15 @@ public enum DisplayCatalogState
     IdentityConflict
 }
 
+public enum DisplayDiscoveryState
+{
+    Idle,
+    Loading,
+    Settling,
+    Ready,
+    Error
+}
+
 public enum DisplayCapabilityState
 {
     UnknownUntilActive,

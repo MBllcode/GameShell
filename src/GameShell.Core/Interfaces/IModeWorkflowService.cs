@@ -18,6 +18,15 @@ public interface IModeWorkflowService
         GameShellMode mode,
         CancellationToken cancellationToken = default);
 
+    Task<ModeWorkflowResult> CompleteGamingWorkflowAsync(
+        AppSettings settings,
+        GameShellMode mode,
+        DisplayLayoutSnapshot? expectedTargetLayout,
+        CancellationToken cancellationToken = default)
+    {
+        return CompleteGamingWorkflowAsync(settings, mode, cancellationToken);
+    }
+
     Task<ModeWorkflowResult> RunGamingWorkflowAsync(
         AppSettings settings,
         GameShellMode mode,
@@ -32,6 +41,7 @@ public sealed record ModeWorkflowResult
 {
     public bool Success { get; init; }
     public string? Message { get; init; }
+    public string? ErrorCode { get; init; }
 
     public static ModeWorkflowResult Ok(string? message = null)
     {
@@ -42,12 +52,13 @@ public sealed record ModeWorkflowResult
         };
     }
 
-    public static ModeWorkflowResult Fail(string message)
+    public static ModeWorkflowResult Fail(string message, string? errorCode = null)
     {
         return new ModeWorkflowResult
         {
             Success = false,
-            Message = message
+            Message = message,
+            ErrorCode = errorCode
         };
     }
 }

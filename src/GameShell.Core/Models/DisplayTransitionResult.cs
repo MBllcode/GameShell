@@ -6,13 +6,17 @@ public sealed record DisplayTransitionResult
     public bool RolledBack { get; init; }
     public string? ErrorCode { get; init; }
     public string? UserMessage { get; init; }
+    public DisplayLayoutSnapshot? TargetLayout { get; init; }
 
-    public static DisplayTransitionResult Ok(string? message = null)
+    public static DisplayTransitionResult Ok(
+        string? message = null,
+        DisplayLayoutSnapshot? targetLayout = null)
     {
         return new DisplayTransitionResult
         {
             Success = true,
-            UserMessage = message
+            UserMessage = message,
+            TargetLayout = targetLayout
         };
     }
 
@@ -27,4 +31,3 @@ public sealed record DisplayTransitionResult
         };
     }
 }
-

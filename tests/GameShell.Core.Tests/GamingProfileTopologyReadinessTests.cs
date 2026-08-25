@@ -191,6 +191,82 @@ public sealed class GamingProfileTopologyReadinessTests
     }
 
     [Fact]
+    public async Task StableKnownDisplayUsesCurrentObservationRouteAfterHdmiReplug()
+    {
+        var savedIdentity = Identity("S90F", 4352) with
+        {
+            AdapterLuid = 65578,
+            MonitorDevicePath = "DISPLAY-PATH-S90F",
+            EdidManufacturerId = 11596,
+            EdidProductCodeId = 30903
+        };
+        var currentIdentity = savedIdentity with
+        {
+            AdapterLuid = 72672,
+            FriendlyName = "S90F"
+        };
+        var known = new KnownPhysicalDisplay
+        {
+            Id = "3286c1e7a95e4a26aefd091848d0265d",
+            PhysicalIdentity = savedIdentity,
+            CanonicalFriendlyName = "S90F",
+            BestKnownCapability = new DisplayCapabilitySnapshot
+            {
+                Width = 3840,
+                Height = 2160,
+                MaxRefreshRateNumerator = 144,
+                MaxRefreshRateDenominator = 1
+            }
+        };
+        var settings = new DisplaySettings { KnownPhysicalDisplays = [known] };
+        var target = AutoTarget();
+        target.Identity = savedIdentity;
+        target.KnownPhysicalDisplayId = known.Id;
+
+        var stableLogicalDisplay = new DisplayDeviceInfo
+        {
+            Id = "logical-s90f",
+            KnownPhysicalDisplayId = known.Id,
+            Name = "S90F",
+            IsEnabled = false,
+            IsAvailable = true,
+            Identity = savedIdentity,
+            AdapterLuid = currentIdentity.AdapterLuid,
+            TargetId = currentIdentity.TargetId,
+            CurrentObservation = new CurrentDisplayObservation
+            {
+                Identity = currentIdentity,
+                CurrentObservedName = "S90F",
+                CurrentSourceDeviceName = "\\\\.\\DISPLAY1",
+                CurrentConnectionTechnology = "HDMI",
+                IsActive = false,
+                IsAvailable = true,
+                EnumeratedModes = []
+            }
+        };
+        var query = new FakeDisplayQuery([], _ => throw new InvalidOperationException("inactive target must not query modes"));
+        var discovery = new FakeStableDiscovery([stableLogicalDisplay]);
+
+        var result = await new GamingProfileTopologyReadinessEvaluator(
+                query,
+                NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance,
+                discovery)
+            .EvaluateAsync(
+                "CONSOLE",
+                "CONSOLE",
+                new GamingProfileDisplayTopology { Displays = [target] },
+                deferInactiveModeValidation: true,
+                displaySettings: settings);
+
+        AssertTarget(result, ProfileDisplayReadiness.ResolvableInactive, ProfileDisplayReadinessReason.TargetInactive);
+        Assert.Equal(known.Id, target.KnownPhysicalDisplayId);
+        Assert.Equal(72672, result.Targets[0].ResolvedTarget!.Identity.AdapterLuid);
+        Assert.Equal(DisplayIdentityMatchConfidence.ExactMonitorDevicePath, result.Targets[0].PhysicalMatchConfidence);
+        Assert.Equal(144, result.Targets[0].BestKnownCapability!.MaxRefreshRateHz);
+        Assert.Equal(known.Id, settings.KnownPhysicalDisplays[0].Id);
+    }
+
+    [Fact]
     public async Task Fixed144_WithOnly60_IsUnavailable()
     {
         var target = AutoTarget();
@@ -442,5 +518,22 @@ public sealed class GamingProfileTopologyReadinessTests
         public Task<IReadOnlyList<DisplayDeviceInfo>> GetAvailableDisplaysAsync(CancellationToken cancellationToken = default) => Task.FromResult(_devices);
         public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default) => Task.FromResult(new DisplayLayoutSnapshot());
         public Task<DisplayModeQueryResult> GetAvailableDisplayModesAsync(DisplayIdentity display, CancellationToken cancellationToken = default) => Task.FromResult(new DisplayModeQueryResult { Success = true, InventoryValid = _inventoryValid, Modes = _modes(display) });
+    }
+
+    private sealed class FakeStableDiscovery : IDisplayDiscoveryStabilizationService
+    {
+        private readonly IReadOnlyList<DisplayDeviceInfo> _displays;
+
+        public FakeStableDiscovery(IReadOnlyList<DisplayDeviceInfo> displays)
+        {
+            _displays = displays;
+        }
+
+        public DisplayDiscoveryState State => DisplayDiscoveryState.Ready;
+
+        public Task WaitForSettledAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<DisplayDeviceInfo>> GetStableDisplaysAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(_displays);
     }
 }

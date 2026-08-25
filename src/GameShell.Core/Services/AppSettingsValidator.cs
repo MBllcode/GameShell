@@ -5,7 +5,7 @@ namespace GameShell.Core.Services;
 
 public static class AppSettingsValidator
 {
-    public const int CurrentSettingsSchemaVersion = 3;
+    public const int CurrentSettingsSchemaVersion = 4;
 
     public static AppSettings Validate(AppSettings settings)
     {
@@ -23,6 +23,9 @@ public static class AppSettingsValidator
         settings.Hotkeys ??= new HotkeySettings();
         settings.Startup ??= new StartupSettings();
         settings.Ui ??= new UiSettings();
+        settings.RemoteControl ??= new RemoteControlSettings();
+        settings.RemoteControl.Port = Math.Clamp(settings.RemoteControl.Port, 1024, 65535);
+        settings.RemoteControl.AuthenticationToken ??= string.Empty;
         settings.Ui.Language = NormalizeLanguage(settings.Ui.Language ?? CultureInfo.CurrentUICulture.Name);
 
         settings.GameShell.CompletionDelaySeconds = Math.Clamp(settings.GameShell.CompletionDelaySeconds, 0, 600);

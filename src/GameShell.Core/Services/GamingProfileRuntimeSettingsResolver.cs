@@ -59,7 +59,8 @@ public sealed class GamingProfileRuntimeSettingsResolver
             Controller = settings.Controller,
             Hotkeys = settings.Hotkeys,
             Startup = settings.Startup,
-            Ui = settings.Ui
+            Ui = settings.Ui,
+            RemoteControl = settings.RemoteControl
         };
     }
 

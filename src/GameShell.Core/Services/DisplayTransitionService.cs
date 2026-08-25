@@ -4,17 +4,19 @@ using Microsoft.Extensions.Logging;
 
 namespace GameShell.Core.Services;
 
-public sealed class DisplayTransitionService : IDisplayTransitionService
+public sealed class DisplayTransitionService : IDisplayTransitionService, IDisplayTransitionStabilityGuard
 {
     private const int VerificationAttempts = 6;
     private const int MultiDisplayVerificationAttempts = 14;
     private static readonly TimeSpan VerificationDelay = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan FinalStabilityTimeout = TimeSpan.FromSeconds(2);
 
     private readonly IDisplayQueryService _queryService;
     private readonly IDisplayLayoutApplicationService _layoutService;
     private readonly IRuntimeStateService _runtimeStateService;
     private readonly ConsoleDisplayLayoutBuilder _consoleLayoutBuilder;
     private readonly ILogger<DisplayTransitionService> _logger;
+    private readonly IDisplayDiscoveryStabilizationService? _displayDiscoveryStabilizationService;
 
     private DisplayLayoutSnapshot? _pendingTestRollbackLayout;
 
@@ -23,13 +25,15 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
         IDisplayLayoutApplicationService layoutService,
         IRuntimeStateService runtimeStateService,
         ConsoleDisplayLayoutBuilder consoleLayoutBuilder,
-        ILogger<DisplayTransitionService> logger)
+        ILogger<DisplayTransitionService> logger,
+        IDisplayDiscoveryStabilizationService? displayDiscoveryStabilizationService = null)
     {
         _queryService = queryService;
         _layoutService = layoutService;
         _runtimeStateService = runtimeStateService;
         _consoleLayoutBuilder = consoleLayoutBuilder;
         _logger = logger;
+        _displayDiscoveryStabilizationService = displayDiscoveryStabilizationService;
     }
 
     public Task<RuntimeState> LoadRuntimeStateAsync(CancellationToken cancellationToken = default)
@@ -71,7 +75,7 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
 
         state.CurrentMode = GameShellMode.Console;
         await _runtimeStateService.SaveAsync(state, cancellationToken);
-        return DisplayTransitionResult.Ok();
+        return DisplayTransitionResult.Ok(targetLayout: BuildIdentityOnlyTargetLayout(consoleDisplays));
     }
 
     public async Task<DisplayTransitionResult> EnterGamingModeAsync(
@@ -151,7 +155,10 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
 
         state.CurrentMode = GameShellMode.GamingProfile;
         await _runtimeStateService.SaveAsync(state, cancellationToken);
-        return DisplayTransitionResult.Ok();
+        return DisplayTransitionResult.Ok(targetLayout: new DisplayLayoutSnapshot
+        {
+            Displays = [targetDisplay]
+        });
     }
 
     public Task<DisplayTransitionResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
@@ -305,7 +312,58 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
 
         state.CurrentMode = targetMode;
         await _runtimeStateService.SaveAsync(state, cancellationToken);
-        return DisplayTransitionResult.Ok();
+        return DisplayTransitionResult.Ok(targetLayout: target);
+    }
+
+    public async Task<DisplayTransitionResult?> VerifyBeforeLauncherAsync(
+        DisplayLayoutSnapshot? expectedTargetLayout,
+        string? profileName,
+        CancellationToken cancellationToken = default)
+    {
+        if (expectedTargetLayout is null || expectedTargetLayout.Displays.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (_displayDiscoveryStabilizationService is not null)
+            {
+                await _displayDiscoveryStabilizationService.WaitForStableAsync(
+                    FinalStabilityTimeout,
+                    cancellationToken);
+            }
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning(
+                "[DISPLAY STABILITY CHECK] Profile={Profile} ExpectedDisplays=[{ExpectedDisplays}] ActualDisplays=[unknown] DiscoveryState={DiscoveryState} Result=TargetTopologyLostDuringTransition",
+                profileName ?? "-",
+                FormatLayoutDisplays(expectedTargetLayout),
+                _displayDiscoveryStabilizationService?.State.ToString() ?? "Unavailable");
+            return DisplayTransitionResult.Fail(
+                "TargetTopologyLostDuringTransition",
+                "Docelowy ekran nie ustabilizowal sie przed uruchomieniem launchera.");
+        }
+
+        var actual = await _queryService.CaptureCurrentLayoutAsync(cancellationToken);
+        var discoveryState = _displayDiscoveryStabilizationService?.State;
+        var discoveryReady = discoveryState is null or DisplayDiscoveryState.Ready;
+        var matches = discoveryReady
+            && MatchesFinalTarget(expectedTargetLayout, actual);
+        _logger.LogInformation(
+            "[DISPLAY STABILITY CHECK] Profile={Profile} ExpectedDisplays=[{ExpectedDisplays}] ActualDisplays=[{ActualDisplays}] DiscoveryState={DiscoveryState} Result={Result}",
+            profileName ?? "-",
+            FormatLayoutDisplays(expectedTargetLayout),
+            FormatLayoutDisplays(actual),
+            discoveryState?.ToString() ?? "Unavailable",
+            matches ? "Stable" : "TargetTopologyLostDuringTransition");
+
+        return matches
+            ? null
+            : DisplayTransitionResult.Fail(
+                "TargetTopologyLostDuringTransition",
+                "Docelowy uklad ekranow zniknal przed uruchomieniem launchera.");
     }
 
     private void LogDisplayTransitionRequest(
@@ -346,6 +404,52 @@ public sealed class DisplayTransitionService : IDisplayTransitionService
     {
         return string.Join(", ", layout.Displays.Where(display => display.IsActive).Select(display =>
             $"{display.Identity.FriendlyName}({display.Identity.AdapterLuid}:{display.Identity.TargetId})"));
+    }
+
+    private static DisplayLayoutSnapshot BuildIdentityOnlyTargetLayout(IReadOnlyCollection<DisplayIdentity> displays)
+    {
+        return new DisplayLayoutSnapshot
+        {
+            Displays = displays.Select(display => new DisplayPathSnapshot
+            {
+                Identity = display,
+                IsActive = true,
+                IsPrimary = displays.Count == 1
+            }).ToList()
+        };
+    }
+
+    private static bool MatchesFinalTarget(DisplayLayoutSnapshot expected, DisplayLayoutSnapshot actual)
+    {
+        var expectedActive = expected.Displays.Where(display => display.IsActive).ToList();
+        var hasGeometry = expectedActive.Any(display => display.Width > 0 && display.Height > 0);
+        if (hasGeometry)
+        {
+            return DisplayLayoutVerifier.MatchesSnapshot(expected, actual)
+                && MatchesKnownPhysicalDisplayIds(expected, actual);
+        }
+
+        return DisplayLayoutVerifier.IsConsoleLayout(
+            actual,
+            expectedActive.Select(display => display.Identity).ToList());
+    }
+
+    private static bool MatchesKnownPhysicalDisplayIds(DisplayLayoutSnapshot expected, DisplayLayoutSnapshot actual)
+    {
+        var expectedActive = expected.Displays.Where(display => display.IsActive).ToList();
+        var actualActive = actual.Displays.Where(display => display.IsActive).ToList();
+        return expectedActive.All(expectedDisplay =>
+        {
+            var actualDisplay = actualActive.FirstOrDefault(display =>
+                DisplayIdentityMatcher.IsReliableMatch(expectedDisplay.Identity, display.Identity));
+            return actualDisplay is not null
+                && (string.IsNullOrWhiteSpace(expectedDisplay.KnownPhysicalDisplayId)
+                    || string.IsNullOrWhiteSpace(actualDisplay.KnownPhysicalDisplayId)
+                    || string.Equals(
+                        expectedDisplay.KnownPhysicalDisplayId,
+                        actualDisplay.KnownPhysicalDisplayId,
+                        StringComparison.OrdinalIgnoreCase));
+        });
     }
 
     private async Task<DisplayTransitionResult> RestoreWorkLayoutAsync(

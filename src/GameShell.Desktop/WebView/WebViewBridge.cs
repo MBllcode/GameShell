@@ -27,6 +27,8 @@ public sealed class WebViewBridge
     private readonly IDependencyDetectionService _dependencyDetectionService;
     private readonly IDisplayTransitionService _displayTransitionService;
     private readonly IWindowsIntegrationService _windowsIntegrationService;
+    private readonly DisplayDiscoveryCoordinator _displayDiscoveryCoordinator;
+    private readonly ITransientOperationStateService _transientOperationStateService;
     private readonly WebViewDisplayCommandHandler _displayCommandHandler;
     private readonly WebViewCommandRouter _commandRouter;
     private readonly ILogger<WebViewBridge> _logger;
@@ -41,8 +43,10 @@ public sealed class WebViewBridge
         ISettingsService settingsService,
         IDependencyDetectionService dependencyDetectionService,
         IDisplayQueryService displayQueryService,
+        DisplayDiscoveryCoordinator displayDiscoveryCoordinator,
         IDisplayTransitionService displayTransitionService,
         IWindowsIntegrationService windowsIntegrationService,
+        ITransientOperationStateService transientOperationStateService,
         ILogger<WebViewBridge> logger,
         ILoggerFactory loggerFactory)
     {
@@ -51,15 +55,20 @@ public sealed class WebViewBridge
         _dependencyDetectionService = dependencyDetectionService;
         _displayTransitionService = displayTransitionService;
         _windowsIntegrationService = windowsIntegrationService;
+        _displayDiscoveryCoordinator = displayDiscoveryCoordinator;
+        _transientOperationStateService = transientOperationStateService;
         _displayCommandHandler = new WebViewDisplayCommandHandler(
             settingsService,
             displayQueryService,
+            displayDiscoveryCoordinator,
             displayTransitionService,
             windowsIntegrationService,
             loggerFactory.CreateLogger<WebViewDisplayCommandHandler>(),
             SaveAndApplySettingsAsync);
         _logger = logger;
         _commandRouter = new WebViewCommandRouter(CreateCommandHandlers());
+        _displayDiscoveryCoordinator.StateChanged += OnDisplayDiscoveryStateChanged;
+        _transientOperationStateService.Changed += OnTransientOperationChanged;
     }
 
     public void AttachControllerShortcutService(Services.SdlControllerShortcutService controllerShortcutService)
@@ -74,6 +83,49 @@ public sealed class WebViewBridge
     {
         _coreWebView = coreWebView;
         coreWebView.WebMessageReceived += OnWebMessageReceived;
+    }
+
+    private void OnDisplayDiscoveryStateChanged(object? sender, DisplayDiscoveryStateChangedEventArgs e)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            return;
+        }
+
+        void Post()
+        {
+            try
+            {
+                _coreWebView?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "displayDiscoveryChanged",
+                    state = e.NewState.ToString(),
+                    reason = e.Reason,
+                    durationMs = e.DurationMs
+                }, JsonOptions));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to notify WebView about display discovery state.");
+            }
+        }
+
+        if (dispatcher.CheckAccess())
+        {
+            Post();
+        }
+        else
+        {
+            dispatcher.BeginInvoke((Action)Post);
+        }
+
+        NotifyStatusChanged();
+    }
+
+    private void OnTransientOperationChanged(object? sender, TransientOperationChangedEventArgs e)
+    {
+        NotifyStatusChanged(e.NewState.TransitionId ?? e.OldState.TransitionId);
     }
 
     public void NotifyStatusChanged(string? transitionId = null)
@@ -204,12 +256,15 @@ public sealed class WebViewBridge
             if (message.Type == "getStatus" && data is AppStatus status)
             {
                 _logger.LogInformation(
-                    "[GETSTATUS RESPONSE] Timestamp={Timestamp} CurrentMode={CurrentMode} SessionState={SessionState} ActiveProfileName={ActiveProfileName} ActiveLauncher={ActiveLauncher}.",
+                    "[GETSTATUS RESPONSE] Timestamp={Timestamp} CurrentMode={CurrentMode} SessionState={SessionState} ActiveProfileName={ActiveProfileName} ActiveLauncher={ActiveLauncher} TransientKind={TransientKind} TransientPhase={TransientPhase} TransitionId={TransitionId}.",
                     DateTimeOffset.Now.ToString("O"),
                     status.CurrentMode ?? "null",
                     status.SessionState ?? "null",
                     status.ActiveProfileName ?? "null",
-                    status.ActiveLauncher ?? "null");
+                    status.ActiveLauncher ?? "null",
+                    status.TransientOperation.Kind,
+                    status.TransientOperation.Phase,
+                    status.TransientOperation.TransitionId ?? "null");
             }
 
                     if (message.Type == "enterWorkMode" && data is ModeResult { Success: true })

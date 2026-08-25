@@ -830,6 +830,141 @@ public sealed class KnownPhysicalDisplayCatalogTests
         Assert.Equal(2, settings.KnownPhysicalDisplays.Count);
     }
 
+    [Fact]
+    public void Settling_defers_incomplete_reconnect_candidate_without_persisting_duplicate()
+    {
+        var saved = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-S90F",
+            OutputTechnology = "HDMI",
+            ConnectorInstance = 1
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                Id = "known-s90f",
+                PhysicalIdentity = saved,
+                CanonicalFriendlyName = "S90F",
+                BestKnownCapability = Capability(3840, 2160, 144)
+            }]
+        };
+        var reconnectObservation = saved with
+        {
+            AdapterLuid = 63704,
+            MonitorDevicePath = string.Empty,
+            EdidIdsValid = false,
+            EdidManufacturerId = 0,
+            EdidProductCodeId = 0,
+            FriendlyName = "S90F"
+        };
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(
+            settings,
+            [CreateDisplay(reconnectObservation, 60)],
+            deferTransientCandidates: true);
+
+        Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal("known-s90f", settings.KnownPhysicalDisplays[0].Id);
+        Assert.Equal(1, result.DeferredCount);
+        Assert.Equal(1, result.LogicalCount);
+        Assert.Equal(DisplayCatalogState.Unavailable, Assert.Single(result.Displays).CatalogState);
+    }
+
+    [Fact]
+    public void Settling_defers_name_only_incomplete_reconnect_without_persisting_duplicate()
+    {
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                Id = "known-s90f",
+                PhysicalIdentity = CreateIdentity("S90F") with { AdapterLuid = 65578, TargetId = 4352 },
+                CanonicalFriendlyName = "S90F",
+                BestKnownCapability = Capability(3840, 2160, 144)
+            }]
+        };
+        var incompleteObservation = new DisplayIdentity
+        {
+            FriendlyName = "S90F",
+            AdapterLuid = 0,
+            TargetId = 0,
+            MonitorDevicePath = string.Empty,
+            EdidIdsValid = false
+        };
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(
+            settings,
+            [CreateDisplay(incompleteObservation, 0, isEnabled: false)],
+            deferTransientCandidates: true);
+
+        Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal("known-s90f", settings.KnownPhysicalDisplays[0].Id);
+        Assert.Equal(1, result.DeferredCount);
+        Assert.Equal(1, result.LogicalCount);
+        Assert.Equal(DisplayCatalogState.Unavailable, Assert.Single(result.Displays).CatalogState);
+    }
+
+    [Fact]
+    public void Strong_reconnect_identity_resolves_to_existing_known_display_after_settling()
+    {
+        var saved = CreateIdentity("S90F") with
+        {
+            AdapterLuid = 65578,
+            TargetId = 4352,
+            MonitorDevicePath = "PATH-S90F",
+            OutputTechnology = "HDMI"
+        };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay
+            {
+                Id = "known-s90f",
+                PhysicalIdentity = saved,
+                CanonicalFriendlyName = "S90F",
+                BestKnownCapability = Capability(3840, 2160, 144)
+            }]
+        };
+        var reconnected = saved with { AdapterLuid = 63704, FriendlyName = "SAMSUNG" };
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(
+            settings,
+            [CreateDisplay(reconnected, 60)],
+            deferTransientCandidates: true);
+
+        Assert.Equal(0, result.DeferredCount);
+        Assert.Equal(1, result.LogicalCount);
+        Assert.Equal("known-s90f", Assert.Single(result.Displays).KnownPhysicalDisplayId);
+        Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal(144, settings.KnownPhysicalDisplays[0].BestKnownCapability?.MaxRefreshRateHz);
+    }
+
+    [Fact]
+    public void Settling_does_not_merge_two_genuinely_distinct_monitors_with_same_name()
+    {
+        var first = CreateIdentity("S90F") with { TargetId = 4352, MonitorDevicePath = "PATH-A", EdidProductCodeId = 30903 };
+        var second = first with { TargetId = 4355, MonitorDevicePath = "PATH-B", EdidProductCodeId = 30904 };
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay { Id = "first", PhysicalIdentity = first, CanonicalFriendlyName = "S90F" }]
+        };
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(
+            settings,
+            [CreateDisplay(first, 60), CreateDisplay(second, 60)],
+            deferTransientCandidates: true);
+
+        Assert.Equal(2, result.LogicalCount);
+        Assert.True(settings.KnownPhysicalDisplays.Count == 2);
+        Assert.Equal(2, result.Displays.Count(display => display.Name == "S90F"));
+    }
+
     private static DisplayDeviceInfo CreateDisplay(string name, uint refresh, bool isEnabled = true)
     {
         return CreateDisplay(CreateIdentity(name), refresh, isEnabled);

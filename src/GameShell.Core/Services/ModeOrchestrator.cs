@@ -14,6 +14,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
     private readonly GamingProfileRuntimeSettingsResolver _gamingProfileSettingsResolver;
     private readonly GamingProfileReadinessCoordinator _gamingProfileReadinessCoordinator;
     private readonly ILogger<ModeOrchestrator> _logger;
+    private readonly ITransientOperationStateService? _transientOperationStateService;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _statusGate = new();
 
@@ -30,7 +31,9 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         IRuntimeStateService runtimeStateService,
         IGamingProfileTopologyReadinessEvaluator? topologyReadinessEvaluator,
         ILogger<ModeOrchestrator> logger,
-        GamingProfileRuntimeSettingsResolver? gamingProfileSettingsResolver = null)
+        GamingProfileRuntimeSettingsResolver? gamingProfileSettingsResolver = null,
+        IDisplayDiscoveryStabilizationService? displayDiscoveryStabilizationService = null,
+        ITransientOperationStateService? transientOperationStateService = null)
     {
         _settingsService = settingsService;
         _modeWorkflowService = modeWorkflowService;
@@ -41,8 +44,10 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             settingsService,
             _gamingProfileSettingsResolver,
             topologyReadinessEvaluator,
-            logger);
+            logger,
+            displayDiscoveryStabilizationService);
         _logger = logger;
+        _transientOperationStateService = transientOperationStateService;
     }
 
     public ModeOrchestrator(
@@ -87,13 +92,25 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     public Task<ModeResult> EnterGameShellAsync(CancellationToken cancellationToken = default)
     {
+        DisplayTransitionResult? transitionResult = null;
         return RunModeAsync(
             operationName: "Enter Console Mode",
+            transientOperationKind: TransientOperationKind.EnterProfile,
             switchingState: ModeState.SwitchingToConsole,
             completedState: ModeState.GameShell,
-            transition: settings => _displayTransitionService.EnterConsoleModeAsync(GetConsoleDisplays(settings), cancellationToken),
+            transition: async settings =>
+            {
+                transitionResult = await _displayTransitionService.EnterConsoleModeAsync(
+                    GetConsoleDisplays(settings),
+                    cancellationToken);
+                return transitionResult;
+            },
             preWorkflow: settings => _modeWorkflowService.PrepareGamingWorkflowAsync(settings, GameShellMode.Console, cancellationToken),
-            workflow: settings => _modeWorkflowService.CompleteGamingWorkflowAsync(settings, GameShellMode.Console, cancellationToken),
+            workflow: settings => _modeWorkflowService.CompleteGamingWorkflowAsync(
+                settings,
+                GameShellMode.Console,
+                transitionResult?.TargetLayout,
+                cancellationToken),
             completionDelay: settings => TimeSpan.FromSeconds(settings.GameShell.CompletionDelaySeconds),
             runtimeMode: GameShellMode.Console,
             cancellationToken);
@@ -112,15 +129,21 @@ public sealed class ModeOrchestrator : IModeOrchestrator
     private Task<ModeResult> RunGamingModeAsync(string? profileName, CancellationToken cancellationToken = default)
     {
         GamingProfileTransitionPreparation? preparation = null;
+        DisplayTransitionResult? transitionResult = null;
         return RunModeAsync(
             operationName: "Enter Gaming Profile",
+            transientOperationKind: TransientOperationKind.EnterProfile,
             switchingState: ModeState.SwitchingToConsole,
             completedState: ModeState.GameShell,
-            transition: settings => _displayTransitionService.EnterGamingModeAsync(
-                preparation?.TargetLayout ?? _gamingProfileSettingsResolver.ResolveLayout(settings.Display, profileName),
-                GetConsoleDisplays(settings),
-                preparation?.ProfileName ?? profileName,
-                cancellationToken),
+            transition: async settings =>
+            {
+                transitionResult = await _displayTransitionService.EnterGamingModeAsync(
+                    preparation?.TargetLayout ?? _gamingProfileSettingsResolver.ResolveLayout(settings.Display, profileName),
+                    GetConsoleDisplays(settings),
+                    preparation?.ProfileName ?? profileName,
+                    cancellationToken);
+                return transitionResult;
+            },
             preWorkflow: settings => _modeWorkflowService.PrepareGamingWorkflowAsync(
                 _gamingProfileSettingsResolver.BuildEffectiveSettings(settings, profileName),
                 GameShellMode.GamingProfile,
@@ -128,6 +151,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             workflow: settings => _modeWorkflowService.CompleteGamingWorkflowAsync(
                 _gamingProfileSettingsResolver.BuildEffectiveSettings(settings, profileName),
                 GameShellMode.GamingProfile,
+                transitionResult?.TargetLayout ?? preparation?.TargetLayout,
                 cancellationToken),
             completionDelay: settings => TimeSpan.FromSeconds(_gamingProfileSettingsResolver
                 .ResolveBehaviour(settings.Display, settings.Gaming, profileName).CompletionDelaySeconds),
@@ -148,6 +172,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
     {
         return RunModeAsync(
             operationName: "Enter Work Mode",
+            transientOperationKind: TransientOperationKind.ExitToWorkMode,
             switchingState: ModeState.SwitchingToWork,
             completedState: ModeState.WorkMode,
             transition: settings => _displayTransitionService.EnterWorkModeAsync(settings.WorkMode.DefaultDisplayLayout, cancellationToken),
@@ -161,6 +186,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
     private async Task<ModeResult> RunModeAsync(
         string operationName,
+        TransientOperationKind transientOperationKind,
         ModeState switchingState,
         ModeState completedState,
         Func<AppSettings, Task<DisplayTransitionResult>> transition,
@@ -187,6 +213,12 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         var stopwatch = Stopwatch.StartNew();
         var displayTransitionSucceeded = false;
         var transitionId = WorkModeTransitionContext.CurrentId ?? "-";
+        var transientTransitionId = _transientOperationStateService?.Begin(
+            transientOperationKind,
+            transientOperationKind == TransientOperationKind.ExitToWorkMode
+                ? TransientOperationPhase.RestoringDisplays
+                : TransientOperationPhase.PreparingDisplays,
+            transitionId);
 
         try
         {
@@ -242,6 +274,12 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             }
 
             _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 3 START display transition.", transitionId);
+            if (transientTransitionId is not null)
+            {
+                _transientOperationStateService?.SetPhase(
+                    transientTransitionId,
+                    TransientOperationPhase.ApplyingDisplayTopology);
+            }
             var transitionResult = await transition(settings);
             if (!transitionResult.Success)
             {
@@ -286,15 +324,53 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             }
 
             displayTransitionSucceeded = true;
+            if (transientTransitionId is not null)
+            {
+                _transientOperationStateService?.SetPhase(
+                    transientTransitionId,
+                    TransientOperationPhase.SynchronizingDisplays);
+            }
             _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 3 SUCCESS display transition.", transitionId);
 
             _logger.LogInformation("WORK MODE TRANSITION [{TransitionId}] STEP 4 START post-display workflow.", transitionId);
+            if (transientTransitionId is not null)
+            {
+                _transientOperationStateService?.SetPhase(
+                    transientTransitionId,
+                    transientOperationKind == TransientOperationKind.ExitToWorkMode
+                        ? TransientOperationPhase.RestoringDesktop
+                        : TransientOperationPhase.StartingLauncher);
+            }
             var workflowResult = await workflow(settings);
             if (!workflowResult.Success)
             {
                 stopwatch.Stop();
                 var message = workflowResult.Message ?? $"{operationName} workflow failed.";
                 _logger.LogError("WORK MODE TRANSITION FAILED [Step=post-display workflow, Message={Message}].", message);
+
+                if (string.Equals(workflowResult.ErrorCode, "TargetTopologyLostDuringTransition", StringComparison.Ordinal))
+                {
+                    var rollback = await _displayTransitionService.RestorePreviousLayoutAsync(cancellationToken);
+                    await RestoreWorkEnvironmentAfterRollbackAsync(settings, wasInWorkMode, cancellationToken, transitionId);
+                    _logger.LogWarning(
+                        "[DISPLAY TRANSITION ROLLBACK] Reason=TargetTopologyLostDuringTransition Result={Result}",
+                        rollback.Success ? "Success" : "Failed");
+                    SetStatus(ModeState.Error, operationName, stopwatch.ElapsedMilliseconds, message);
+                    await SaveRuntimeResultAsync(
+                        runtimeMode,
+                        "TargetTopologyLostDuringTransition",
+                        cancellationToken,
+                        recoveredMode: wasInWorkMode ? GameShellMode.Work : null);
+
+                    return new ModeResult
+                    {
+                        Status = ModeResultStatus.Failed,
+                        CurrentState = ModeState.Error,
+                        Message = message,
+                        DurationMs = stopwatch.ElapsedMilliseconds
+                    };
+                }
+
                 if (scriptFailureIsWarning)
                 {
                     SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, message, runtimeMode);
@@ -398,6 +474,10 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         }
         finally
         {
+            if (transientTransitionId is not null)
+            {
+                _transientOperationStateService?.Clear(transientTransitionId, "CompletedOrFailed");
+            }
             _operationLock.Release();
         }
     }
@@ -433,7 +513,11 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         }
     }
 
-    private async Task SaveRuntimeResultAsync(GameShellMode requestedMode, string result, CancellationToken cancellationToken)
+    private async Task SaveRuntimeResultAsync(
+        GameShellMode requestedMode,
+        string result,
+        CancellationToken cancellationToken,
+        GameShellMode? recoveredMode = null)
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         state.LastRequestedMode = requestedMode.ToString();
@@ -442,6 +526,10 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         if (result.StartsWith("Success", StringComparison.Ordinal))
         {
             state.CurrentMode = requestedMode;
+        }
+        else if (recoveredMode is not null)
+        {
+            state.CurrentMode = recoveredMode;
         }
 
         await _runtimeStateService.SaveAsync(state, cancellationToken);
@@ -468,6 +556,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 LastOperation = _lastOperation,
                 LastOperationDurationMs = _lastOperationDurationMs,
                 LastError = _lastError,
+                TransientOperation = _transientOperationStateService?.Current ?? TransientOperationState.None,
                 SettingsPath = _settingsService.SettingsPath
             };
         }

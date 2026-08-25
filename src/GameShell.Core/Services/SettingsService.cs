@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -161,6 +162,7 @@ public sealed class SettingsService : ISettingsService
 
     private async Task WriteSettingsAsync(AppSettings settings, CancellationToken cancellationToken)
     {
+        EnsureRemoteControlDefaults(settings);
         var validated = AppSettingsValidator.Validate(settings);
         var payload = SerializeSettings(validated);
 
@@ -252,7 +254,8 @@ public sealed class SettingsService : ISettingsService
             using var document = JsonDocument.Parse(json);
             var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? new AppSettings();
-            var wasMigrated = AppSettingsValidator.HasLegacyCapabilityData(settings);
+            var remoteControlWasInitialized = EnsureRemoteControlDefaults(settings);
+            var wasMigrated = remoteControlWasInitialized || AppSettingsValidator.HasLegacyCapabilityData(settings);
             var knownDisplaysBeforeValidation = settings.Display.KnownPhysicalDisplays
                 .Select(known => (known.Id, known.CanonicalFriendlyName, known.PhysicalIdentity))
                 .ToList();
@@ -301,6 +304,35 @@ public sealed class SettingsService : ISettingsService
     }
 
     private static AppSettings CreateDefaultSettings() => new();
+
+    private static bool EnsureRemoteControlDefaults(AppSettings settings)
+    {
+        settings.RemoteControl ??= new RemoteControlSettings();
+        var initialized = false;
+
+        if (settings.RemoteControl.Port is < 1024 or > 65535)
+        {
+            settings.RemoteControl.Port = 47777;
+            initialized = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.RemoteControl.AuthenticationToken))
+        {
+            settings.RemoteControl.AuthenticationToken = GenerateRemoteControlToken();
+            initialized = true;
+        }
+
+        return initialized;
+    }
+
+    private static string GenerateRemoteControlToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(bytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
 
     private void LogRefreshPolicyHydration(AppSettings? persisted, AppSettings resolved)
     {

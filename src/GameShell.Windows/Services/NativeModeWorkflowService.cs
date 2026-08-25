@@ -14,19 +14,22 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     private readonly IWindowsCursorService _cursorService;
     private readonly IWindowsWindowManagementService _windowManagementService;
     private readonly ILauncherProcessService _launcherProcessService;
+    private readonly IDisplayTransitionStabilityGuard? _displayTransitionStabilityGuard;
 
     public NativeModeWorkflowService(
         ILogger<NativeModeWorkflowService> logger,
         IRuntimeStateService runtimeStateService,
         IWindowsCursorService cursorService,
         IWindowsWindowManagementService windowManagementService,
-        ILauncherProcessService launcherProcessService)
+        ILauncherProcessService launcherProcessService,
+        IDisplayTransitionStabilityGuard? displayTransitionStabilityGuard = null)
     {
         _logger = logger;
         _runtimeStateService = runtimeStateService;
         _cursorService = cursorService;
         _windowManagementService = windowManagementService;
         _launcherProcessService = launcherProcessService;
+        _displayTransitionStabilityGuard = displayTransitionStabilityGuard;
     }
 
     public async Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
@@ -100,9 +103,18 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             : ModeWorkflowResult.Ok($"Workflow zakonczony z ostrzezeniami: {string.Join("; ", warnings)}");
     }
 
+    public Task<ModeWorkflowResult> CompleteGamingWorkflowAsync(
+        AppSettings settings,
+        GameShellMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        return CompleteGamingWorkflowAsync(settings, mode, null, cancellationToken);
+    }
+
     public async Task<ModeWorkflowResult> CompleteGamingWorkflowAsync(
         AppSettings settings,
         GameShellMode mode,
+        DisplayLayoutSnapshot? expectedTargetLayout,
         CancellationToken cancellationToken = default)
     {
         var warnings = new List<string>();
@@ -131,6 +143,20 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
                 await RetryAsync(() => _windowManagementService.SetTaskbarsVisible(false), cancellationToken);
             }
         }, cancellationToken);
+
+        if (behaviour.StartLauncher && _displayTransitionStabilityGuard is not null)
+        {
+            var stabilityFailure = await _displayTransitionStabilityGuard.VerifyBeforeLauncherAsync(
+                expectedTargetLayout,
+                mode == GameShellMode.GamingProfile ? "GamingProfile" : "CONSOLE",
+                cancellationToken);
+            if (stabilityFailure is not null)
+            {
+                return ModeWorkflowResult.Fail(
+                    stabilityFailure.UserMessage ?? "Docelowy uklad ekranow nie jest stabilny.",
+                    stabilityFailure.ErrorCode);
+            }
+        }
 
         await TryStepAsync("start launcher", warnings, async () =>
         {

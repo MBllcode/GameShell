@@ -11,21 +11,25 @@ namespace GameShell.Core.Services;
 /// </summary>
 public sealed class GamingProfileReadinessCoordinator
 {
+    private static readonly TimeSpan DisplaySettlingReadinessTimeout = TimeSpan.FromSeconds(3);
     private readonly ISettingsService _settingsService;
     private readonly GamingProfileRuntimeSettingsResolver _profileResolver;
     private readonly IGamingProfileTopologyReadinessEvaluator? _evaluator;
+    private readonly IDisplayDiscoveryStabilizationService? _displayDiscoveryStabilizationService;
     private readonly ILogger _logger;
 
     public GamingProfileReadinessCoordinator(
         ISettingsService settingsService,
         GamingProfileRuntimeSettingsResolver profileResolver,
         IGamingProfileTopologyReadinessEvaluator? evaluator,
-        ILogger logger)
+        ILogger logger,
+        IDisplayDiscoveryStabilizationService? displayDiscoveryStabilizationService = null)
     {
         _settingsService = settingsService;
         _profileResolver = profileResolver;
         _evaluator = evaluator;
         _logger = logger;
+        _displayDiscoveryStabilizationService = displayDiscoveryStabilizationService;
     }
 
     public async Task<ModeResult?> CheckBeforeTransitionAsync(
@@ -52,6 +56,23 @@ public sealed class GamingProfileReadinessCoordinator
                     ? _profileResolver.ResolveLayout(settings.Display, requestedProfileName)
                     : GamingProfileDisplayTopologyAdapter.ToLegacy(profile.DisplayTopology!)
             };
+        }
+
+        if (_displayDiscoveryStabilizationService?.State == DisplayDiscoveryState.Settling)
+        {
+            _logger.LogInformation("[DISPLAY READINESS WAIT] Profile={Profile} Reason=DisplayDiscoverySettling", profile.Name);
+            try
+            {
+                await _displayDiscoveryStabilizationService.WaitForStableAsync(
+                    DisplaySettlingReadinessTimeout,
+                    cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogWarning(
+                    "[DISPLAY READINESS WAIT] Profile={Profile} Result=Timeout; continuing with normal readiness evaluation.",
+                    profile.Name);
+            }
         }
 
         await EnsureCapabilityCatalogMigratedAsync(settings, cancellationToken);
@@ -275,7 +296,7 @@ public sealed class GamingProfileReadinessCoordinator
             ProfileDisplayReadinessReason.ModeInventoryInvalid => "Nie moÅ¼na uruchomiÄ‡ profilu, poniewaÅ¼ lista trybÃ³w ekranu jest niespÃ³jna.",
             ProfileDisplayReadinessReason.InvalidExpectedMode => "Nie moÅ¼na uruchomiÄ‡ profilu, poniewaÅ¼ zapisana czÄ™stotliwoÅ›Ä‡ odÅ›wieÅ¼ania ekranu jest nieprawidÅ‚owa.",
             ProfileDisplayReadinessReason.ExpectedModeUnavailable => $"Ekran zostaÅ‚ wykryty, ale zapisany tryb profilu nie jest obecnie dostÄ™pny. ({blockedTarget.SavedTarget.Width} Ã— {blockedTarget.SavedTarget.Height} @ {FormatRefreshRate(blockedTarget.SavedTarget)} Hz)",
-            _ => "Nie moÅ¼na uruchomiÄ‡ profilu, poniewaÅ¼ wymagany ekran nie jest obecnie gotowy."
+            _ => "Nie można uruchomić profilu, ponieważ wymagany ekran nie jest obecnie gotowy."
         };
     }
 

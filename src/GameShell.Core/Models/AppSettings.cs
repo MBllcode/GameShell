@@ -12,6 +12,15 @@ public sealed class AppSettings
     public HotkeySettings Hotkeys { get; set; } = new();
     public StartupSettings Startup { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
+    public RemoteControlSettings RemoteControl { get; set; } = new();
+}
+
+public sealed class RemoteControlSettings
+{
+    public bool Enabled { get; set; }
+    public int Port { get; set; } = 47777;
+    public string AuthenticationToken { get; set; } = string.Empty;
+    public bool AllowPrivateNetworkOnly { get; set; } = true;
 }
 
 public sealed class DisplaySettings

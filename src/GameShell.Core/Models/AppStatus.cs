@@ -14,5 +14,6 @@ public sealed class AppStatus
     public string? LastOperation { get; init; }
     public long? LastOperationDurationMs { get; init; }
     public string? LastError { get; init; }
+    public TransientOperationState TransientOperation { get; init; } = TransientOperationState.None;
     public string SettingsPath { get; init; } = string.Empty;
 }

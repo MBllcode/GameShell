@@ -4,6 +4,7 @@ using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
 using GameShell.Core.Services;
 using GameShell.Desktop.Logging;
+using GameShell.Desktop.Remote;
 using GameShell.Desktop.Services;
 using GameShell.Windows.Detection;
 using GameShell.Windows.Displays;
@@ -32,9 +33,14 @@ public partial class App : System.Windows.Application
     private IModeCommandService? _modeCommandService;
     private IDisplayTransitionService? _displayTransitionService;
     private IDisplayCapabilityDiagnostic? _displayCapabilityDiagnostic;
+    private RemoteControlHost? _remoteControlHost;
     private GamingProfileRuntimeSettingsResolver? _gamingProfileSettingsResolver;
+    private DisplayDiscoveryCoordinator? _displayDiscoveryCoordinator;
     private GlobalHotkeyHost? _hotkeyHost;
     private TrayHost? _trayHost;
+    private Task? _showMainWindowTask;
+    private readonly TaskCompletionSource<bool> _startupReady =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _isExiting;
     private ILogger<App>? _logger;
 
@@ -57,15 +63,40 @@ public partial class App : System.Windows.Application
 
         _serviceProvider = services.BuildServiceProvider();
         _logger = _serviceProvider.GetRequiredService<ILogger<App>>();
+        _displayDiscoveryCoordinator = _serviceProvider.GetRequiredService<DisplayDiscoveryCoordinator>();
+        _displayDiscoveryCoordinator.StateChanged += OnDisplayDiscoveryStateChanged;
         _commandHost = new SingleInstanceCommandHost(Dispatcher);
         _logger.LogInformation("GameShell starting. Args: {Args}", string.Join(' ', e.Args));
 
         _settingsService = _serviceProvider.GetRequiredService<ISettingsService>();
         _modeCommandService = _serviceProvider.GetRequiredService<IModeCommandService>();
+        _remoteControlHost = _serviceProvider.GetRequiredService<RemoteControlHost>();
         _displayTransitionService = _serviceProvider.GetRequiredService<IDisplayTransitionService>();
         _displayCapabilityDiagnostic = _serviceProvider.GetRequiredService<IDisplayCapabilityDiagnostic>();
         _gamingProfileSettingsResolver = _serviceProvider.GetRequiredService<GamingProfileRuntimeSettingsResolver>();
         var startupSettings = await _settingsService.LoadAsync();
+
+        var startupStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var startupReconciliation = _serviceProvider.GetRequiredService<StartupReconciliationService>();
+            var reconciliationResult = await startupReconciliation.ReconcileAsync(
+                startupSettings,
+                explicitGamingStartup: GetCommandEventName(e.Args) is not null,
+                CancellationToken.None);
+            if (reconciliationResult is { Success: false })
+            {
+                _logger.LogWarning(
+                    "Startup display reconciliation completed without a usable Work topology. Message={Message}",
+                    reconciliationResult.Message);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Startup display reconciliation failed.");
+        }
+
+        await _remoteControlHost.StartAsync(startupSettings);
         RegisterCommandEvents();
         _controllerShortcutService = _serviceProvider.GetRequiredService<SdlControllerShortcutService>();
         _webViewBridge = _serviceProvider.GetRequiredService<WebView.WebViewBridge>();
@@ -80,10 +111,14 @@ public partial class App : System.Windows.Application
         _logger.LogInformation("Tray initialized");
         _logger.LogInformation("Hotkeys initialized");
         _logger.LogInformation("Controller service initialized");
+        _startupReady.TrySetResult(true);
+        _logger.LogInformation(
+            "[STARTUP READY] DurationMs={DurationMs}",
+            startupStopwatch.ElapsedMilliseconds);
 
         if (!startupSettings.Startup.StartMinimizedToTray)
         {
-            ShowMainWindow();
+            await ShowMainWindowAsync();
         }
 
         RunStartupCommand(e.Args);
@@ -138,15 +173,51 @@ public partial class App : System.Windows.Application
 
     private void ShowMainWindow()
     {
+        _ = ShowMainWindowAsync();
+    }
+
+    private async Task ShowMainWindowAsync()
+    {
         if (_isExiting)
         {
             return;
         }
 
+        if (_showMainWindowTask is not null)
+        {
+            await _showMainWindowTask;
+            return;
+        }
+
+        _showMainWindowTask = ShowMainWindowCoreAsync();
         try
         {
+            await _showMainWindowTask;
+        }
+        finally
+        {
+            _showMainWindowTask = null;
+        }
+    }
+
+    private async Task ShowMainWindowCoreAsync()
+    {
+        try
+        {
+            await _startupReady.Task;
             _logger?.LogInformation("MainWindow requested");
             var window = EnsureMainWindow();
+            try
+            {
+                await window.PrepareForPresentationAsync();
+            }
+            catch (Exception ex)
+            {
+                // Placement repair is best-effort. A settings/monitor API failure
+                // must not leave the tray application without a recoverable window.
+                _logger?.LogWarning(ex, "MainWindow placement preparation failed; showing with current bounds.");
+            }
+
             window.Show();
             if (window.WindowState == WindowState.Minimized)
             {
@@ -159,6 +230,37 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to show MainWindow.");
+        }
+    }
+
+    private void OnDisplayDiscoveryStateChanged(object? sender, DisplayDiscoveryStateChangedEventArgs e)
+    {
+        if (e.OldState != DisplayDiscoveryState.Settling
+            || e.NewState != DisplayDiscoveryState.Ready
+            || _mainWindow is not { IsVisible: true })
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Background,
+            new Action(() => _ = ReconcileMainWindowPlacementAsync()));
+    }
+
+    private async Task ReconcileMainWindowPlacementAsync()
+    {
+        if (_isExiting || _mainWindow is not { IsVisible: true } window)
+        {
+            return;
+        }
+
+        try
+        {
+            await window.ReconcileWindowPlacementAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Window placement reconciliation failed after display settling.");
         }
     }
 
@@ -203,6 +305,19 @@ public partial class App : System.Windows.Application
 
         try
         {
+            _logger?.LogInformation("Remote control host stop begin. Thread={ThreadId}", Environment.CurrentManagedThreadId);
+            try
+            {
+                if (_remoteControlHost is not null)
+                {
+                    await _remoteControlHost.StopAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Remote control host stop failed. Thread={ThreadId}", Environment.CurrentManagedThreadId);
+            }
+
             _logger?.LogInformation("MainWindow close begin. Thread={ThreadId}", Environment.CurrentManagedThreadId);
             try
             {
@@ -255,6 +370,11 @@ public partial class App : System.Windows.Application
                 _webViewBridge.HotkeyCaptureStateChanged -= OnHotkeyCaptureStateChanged;
             }
 
+            if (_displayDiscoveryCoordinator is not null)
+            {
+                _displayDiscoveryCoordinator.StateChanged -= OnDisplayDiscoveryStateChanged;
+            }
+
             _logger?.LogInformation("Tray dispose begin. Thread={ThreadId}", Environment.CurrentManagedThreadId);
             try
             {
@@ -268,11 +388,18 @@ public partial class App : System.Windows.Application
 
             _commandHost?.Dispose();
             _commandHost = null;
+            _remoteControlHost = null;
 
             _singleInstanceMutex?.Dispose();
             _singleInstanceMutex = null;
-            _serviceProvider?.Dispose();
-            _serviceProvider = null;
+            if (_serviceProvider is not null)
+            {
+                var serviceProvider = _serviceProvider;
+                _serviceProvider = null;
+                _logger?.LogInformation("[SHUTDOWN] Component=ServiceProvider Action=DisposeAsync Result=Started");
+                await serviceProvider.DisposeAsync();
+                _logger?.LogInformation("[SHUTDOWN] Component=ServiceProvider Action=DisposeAsync Result=Success");
+            }
         }
         catch (Exception ex)
         {
@@ -461,19 +588,27 @@ public partial class App : System.Windows.Application
         services.AddSingleton<WindowsDisplayConfigurationService>();
         services.AddSingleton<WindowsDisplayTopologyReader>();
         services.AddSingleton<IDisplayQueryService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
+        services.AddSingleton<DisplayDiscoveryCoordinator>();
+        services.AddSingleton<IDisplayDiscoveryStabilizationService>(provider => provider.GetRequiredService<DisplayDiscoveryCoordinator>());
+        services.AddSingleton<ITransientOperationStateService, TransientOperationStateService>();
         services.AddSingleton<IDisplayConfigurationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayLayoutApplicationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
         services.AddSingleton<IDisplayCapabilityDiagnostic, DisplayCapabilityDiagnostic>();
-        services.AddSingleton<IDisplayTransitionService, DisplayTransitionService>();
+        services.AddSingleton<DisplayTransitionService>();
+        services.AddSingleton<IDisplayTransitionService>(provider => provider.GetRequiredService<DisplayTransitionService>());
+        services.AddSingleton<IDisplayTransitionStabilityGuard>(provider => provider.GetRequiredService<DisplayTransitionService>());
         services.AddSingleton<IModeOrchestrator, ModeOrchestrator>();
         services.AddSingleton<IGameSessionMonitor, WindowsGameSessionMonitor>();
         services.AddSingleton<ILauncherRecoveryStrategy, WindowsLauncherRecoveryStrategy>();
         services.AddSingleton<IConsoleSessionManager, ConsoleSessionManager>();
         services.AddSingleton<IModeCommandService, ModeCommandService>();
+        services.AddSingleton<StartupReconciliationService>();
+        services.AddSingleton<RemoteControlHost>();
         services.AddSingleton<IDependencyDetectionService, DependencyDetectionService>();
         services.AddSingleton<IWindowsIntegrationService, WindowsIntegrationService>();
         services.AddSingleton<SdlControllerShortcutService>();
         services.AddSingleton<WebView.WebViewBridge>();
+        services.AddSingleton<IWindowPlacementService, WindowsWindowPlacementService>();
         services.AddTransient<MainWindow>();
     }
 }

@@ -1,13 +1,10 @@
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
 using System.Windows;
 using GameShell.Core.Interfaces;
-using GameShell.Core.Models;
+using GameShell.Desktop.Services;
 using GameShell.Desktop.WebView;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
 
@@ -18,16 +15,20 @@ public partial class MainWindow : Window
     private readonly ILogger<MainWindow> _logger;
     private readonly WebViewBridge _webViewBridge;
     private readonly ISettingsService _settingsService;
+    private readonly IWindowPlacementService _windowPlacementService;
+    private bool _presentationPrepared;
     private bool _isExitRequested;
 
     public MainWindow(
         ILogger<MainWindow> logger,
         WebViewBridge webViewBridge,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        IWindowPlacementService windowPlacementService)
     {
         _logger = logger;
         _webViewBridge = webViewBridge;
         _settingsService = settingsService;
+        _windowPlacementService = windowPlacementService;
         InitializeComponent();
         Loaded += OnLoaded;
         StateChanged += OnStateChanged;
@@ -39,8 +40,6 @@ public partial class MainWindow : Window
     {
         try
         {
-            await ApplySavedWindowBoundsAsync();
-
             var userDataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "GameShell",
@@ -102,63 +101,21 @@ public partial class MainWindow : Window
 
     }
 
-    private async Task ApplySavedWindowBoundsAsync()
+    public async Task PrepareForPresentationAsync(CancellationToken cancellationToken = default)
     {
-        var settings = await _settingsService.LoadAsync();
-        if (settings.Ui.WindowWidth is null || settings.Ui.WindowHeight is null)
+        if (!_presentationPrepared)
         {
-            FitWindowToPrimaryWorkArea();
-            CenterOnPrimaryScreen();
+            await _windowPlacementService.PrepareForPresentationAsync(this, cancellationToken);
+            _presentationPrepared = true;
             return;
         }
 
-        Width = Math.Max(MinWidth, settings.Ui.WindowWidth.Value);
-        Height = Math.Max(MinHeight, settings.Ui.WindowHeight.Value);
-        FitWindowToPrimaryWorkArea();
-
-        if (settings.Ui.WindowLeft is null || settings.Ui.WindowTop is null)
-        {
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            return;
-        }
-
-        Left = settings.Ui.WindowLeft.Value;
-        Top = settings.Ui.WindowTop.Value;
-        EnsureWindowVisible();
+        await _windowPlacementService.ReconcileAsync(this, cancellationToken);
     }
 
-    private void EnsureWindowVisible()
+    public Task ReconcileWindowPlacementAsync(CancellationToken cancellationToken = default)
     {
-        FitWindowToPrimaryWorkArea();
-
-        var windowRectangle = new System.Drawing.Rectangle(
-            (int)Math.Round(Left),
-            (int)Math.Round(Top),
-            (int)Math.Round(Width),
-            (int)Math.Round(Height));
-
-        if (Screen.AllScreens.Any(screen => screen.WorkingArea.IntersectsWith(windowRectangle)))
-        {
-            return;
-        }
-
-        CenterOnPrimaryScreen();
-    }
-
-    private void FitWindowToPrimaryWorkArea()
-    {
-        var workArea = SystemParameters.WorkArea;
-        var maxWidth = Math.Max(MinWidth, workArea.Width * 0.92);
-        var maxHeight = Math.Max(MinHeight, workArea.Height * 0.88);
-        Width = Math.Min(Math.Max(MinWidth, Width), maxWidth);
-        Height = Math.Min(Math.Max(MinHeight, Height), maxHeight);
-    }
-
-    private void CenterOnPrimaryScreen()
-    {
-        var area = Screen.PrimaryScreen?.WorkingArea ?? Screen.AllScreens.First().WorkingArea;
-        Left = area.Left + Math.Max(0, (area.Width - Width) / 2.0);
-        Top = area.Top + Math.Max(0, (area.Height - Height) / 2.0);
+        return _windowPlacementService.ReconcileAsync(this, cancellationToken);
     }
 
     public Task SaveBoundsForApplicationExitAsync() => SaveWindowBoundsAsync();

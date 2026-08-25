@@ -47,6 +47,11 @@ public static class KnownPhysicalDisplayCatalogService
         return FindKnown(settings, identity);
     }
 
+    public static DisplayCapabilitySnapshot? GetBestKnownCapability(KnownPhysicalDisplay? known)
+    {
+        return known is null ? null : GetBestKnown(known);
+    }
+
     public static bool MigrateLegacyProfileCapabilities(DisplaySettings settings)
     {
         settings.KnownPhysicalDisplays ??= [];
@@ -198,6 +203,14 @@ public static class KnownPhysicalDisplayCatalogService
         DisplaySettings settings,
         IReadOnlyList<DisplayDeviceInfo> currentDisplays)
     {
+        return Merge(settings, currentDisplays, deferTransientCandidates: false);
+    }
+
+    public static DisplayCatalogMergeResult Merge(
+        DisplaySettings settings,
+        IReadOnlyList<DisplayDeviceInfo> currentDisplays,
+        bool deferTransientCandidates)
+    {
         settings.KnownPhysicalDisplays ??= [];
         var changed = NormalizeKnownDisplays(settings);
         var knownDisplays = settings.KnownPhysicalDisplays;
@@ -216,6 +229,24 @@ public static class KnownPhysicalDisplayCatalogService
             if (known is null)
             {
                 var conflict = FindIdentityConflict(settings, current.Identity);
+                if (deferTransientCandidates
+                    && conflict is null
+                    && IsTransientReconnectCandidate(settings, current.Identity))
+                {
+                    identityMatches.Add(new DisplayIdentityMatchRecord(
+                        string.Empty,
+                        ResolveCandidateCanonicalName(settings, current.Identity),
+                        ResolveFriendlyName(current),
+                        current.Identity.AdapterLuid,
+                        current.Identity.TargetId,
+                        DisplayIdentityMatchConfidence.None,
+                        "Deferred")
+                    {
+                        MissingMetadata = true
+                    });
+                    continue;
+                }
+
                 known = new KnownPhysicalDisplay
                 {
                     Id = NewKnownDisplayId(),
@@ -307,7 +338,37 @@ public static class KnownPhysicalDisplayCatalogService
             matchedCount,
             newCount,
             conflictCount,
-            identityMatches);
+            identityMatches)
+        {
+            DeferredCount = identityMatches.Count(match => string.Equals(match.Result, "Deferred", StringComparison.Ordinal))
+        };
+    }
+
+    /// <summary>
+    /// A reconnect candidate is intentionally only deferred here. It is never
+    /// merged by friendly name or by this degraded route evidence.
+    /// </summary>
+    public static bool IsTransientReconnectCandidate(DisplaySettings settings, DisplayIdentity identity)
+    {
+        if (HasStrongIdentity(identity))
+        {
+            return false;
+        }
+
+        // Route/name evidence is used only as a bounded deferral hint when
+        // Windows has not emitted usable physical metadata yet. It never
+        // authorizes a merge or a persisted identity.
+        return settings.KnownPhysicalDisplays.Any(known =>
+            (identity.TargetId != 0
+                && known.PhysicalIdentity.TargetId == identity.TargetId
+                && (known.PhysicalIdentity.AdapterLuid == 0
+                    || identity.AdapterLuid == 0
+                    || known.PhysicalIdentity.AdapterLuid != identity.AdapterLuid))
+            || (identity.TargetId == 0
+                && !string.IsNullOrWhiteSpace(identity.FriendlyName)
+                && (string.Equals(known.CanonicalFriendlyName, identity.FriendlyName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(known.PhysicalIdentity.FriendlyName, identity.FriendlyName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(known.OptionalUserLabel, identity.FriendlyName, StringComparison.OrdinalIgnoreCase))));
     }
 
     private static KnownPhysicalDisplay? FindKnown(DisplaySettings settings, DisplayIdentity identity)
@@ -1057,6 +1118,18 @@ public static class KnownPhysicalDisplayCatalogService
             || identity.EdidIdsValid && identity.EdidManufacturerId != 0 && identity.EdidProductCodeId != 0;
     }
 
+    private static bool HasStrongIdentity(DisplayIdentity identity)
+    {
+        return !string.IsNullOrWhiteSpace(identity.MonitorDevicePath)
+            || HasValidEdid(identity);
+    }
+
+    private static string ResolveCandidateCanonicalName(DisplaySettings settings, DisplayIdentity identity)
+    {
+        var candidate = settings.KnownPhysicalDisplays.FirstOrDefault(known => known.PhysicalIdentity.TargetId == identity.TargetId);
+        return candidate is null ? identity.FriendlyName : ResolveFriendlyName(candidate);
+    }
+
     private static bool HasValidEdid(DisplayIdentity identity)
     {
         return identity.EdidIdsValid
@@ -1092,7 +1165,10 @@ public sealed record DisplayCatalogMergeResult(
     int MatchedCount,
     int NewCount,
     int ConflictCount,
-    IReadOnlyList<DisplayIdentityMatchRecord> IdentityMatches);
+    IReadOnlyList<DisplayIdentityMatchRecord> IdentityMatches)
+{
+    public int DeferredCount { get; init; }
+}
 
 public sealed record DisplayIdentityMatchRecord(
     string KnownDisplayId,

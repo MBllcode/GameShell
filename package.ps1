@@ -12,7 +12,6 @@ $wwwrootPath = Join-Path $root 'src\GameShell.Desktop\wwwroot'
 $artifactRoot = Join-Path $root 'artifacts'
 $installerPath = Join-Path $artifactRoot 'installer'
 $publishTempPath = Join-Path $artifactRoot 'package-temp'
-$iconScriptPath = Join-Path $root 'scripts\GenerateGameShellIcon.ps1'
 $finalExePath = Join-Path $installerPath 'GameShell.exe'
 
 function Invoke-Native {
@@ -48,9 +47,6 @@ function Stop-RunningGameShell {
         }
     }
 }
-
-Write-Host 'Preparing GameShell icon from provided PNG asset...'
-Invoke-Native { powershell.exe -NoProfile -ExecutionPolicy Bypass -File $iconScriptPath }
 
 Write-Host 'Building React UI...'
 Push-Location $uiPath

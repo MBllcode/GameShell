@@ -11,6 +11,7 @@ internal sealed class WebViewDisplayCommandHandler
 {
     private readonly ISettingsService _settingsService;
     private readonly IDisplayQueryService _displayQueryService;
+    private readonly DisplayDiscoveryCoordinator _displayDiscoveryCoordinator;
     private readonly IDisplayTransitionService _displayTransitionService;
     private readonly IWindowsIntegrationService _windowsIntegrationService;
     private readonly ILogger<WebViewDisplayCommandHandler> _logger;
@@ -19,6 +20,7 @@ internal sealed class WebViewDisplayCommandHandler
     public WebViewDisplayCommandHandler(
         ISettingsService settingsService,
         IDisplayQueryService displayQueryService,
+        DisplayDiscoveryCoordinator displayDiscoveryCoordinator,
         IDisplayTransitionService displayTransitionService,
         IWindowsIntegrationService windowsIntegrationService,
         ILogger<WebViewDisplayCommandHandler> logger,
@@ -26,6 +28,7 @@ internal sealed class WebViewDisplayCommandHandler
     {
         _settingsService = settingsService;
         _displayQueryService = displayQueryService;
+        _displayDiscoveryCoordinator = displayDiscoveryCoordinator;
         _displayTransitionService = displayTransitionService;
         _windowsIntegrationService = windowsIntegrationService;
         _logger = logger;
@@ -41,40 +44,7 @@ internal sealed class WebViewDisplayCommandHandler
     {
         try
         {
-            var settings = await _settingsService.LoadAsync();
-            var currentDisplays = await _displayQueryService.GetAvailableDisplaysAsync();
-            currentDisplays = await RefreshCurrentModeInventoryAsync(currentDisplays);
-            var merged = KnownPhysicalDisplayCatalogService.Merge(settings.Display, currentDisplays);
-            _logger.LogInformation(
-                "[DISPLAY DISCOVERY MERGE] KnownCount={KnownCount}, ObservationCount={ObservationCount}, LogicalCount={LogicalCount}, DuplicatesCollapsed={DuplicatesCollapsed}",
-                merged.KnownCount,
-                merged.ObservationCount,
-                merged.LogicalCount,
-                merged.DuplicatesCollapsed);
-            foreach (var match in merged.IdentityMatches)
-            {
-                _logger.LogInformation(
-                    "[DISPLAY IDENTITY MATCH] KnownDisplayId={KnownDisplayId}, CanonicalName={CanonicalName}, ObservedName={ObservedName}, SavedAdapterLuid={SavedAdapterLuid}, ObservedAdapterLuid={ObservedAdapterLuid}, TargetId={TargetId}, MonitorDevicePathMatch={MonitorDevicePathMatch}, EdidMatch={EdidMatch}, HistoricalRouteMatch={HistoricalRouteMatch}, MissingMetadata={MissingMetadata}, ConflictingMetadata={ConflictingMetadata}, MatchConfidence={MatchConfidence}, Result={Result}",
-                    match.KnownDisplayId,
-                    match.CanonicalName,
-                    match.ObservedName,
-                    match.SavedAdapterLuid,
-                    match.AdapterLuid,
-                    match.TargetId,
-                    match.MonitorDevicePathMatch,
-                    match.EdidMatch,
-                    match.HistoricalRouteMatch,
-                    match.MissingMetadata,
-                    match.ConflictingMetadata,
-                    match.MatchConfidence,
-                    match.Result);
-            }
-            if (merged.CatalogChanged)
-            {
-                await _settingsService.SaveAsync(settings);
-            }
-
-            return merged.Displays;
+            return await _displayDiscoveryCoordinator.GetDisplaysAsync();
         }
         catch (Exception ex)
         {
@@ -189,87 +159,6 @@ internal sealed class WebViewDisplayCommandHandler
         UpsertGamingProfile(settings.Display, profileName, layout, maxProfileCount);
         await _saveAndApplySettingsAsync(settings);
         return settings;
-    }
-
-    private async Task<IReadOnlyList<DisplayDeviceInfo>> RefreshCurrentModeInventoryAsync(
-        IReadOnlyList<DisplayDeviceInfo> displays)
-    {
-        var refreshed = new List<DisplayDeviceInfo>(displays.Count);
-        foreach (var display in displays)
-        {
-            if (!display.IsEnabled || !display.IsAvailable)
-            {
-                refreshed.Add(display);
-                continue;
-            }
-
-            try
-            {
-                var inventory = await _displayQueryService.GetAvailableDisplayModesAsync(display.Identity);
-                var requestedModes = inventory.Modes
-                    .Where(mode => mode.Width == display.Width && mode.Height == display.Height)
-                    .OrderByDescending(mode => mode.RefreshRateHz)
-                    .ToList();
-                var highest = requestedModes.FirstOrDefault();
-                    refreshed.Add(highest is null
-                        ? display
-                        : WithCurrentCapability(display, highest, inventory.Modes));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(
-                    ex,
-                    "[DISPLAY MODE INVENTORY] Refresh failed for PhysicalId={PhysicalId}; keeping DisplayConfig observation.",
-                    FormatPhysicalId(display.Identity));
-                refreshed.Add(display);
-            }
-        }
-
-        return refreshed;
-    }
-
-    private static DisplayDeviceInfo WithCurrentCapability(
-        DisplayDeviceInfo display,
-        DisplayModeInfo capability,
-        IReadOnlyList<DisplayModeInfo> enumeratedModes)
-    {
-        return new DisplayDeviceInfo
-        {
-            Id = display.Id,
-            KnownPhysicalDisplayId = display.KnownPhysicalDisplayId,
-            Name = display.Name,
-            IsPrimary = display.IsPrimary,
-            IsEnabled = display.IsEnabled,
-            IsAvailable = display.IsAvailable,
-            Identity = display.Identity,
-            SourceDeviceName = display.SourceDeviceName,
-            SourceId = display.SourceId,
-            TargetId = display.TargetId,
-            AdapterLuid = display.AdapterLuid,
-            ConnectionTechnology = display.ConnectionTechnology,
-            PositionX = display.PositionX,
-            PositionY = display.PositionY,
-            Width = display.Width,
-            Height = display.Height,
-            Orientation = display.Orientation,
-            RefreshRateNumerator = capability.RefreshRateNumerator,
-            RefreshRateDenominator = capability.RefreshRateDenominator,
-            IsRemembered = display.IsRemembered,
-            CatalogState = display.CatalogState,
-            CurrentObservation = display.CurrentObservation,
-            EnumeratedModes = enumeratedModes,
-            LastKnownGoodCapability = display.LastKnownGoodCapability,
-            LastVerifiedActiveCapability = display.LastVerifiedActiveCapability
-        };
-    }
-
-    private static string FormatPhysicalId(DisplayIdentity identity)
-    {
-        return identity.AdapterLuid != 0 && identity.TargetId != 0
-            ? $"{identity.AdapterLuid}:{identity.TargetId}"
-            : string.IsNullOrWhiteSpace(identity.MonitorDevicePath)
-                ? "fallback"
-                : identity.MonitorDevicePath;
     }
 
     private static DisplayLayoutSnapshot CanonicalizeLayout(

@@ -312,17 +312,64 @@ public sealed class DisplayTransitionServiceTests
         Assert.True(DisplayLayoutVerifier.MatchesActiveDisplaySet(expected, actual));
     }
 
+    [Fact]
+    public async Task FinalStableTarget_AllowsCurrent60HzInventory()
+    {
+        var target = Snapshot(Path("S90F", "PATH-TV", 0, 0, 3840, 2160, isPrimary: true, knownId: "tv"));
+        var query = new FakeDisplayQueryService(target);
+        var service = CreateService(query, new FakeDisplayLayoutApplicationService(query), new FakeRuntimeStateService(new RuntimeState()));
+
+        var result = await service.VerifyBeforeLauncherAsync(target, "CONSOLE");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FinalStableTarget_RejectsWorkTopologyAfterTargetWasLost()
+    {
+        var work = Snapshot(
+            Path("DELL P2722H", "PATH-DELL", 0, 0, 1920, 1080, isPrimary: false),
+            Path("PL3480WQ", "PATH-PL", 1920, 0, 3440, 1440, isPrimary: true));
+        var target = Snapshot(Path("S90F", "PATH-TV", 0, 0, 3840, 2160, isPrimary: true, knownId: "tv"));
+        var query = new FakeDisplayQueryService(work);
+        var service = CreateService(query, new FakeDisplayLayoutApplicationService(query), new FakeRuntimeStateService(new RuntimeState()));
+
+        var result = await service.VerifyBeforeLauncherAsync(target, "CONSOLE");
+
+        Assert.NotNull(result);
+        Assert.Equal("TargetTopologyLostDuringTransition", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task FinalStableTarget_WaitsForActiveSettlingBeforeVerification()
+    {
+        var target = Snapshot(Path("S90F", "PATH-TV", 0, 0, 3840, 2160, isPrimary: true, knownId: "tv"));
+        var query = new FakeDisplayQueryService(target);
+        var stabilization = new FakeDisplayStabilizationService
+        {
+            State = DisplayDiscoveryState.Settling
+        };
+        var service = CreateService(query, new FakeDisplayLayoutApplicationService(query), new FakeRuntimeStateService(new RuntimeState()), stabilization);
+
+        var result = await service.VerifyBeforeLauncherAsync(target, "CONSOLE");
+
+        Assert.Null(result);
+        Assert.Equal(1, stabilization.WaitCount);
+    }
+
     private static DisplayTransitionService CreateService(
         FakeDisplayQueryService query,
         FakeDisplayLayoutApplicationService applier,
-        FakeRuntimeStateService runtime)
+        FakeRuntimeStateService runtime,
+        IDisplayDiscoveryStabilizationService? stabilization = null)
     {
         return new DisplayTransitionService(
             query,
             applier,
             runtime,
             new ConsoleDisplayLayoutBuilder(),
-            NullLogger<DisplayTransitionService>.Instance);
+            NullLogger<DisplayTransitionService>.Instance,
+            stabilization);
     }
 
     private static DisplayLayoutSnapshot Snapshot(params DisplayPathSnapshot[] displays)
@@ -334,10 +381,11 @@ public sealed class DisplayTransitionServiceTests
         };
     }
 
-    private static DisplayPathSnapshot Path(string name, string path, int x, int y, int width, int height, bool isPrimary = false)
+    private static DisplayPathSnapshot Path(string name, string path, int x, int y, int width, int height, bool isPrimary = false, string knownId = "")
     {
         return new DisplayPathSnapshot
         {
+            KnownPhysicalDisplayId = knownId,
             Identity = new DisplayIdentity
             {
                 MonitorDevicePath = path,
@@ -390,6 +438,19 @@ public sealed class DisplayTransitionServiceTests
         public Task<DisplayLayoutSnapshot> CaptureCurrentLayoutAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(Current);
+        }
+    }
+
+    private sealed class FakeDisplayStabilizationService : IDisplayDiscoveryStabilizationService
+    {
+        public DisplayDiscoveryState State { get; set; } = DisplayDiscoveryState.Ready;
+        public int WaitCount { get; private set; }
+
+        public Task WaitForSettledAsync(CancellationToken cancellationToken = default)
+        {
+            WaitCount++;
+            State = DisplayDiscoveryState.Ready;
+            return Task.CompletedTask;
         }
     }
 
