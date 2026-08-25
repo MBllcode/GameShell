@@ -19,6 +19,7 @@ type DisplaysStepProps = {
   validationState: DisplayValidationState;
   onValidationStateChange: (state: DisplayValidationState) => void;
   isRefreshingDisplays: boolean;
+  isDisplaySettling: boolean;
   displayListError: string | null;
   refreshDisplays: () => Promise<void>;
   displayMode?: 'gaming' | 'work';
@@ -37,6 +38,7 @@ export function DisplaysStep({
   validationState,
   onValidationStateChange,
   isRefreshingDisplays,
+  isDisplaySettling,
   displayListError,
   refreshDisplays,
   displayMode = 'gaming',
@@ -193,6 +195,7 @@ export function DisplaysStep({
           </div>
         </div>
         {displayMode !== 'work' && validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">{t('profile.nameRequired')}</div> : null}
+        {isDisplaySettling ? <div className="display-settling-status" role="status" aria-live="polite"><span className="display-settling-spinner" aria-hidden="true" /> <span>{t('profile.displaySynchronizing')}</span></div> : null}
         {displayListError ? <p className="error-line display-error">{displayListError}</p> : null}
         {actionError ? <p className="error-line display-error">{actionError}</p> : null}
         <div className={`display-topology-layout ${topology.displays.length === 0 ? 'is-empty' : ''}`}>

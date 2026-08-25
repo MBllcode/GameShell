@@ -23,7 +23,6 @@ export type DashboardPageProps = {
   globalWorkModeHotkey: string;
   isModeSwitching: boolean;
   isRemovingProfile: boolean;
-  activeModeAction: string | null;
   message: string;
   hasError: boolean;
   runModeCommand: (command: ModeCommand, saveBeforeRun?: boolean, payload?: unknown) => Promise<void>;
@@ -45,7 +44,6 @@ export function DashboardPage({
   globalWorkModeHotkey,
   isModeSwitching,
   isRemovingProfile,
-  activeModeAction,
   message,
   hasError,
   runModeCommand,

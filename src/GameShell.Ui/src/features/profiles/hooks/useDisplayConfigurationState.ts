@@ -9,6 +9,7 @@ type Options = {
 export function useDisplayConfigurationState({ selectedProfileName }: Options) {
   const [displays, setDisplays] = useState<DisplayDeviceInfo[]>([]);
   const [isRefreshingDisplays, setIsRefreshingDisplays] = useState(false);
+  const [isDisplaySettling, setIsDisplaySettling] = useState(false);
   const [displayListError, setDisplayListError] = useState<string | null>(null);
   const [selectedConsoleDisplay, setSelectedConsoleDisplay] = useState<DisplayIdentity | null>(null);
   const [selectedConsoleDisplays, setSelectedConsoleDisplays] = useState<DisplayIdentity[]>([]);
@@ -30,6 +31,8 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
     setDisplays,
     isRefreshingDisplays,
     setIsRefreshingDisplays,
+    isDisplaySettling,
+    setIsDisplaySettling,
     displayListError,
     setDisplayListError,
     selectedConsoleDisplay,

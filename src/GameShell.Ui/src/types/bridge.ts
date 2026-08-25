@@ -31,6 +31,18 @@ export type BridgeCommand =
 
 export type ModeState = 'Unknown' | 'WorkMode' | 'GameShell' | 'SwitchingToConsole' | 'SwitchingToWork' | 'Error';
 
+export type TransientOperationKind = 'None' | 'Startup' | 'EnterProfile' | 'ExitToWorkMode' | 'DisplayDiscovery' | 'DisplayTransition' | 'LauncherStartup';
+export type TransientOperationPhase = 'None' | 'PreparingDisplays' | 'ApplyingDisplayTopology' | 'SynchronizingDisplays' | 'StartingLauncher' | 'ActivatingLauncher' | 'RestoringDisplays' | 'RestoringDesktop' | 'Completed' | 'Failed';
+
+export interface TransientOperationState {
+  kind: TransientOperationKind;
+  phase: TransientOperationPhase;
+  isActive: boolean;
+  messageKey: string | null;
+  startedAt: string | null;
+  transitionId: string | null;
+}
+
 export interface AppStatus {
   state: ModeState;
   currentMode: string | null;
@@ -44,6 +56,7 @@ export interface AppStatus {
   lastOperation: string | null;
   lastOperationDurationMs: number | null;
   lastError: string | null;
+  transientOperation: TransientOperationState;
   settingsPath: string;
 }
 
@@ -70,6 +83,7 @@ export interface DisplayCapabilitySnapshot {
 
 export type DisplayCatalogState = 'Current' | 'Degraded' | 'InactiveObservation' | 'Unavailable' | 'IdentityConflict';
 export type DisplayCapabilityState = 'UnknownUntilActive' | 'Available';
+export type DisplayDiscoveryState = 'Idle' | 'Loading' | 'Settling' | 'Ready' | 'Error';
 
 export interface CurrentDisplayObservation {
   identity: DisplayIdentity;

@@ -1,4 +1,4 @@
-import type { AppStatus } from '../types/bridge';
+import type { AppStatus, TransientOperationState } from '../types/bridge';
 
 type ModeCommand = 'enterGameShell' | 'enterGameShellWithProfile' | 'enterWorkMode';
 
@@ -47,4 +47,23 @@ export function formatCommandTargetMode(command: ModeCommand, t?: TranslationLik
     case 'enterGameShellWithProfile': return t ? t('status.gamingProfile') : 'Gaming profile';
     case 'enterWorkMode': return t ? t('status.workMode') : 'Work Mode';
   }
+}
+
+export function formatTransientOperation(
+  operation: TransientOperationState | null | undefined,
+  t?: TranslationLike
+) {
+  if (!operation?.isActive) return '';
+
+  const keyByPhase: Record<string, string> = {
+    PreparingDisplays: 'status.transient.preparingDisplays',
+    ApplyingDisplayTopology: 'status.transient.applyingDisplayTopology',
+    SynchronizingDisplays: 'status.transient.synchronizingDisplays',
+    StartingLauncher: 'status.transient.startingLauncher',
+    ActivatingLauncher: 'status.transient.activatingLauncher',
+    RestoringDisplays: 'status.transient.restoringDisplays',
+    RestoringDesktop: 'status.transient.restoringDesktop'
+  };
+  const key = operation.messageKey || keyByPhase[operation.phase];
+  return key && t ? t(key) : key || '';
 }

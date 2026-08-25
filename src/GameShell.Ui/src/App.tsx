@@ -19,12 +19,15 @@ import { normalizeGamingProfileName } from './features/profiles/utils';
 import { areTopologiesEqual, getProfileTopology, normalizeCanvasTopology, topologyFromLegacy, topologyToLegacy } from './utils/displays';
 import { createSettingsComparisonKey } from './features/settings/settingsComparison';
 import { resolveWorkingProfileName } from './features/setup/setupRouting';
+import { formatTransientOperation } from './utils/status';
+import { useTranslation } from 'react-i18next';
 
 const FOOTNOTE_ERROR_DURATION_MS = 6000;
 
 export function App() {
+  const { t } = useTranslation();
   const runtimeState = useAppRuntimeState();
-  const { status, setStatus, settings, setSettings, isRemovingProfile, setIsRemovingProfile, activeModeAction, setActiveModeAction } = runtimeState;
+  const { status, setStatus, settings, setSettings, isRemovingProfile, setIsRemovingProfile } = runtimeState;
   const setupState = useSetupWorkflowState();
   const { stepIndex, setStepIndex, message, setMessage, setTransientMessage, error, setError, isSaving, setIsSaving, isInitialLoading, setIsInitialLoading, setupMode, setSetupMode, isHydrated, setIsHydrated, bootstrapRoute, setBootstrapRoute, editingProfileId, setEditingProfileId, isSetupComplete, setIsSetupComplete, hasAdvancedInCreateProfileFlow, setHasAdvancedInCreateProfileFlow, hasUnsavedChanges, setHasUnsavedChanges, pendingNavigationAction, setPendingNavigationAction, showUnsavedDialog, setShowUnsavedDialog, showOverwriteProfileDialog, setShowOverwriteProfileDialog, pendingOverwriteProfileAction, setPendingOverwriteProfileAction, displayProfileDraft, displayValidationState, setDisplayValidationState, displayProfileDraftRef, pendingSettingsOverrideRef, syncDisplayProfileDraft, markUnsavedChanges, handleDisplayDraftChange, handleDisplayValidationStateChange } = setupState;
   const isVeryFirstConfiguration = setupMode === 'FirstRun';
@@ -34,7 +37,7 @@ export function App() {
   const persistedSettingsBaselineRef = useRef<string | null>(null);
   const workingProfileName = resolveWorkingProfileName(setupMode, displayProfileDraft.profileName, selectedGamingBehaviourProfileName);
   const displayState = useDisplayConfigurationState({ selectedProfileName: selectedGamingBehaviourProfileName });
-  const { displays, setDisplays, isRefreshingDisplays, setIsRefreshingDisplays, displayListError, setDisplayListError, selectedConsoleDisplay, setSelectedConsoleDisplay, selectedConsoleDisplays, setSelectedConsoleDisplays, gamingLayout, setGamingLayout, workModeLayout, setWorkModeLayout, gamingProfiles, setGamingProfiles, activeGamingProfileName, setActiveGamingProfileName, gamingProfileBehaviours, setGamingProfileBehaviours, gamingProfileLaunchers, setGamingProfileLaunchers, gamingProfileHotkeys, setGamingProfileHotkeys, gamingProfileControllerShortcuts, setGamingProfileControllerShortcuts, workModeControllerShortcut, setWorkModeControllerShortcut, profileHotkeyValidationError, setProfileHotkeyValidationError, profileControllerValidationError, setProfileControllerValidationError } = displayState;
+  const { displays, setDisplays, isRefreshingDisplays, setIsRefreshingDisplays, setIsDisplaySettling, displayListError, setDisplayListError, selectedConsoleDisplay, setSelectedConsoleDisplay, selectedConsoleDisplays, setSelectedConsoleDisplays, gamingLayout, setGamingLayout, workModeLayout, setWorkModeLayout, gamingProfiles, setGamingProfiles, activeGamingProfileName, setActiveGamingProfileName, gamingProfileBehaviours, setGamingProfileBehaviours, gamingProfileLaunchers, setGamingProfileLaunchers, gamingProfileHotkeys, setGamingProfileHotkeys, gamingProfileControllerShortcuts, setGamingProfileControllerShortcuts, workModeControllerShortcut, setWorkModeControllerShortcut, profileHotkeyValidationError, setProfileHotkeyValidationError, profileControllerValidationError, setProfileControllerValidationError } = displayState;
   const formState = useSettingsFormState();
   const { hotkeys, setHotkeys, launcher, setLauncher, language, setLanguage, consoleBehaviour, setConsoleBehaviour, gamingBehaviour, setGamingBehaviour, workBehaviour, setWorkBehaviour, finishOptions, setFinishOptions } = formState;
 
@@ -139,7 +142,7 @@ export function App() {
     controllerCapture
   });
   const { activeSteps, activeStepIndexes, currentStep, resolvedFlowPosition, isNonFirstRunEditingSession, isLastStep, canGoBack } = flow;
-  const isModeSwitching = activeModeAction !== null;
+  const isModeSwitching = status.isBusy || Boolean(status.transientOperation?.isActive);
 
   useEffect(() => {
     if (!error && !status.lastError) return;
@@ -154,7 +157,8 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [error, setError, setStatus, status.lastError]);
 
-  const footerMessage = error || status.lastError || message;
+  const transientMessage = formatTransientOperation(status.transientOperation, t);
+  const footerMessage = transientMessage || error || status.lastError || message;
   const canSelectSidebarStep = !isVeryFirstConfiguration && !isSaving;
   const handleWorkModeDraftChange = useCallback((topology: Parameters<typeof topologyToLegacy>[0]) => {
     setWorkModeLayout(topologyToLegacy(topology, displays));
@@ -220,6 +224,8 @@ export function App() {
     setMessage,
     applyControllerStatus: controllerCapture.applyStatus,
     setDisplays,
+    setDisplaySettling: setIsDisplaySettling,
+    setIsRefreshingDisplays,
     setDisplayListError,
     setInitialLoading: setIsInitialLoading
   });
@@ -301,7 +307,6 @@ export function App() {
     globalWorkModeHotkey: hotkeys.workMode,
     isModeSwitching,
     isRemovingProfile,
-    activeModeAction,
     message: footerMessage,
     hasError: Boolean(error || status.lastError),
     hasUnsavedChanges,
@@ -313,7 +318,6 @@ export function App() {
     profileControllerShortcuts: gamingProfileControllerShortcuts,
     saveCurrentSettings,
     setStatus,
-    setActiveModeAction,
     setIsRemovingProfile,
     setActiveProfileName: setActiveGamingProfileName,
     setSelectedProfileName: setSelectedGamingBehaviourProfileName,

@@ -14,6 +14,14 @@ export const initialStatus: AppStatus = {
   lastOperation: null,
   lastOperationDurationMs: null,
   lastError: null,
+  transientOperation: {
+    kind: 'None',
+    phase: 'None',
+    isActive: false,
+    messageKey: null,
+    startedAt: null,
+    transitionId: null
+  },
   settingsPath: ''
 };
 
@@ -21,16 +29,12 @@ export function useAppRuntimeState() {
   const [status, setStatus] = useState<AppStatus>(initialStatus);
   const [settings, setSettings] = useState<import('../../../types/bridge').AppSettings | null>(null);
   const [isRemovingProfile, setIsRemovingProfile] = useState(false);
-  const [activeModeAction, setActiveModeAction] = useState<string | null>(null);
-
   return {
     status,
     setStatus,
     settings,
     setSettings,
     isRemovingProfile,
-    setIsRemovingProfile,
-    activeModeAction,
-    setActiveModeAction
+    setIsRemovingProfile
   };
 }

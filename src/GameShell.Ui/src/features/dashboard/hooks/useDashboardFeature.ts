@@ -23,7 +23,6 @@ type Options = {
   globalWorkModeHotkey: string;
   isModeSwitching: boolean;
   isRemovingProfile: boolean;
-  activeModeAction: string | null;
   message: string;
   hasError: boolean;
   hasUnsavedChanges: boolean;
@@ -34,7 +33,6 @@ type Options = {
   profileControllerShortcuts: GamingProfileControllerShortcutMap;
   saveCurrentSettings: (isFirstRunCompleted?: boolean, overrides?: SettingsPayloadOverrides) => Promise<unknown>;
   setStatus: Dispatch<SetStateAction<AppStatus>>;
-  setActiveModeAction: (value: string | null) => void;
   setIsRemovingProfile: (value: boolean) => void;
   setActiveProfileName: (value: string | null) => void;
   setSelectedProfileName: (value: string) => void;
@@ -70,7 +68,6 @@ export function useDashboardFeature(options: Options) {
     profileControllerShortcuts: options.profileControllerShortcuts,
     saveCurrentSettings: options.saveCurrentSettings,
     setStatus: options.setStatus,
-    setActiveModeAction: options.setActiveModeAction,
     setIsRemovingProfile: options.setIsRemovingProfile,
     setActiveProfileName: options.setActiveProfileName,
     setSelectedProfileName: options.setSelectedProfileName,
@@ -112,7 +109,6 @@ export function useDashboardFeature(options: Options) {
       globalWorkModeHotkey: options.globalWorkModeHotkey,
       isModeSwitching: options.isModeSwitching,
       isRemovingProfile: options.isRemovingProfile,
-      activeModeAction: options.activeModeAction,
       message: options.message,
       hasError: options.hasError
     },

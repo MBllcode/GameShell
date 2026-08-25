@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand, subscribeBridgeEvent } from '../services/webViewBridge';
-import type { AppSettings, AppStatus, ControllerStatusInfo, DisplayDeviceInfo } from '../types/bridge';
+import type { AppSettings, AppStatus, ControllerStatusInfo, DisplayDeviceInfo, DisplayDiscoveryState } from '../types/bridge';
 
 export function useGameShellBridge({
   onStatus,
   onSettings,
   onDisplays,
   onDisplayError,
+  onDisplayDiscoveryState,
   onControllerStatus,
   onError,
   onInitialLoadingChange
@@ -17,14 +18,15 @@ export function useGameShellBridge({
   onSettings: (settings: AppSettings) => void;
   onDisplays: (displays: DisplayDeviceInfo[]) => void;
   onDisplayError: (message: string) => void;
+  onDisplayDiscoveryState: (state: DisplayDiscoveryState) => void;
   onControllerStatus: (status: ControllerStatusInfo) => void;
   onError: (message: string) => void;
   onInitialLoadingChange: (isLoading: boolean) => void;
   onHydrationComplete: () => void;
 }) {
   const { t } = useTranslation();
-  const callbacksRef = useRef({ onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete });
-  callbacksRef.current = { onStatus, onSettings, onDisplays, onDisplayError, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete };
+  const callbacksRef = useRef({ onStatus, onSettings, onDisplays, onDisplayError, onDisplayDiscoveryState, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete });
+  callbacksRef.current = { onStatus, onSettings, onDisplays, onDisplayError, onDisplayDiscoveryState, onControllerStatus, onError, onInitialLoadingChange, onHydrationComplete };
 
   useEffect(() => {
     let isMounted = true;
@@ -78,6 +80,19 @@ export function useGameShellBridge({
       callbacksRef.current.onError(reason instanceof Error ? reason.message : t('bridge.statusRefreshError'));
     }
   }), []);
+
+  useEffect(() => subscribeBridgeEvent('displayDiscoveryChanged', async (eventData) => {
+    const event = eventData as { state?: DisplayDiscoveryState };
+    const state = event.state;
+    if (!state) return;
+    callbacksRef.current.onDisplayDiscoveryState(state);
+    if (state !== 'Ready') return;
+    try {
+      callbacksRef.current.onDisplays(await sendBridgeCommand<DisplayDeviceInfo[]>('getDisplays'));
+    } catch (reason: unknown) {
+      callbacksRef.current.onDisplayError(reason instanceof Error ? reason.message : t('bridge.displayReadError'));
+    }
+  }), [t]);
 
   useEffect(() => {
     let isDisposed = false;

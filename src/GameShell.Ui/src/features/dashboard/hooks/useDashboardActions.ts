@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { sendBridgeCommand } from '../../../services/webViewBridge';
-import { formatCommandTargetMode } from '../../../utils/status';
-import { getModeActionKey, type ModeCommand } from '../../../utils/modes';
+import { type ModeCommand } from '../../../utils/modes';
 import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot, ModeResult } from '../../../types/bridge';
 import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
@@ -18,7 +17,6 @@ type Options = {
   profileControllerShortcuts: GamingProfileControllerShortcutMap;
   saveCurrentSettings: (isFirstRunCompleted?: boolean, overrides?: SettingsPayloadOverrides) => Promise<unknown>;
   setStatus: (value: AppStatus | ((current: AppStatus) => AppStatus)) => void;
-  setActiveModeAction: (value: string | null) => void;
   setIsRemovingProfile: (value: boolean) => void;
   setActiveProfileName: (value: string | null) => void;
   setSelectedProfileName: (value: string) => void;
@@ -30,15 +28,14 @@ type Options = {
 
 export function useDashboardActions(options: Options) {
   const { t } = useTranslation();
-  const { hasUnsavedChanges, isSetupComplete, selectedProfileName, profiles, activeProfileName, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, saveCurrentSettings, setStatus, setActiveModeAction, setIsRemovingProfile, setActiveProfileName, setSelectedProfileName, setLayout, setError, setMessage, setTransientMessage } = options;
+  const { hasUnsavedChanges, isSetupComplete, selectedProfileName, profiles, activeProfileName, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, saveCurrentSettings, setStatus, setIsRemovingProfile, setActiveProfileName, setSelectedProfileName, setLayout, setError, setMessage, setTransientMessage } = options;
 
   async function runModeCommand(command: ModeCommand, saveBeforeRun = false, payload?: unknown) {
-    setActiveModeAction(getModeActionKey(command)); setError(null); setMessage(t('dashboard.switchingTo', { mode: formatCommandTargetMode(command, t) }));
+    setError(null);
     try {
       if (saveBeforeRun || hasUnsavedChanges) await saveCurrentSettings(isSetupComplete);
       const modeResult = await sendBridgeCommand<ModeResult>(command, payload);
       if (!modeResult.success) {
-        setMessage('');
         setError(modeResult.message || t('dashboard.runModeError'));
         return;
       }
@@ -70,19 +67,12 @@ export function useDashboardActions(options: Options) {
           }
         }
       }
-      const completionMessage = modeResult?.status === 'NoChanges'
-        ? t('dashboard.profileAlreadyActive')
-        : command === 'enterWorkMode'
-        ? t('dashboard.enterWorkModeCompleted')
-        : command === 'enterGameShellWithProfile'
-          ? t('dashboard.enterGamingProfileCompleted')
-          : t('dashboard.enterGamingModeCompleted');
-      setTransientMessage(completionMessage);
+      if (modeResult?.status === 'NoChanges') {
+        setTransientMessage(t('dashboard.profileAlreadyActive'));
+      }
     } catch (reason: unknown) {
-      setMessage('');
       setError(reason instanceof Error ? reason.message : t('dashboard.runModeError'));
     }
-    finally { setActiveModeAction(null); }
   }
 
   async function deleteSelectedProfile() {

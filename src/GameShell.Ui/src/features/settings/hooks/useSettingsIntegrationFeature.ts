@@ -53,6 +53,8 @@ type Options = BuildSettingsPayloadState & {
   setMessage: (value: string) => void;
   applyControllerStatus: (value: ControllerStatusInfo) => void;
   setDisplays: (value: DisplayDeviceInfo[]) => void;
+  setDisplaySettling: (value: boolean) => void;
+  setIsRefreshingDisplays: (value: boolean) => void;
   setDisplayListError: (value: string) => void;
   setInitialLoading: (value: boolean) => void;
 };
@@ -110,6 +112,14 @@ export function useSettingsIntegrationFeature(options: Options) {
     },
     onDisplays: options.setDisplays,
     onDisplayError: options.setDisplayListError,
+    onDisplayDiscoveryState: (state) => {
+      options.setDisplaySettling(state === 'Settling');
+      if (state === 'Settling') {
+        options.setIsRefreshingDisplays(true);
+      } else if (state === 'Ready' || state === 'Error') {
+        options.setIsRefreshingDisplays(false);
+      }
+    },
     onControllerStatus: options.applyControllerStatus,
     onError: options.setError,
     onInitialLoadingChange: options.setInitialLoading

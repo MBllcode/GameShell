@@ -82,6 +82,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
       displayDraftChange: setupState.handleDisplayDraftChange,
       setDisplayValidationState: setupState.handleDisplayValidationStateChange,
       isRefreshingDisplays: displayState.isRefreshingDisplays,
+      isDisplaySettling: displayState.isDisplaySettling,
       displayListError: displayState.displayListError,
       refreshDisplays: displayWorkflow.refreshDisplays,
       gamingLayout: displayState.gamingLayout,
