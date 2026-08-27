@@ -81,6 +81,36 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public async Task LoadAsync_MigratesLegacyStartupProfileNameToStableProfileId()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        await File.WriteAllTextAsync(settingsPath, """
+            {
+              "display": {
+                "gamingProfiles": [
+                  { "name": "CONSOLE", "layout": { "displays": [] } }
+                ]
+              },
+              "startup": {
+                "startupBehavior": "AlwaysProfile",
+                "startupProfileId": "CONSOLE"
+              }
+            }
+            """);
+
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+
+        var settings = await service.LoadAsync();
+        var profile = Assert.Single(settings.Display.GamingProfiles);
+        var persistedJson = await File.ReadAllTextAsync(settingsPath);
+
+        Assert.False(string.IsNullOrWhiteSpace(profile.Id));
+        Assert.Equal(profile.Id, settings.Startup.StartupProfileId);
+        Assert.Contains("\"id\"", persistedJson, StringComparison.Ordinal);
+        Assert.Contains(profile.Id!, persistedJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NewSettings_DisableControllerByDefault()
     {
         var settings = AppSettingsValidator.Validate(new AppSettings());
@@ -151,6 +181,62 @@ public sealed class SettingsServiceTests
         Assert.Equal("SALON", profile.Name);
         Assert.Equal("SALON", configuration.ProfileName);
         Assert.Equal("SALON", validated.Display.ActiveGamingProfileName);
+    }
+
+    [Fact]
+    public void Validate_AssignsStableProfileIdAndMigratesStartupNameReference()
+    {
+        var settings = new AppSettings
+        {
+            Startup = new StartupSettings
+            {
+                StartupBehavior = StartupBehavior.AlwaysProfile,
+                StartupProfileId = "salon"
+            },
+            Display = new DisplaySettings
+            {
+                GamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Name = "salon",
+                        Layout = new DisplayLayoutSnapshot()
+                    }
+                ]
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        var profile = Assert.Single(validated.Display.GamingProfiles);
+        Assert.False(string.IsNullOrWhiteSpace(profile.Id));
+        Assert.Equal(profile.Id, validated.Startup.StartupProfileId);
+    }
+
+    [Fact]
+    public void Validate_PreservesProfileIdWhenProfileIsRenamed()
+    {
+        var settings = new AppSettings
+        {
+            Display = new DisplaySettings
+            {
+                GamingProfiles =
+                [
+                    new DisplayLayoutProfile
+                    {
+                        Id = "stable-profile-id",
+                        Name = "old name",
+                        Layout = new DisplayLayoutSnapshot()
+                    }
+                ]
+            }
+        };
+
+        var validated = AppSettingsValidator.Validate(settings);
+
+        var profile = Assert.Single(validated.Display.GamingProfiles);
+        Assert.Equal("stable-profile-id", profile.Id);
+        Assert.Equal("OLD NAME", profile.Name);
     }
 
     [Fact]
@@ -663,6 +749,31 @@ public sealed class SettingsServiceTests
         Assert.False(loaded.Ui.CloseToTray);
         Assert.True(loaded.Ui.IsFirstRunCompleted);
         Assert.Equal("LATEST", Assert.Single(loaded.Display.GamingProfiles).Name);
+    }
+
+    [Fact]
+    public async Task LoadAsync_PreservesLegacyConsoleShellCompatibilitySetting()
+    {
+        var settingsPath = CreateTempSettingsPath();
+        await File.WriteAllTextAsync(settingsPath, """
+            {
+              "startup": {
+                "consoleShellModeEnabled": true,
+                "closeExplorerWhenEnteringGamingProfileInShellMode": false
+              }
+            }
+            """);
+
+        var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
+        var loaded = await service.LoadAsync();
+
+        Assert.True(loaded.Startup.ConsoleShellModeEnabled);
+        Assert.False(loaded.Startup.CloseExplorerWhenEnteringGamingProfileInShellMode);
+
+        await service.SaveAsync(loaded);
+        var reloaded = await new SettingsService(NullLogger<SettingsService>.Instance, settingsPath).LoadAsync();
+
+        Assert.False(reloaded.Startup.CloseExplorerWhenEnteringGamingProfileInShellMode);
     }
 
     [Fact]

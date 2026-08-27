@@ -18,6 +18,7 @@ artifacts\installer\GameShell.exe
 - Native display control through Windows DisplayConfig APIs (`QueryDisplayConfig`, `SetDisplayConfig`).
 - Tray menu + global hotkeys + single-instance command forwarding.
 - Per-profile launcher, mode behavior, and shortcut configuration in the UI wizard/dashboard.
+- Optional, disabled-by-default Console Shell Mode on editions that support Microsoft's per-user Custom User Interface policy; see [docs/console-shell-mode.md](docs/console-shell-mode.md).
 
 ### Display identity and capability model
 

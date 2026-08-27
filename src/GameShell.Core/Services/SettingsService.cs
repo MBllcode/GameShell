@@ -255,7 +255,10 @@ public sealed class SettingsService : ISettingsService
             var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? new AppSettings();
             var remoteControlWasInitialized = EnsureRemoteControlDefaults(settings);
-            var wasMigrated = remoteControlWasInitialized || AppSettingsValidator.HasLegacyCapabilityData(settings);
+            var wasMigrated = remoteControlWasInitialized
+                || AppSettingsValidator.HasLegacyCapabilityData(settings)
+                || AppSettingsValidator.HasLegacyProfileIds(settings)
+                || AppSettingsValidator.HasLegacyStartupProfileReference(settings);
             var knownDisplaysBeforeValidation = settings.Display.KnownPhysicalDisplays
                 .Select(known => (known.Id, known.CanonicalFriendlyName, known.PhysicalIdentity))
                 .ToList();

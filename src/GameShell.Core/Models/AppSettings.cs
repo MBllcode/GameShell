@@ -37,6 +37,11 @@ public sealed class DisplaySettings
 
 public sealed class DisplayLayoutProfile
 {
+    /// <summary>
+    /// Stable profile identity used by startup/runtime references. The nullable
+    /// shape keeps older settings files loadable; validation assigns an ID.
+    /// </summary>
+    public string? Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public DisplayLayoutSnapshot Layout { get; set; } = new();
     public GamingProfileDisplayTopology? DisplayTopology { get; set; }
@@ -196,6 +201,24 @@ public sealed class StartupSettings
     public bool StartMinimizedToTray { get; set; }
     public bool CreateStartMenuShortcut { get; set; } = true;
     public bool CreateDesktopShortcut { get; set; }
+    public bool ConsoleShellModeEnabled { get; set; }
+    public StartupBehavior StartupBehavior { get; set; } = StartupBehavior.AlwaysWorkMode;
+    public string? StartupProfileId { get; set; }
+    // Retained for settings compatibility; this legacy option is no longer
+    // exposed in the UI.
+    public bool CloseExplorerWhenEnteringGamingProfileInShellMode { get; set; } = true;
+}
+
+/// <summary>
+/// Selects the target GameShell converges to after sign-in. AlwaysWorkMode is
+/// intentionally zero/default so settings created before Console Shell Mode
+/// retain the historical Work Mode startup behavior.
+/// </summary>
+public enum StartupBehavior
+{
+    AlwaysWorkMode = 0,
+    RestoreLastActiveMode = 1,
+    AlwaysProfile = 2
 }
 
 public sealed class UiSettings
@@ -207,4 +230,6 @@ public sealed class UiSettings
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }
     public double? WindowHeight { get; set; }
+    public double? WindowDpiScaleX { get; set; }
+    public double? WindowDpiScaleY { get; set; }
 }

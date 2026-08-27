@@ -20,6 +20,7 @@ public sealed class StartupReconciliationService
     private readonly IDisplayDiscoveryStabilizationService _displayDiscoveryStabilizationService;
     private readonly ILogger<StartupReconciliationService> _logger;
     private readonly ITransientOperationStateService? _transientOperationStateService;
+    private readonly StartupTargetResolver _startupTargetResolver;
 
     public StartupReconciliationService(
         IRuntimeStateService runtimeStateService,
@@ -27,7 +28,8 @@ public sealed class StartupReconciliationService
         IDisplayQueryService displayQueryService,
         IDisplayDiscoveryStabilizationService displayDiscoveryStabilizationService,
         ILogger<StartupReconciliationService> logger,
-        ITransientOperationStateService? transientOperationStateService = null)
+        ITransientOperationStateService? transientOperationStateService = null,
+        StartupTargetResolver? startupTargetResolver = null)
     {
         _runtimeStateService = runtimeStateService;
         _consoleSessionManager = consoleSessionManager;
@@ -35,17 +37,75 @@ public sealed class StartupReconciliationService
         _displayDiscoveryStabilizationService = displayDiscoveryStabilizationService;
         _logger = logger;
         _transientOperationStateService = transientOperationStateService;
+        _startupTargetResolver = startupTargetResolver ?? new StartupTargetResolver();
+    }
+
+    /// <summary>
+    /// Activates the one startup target resolved for the current process. Work
+    /// uses the existing bounded reconciliation path; gaming targets use the
+    /// existing session pipeline after the same stable-discovery gate.
+    /// </summary>
+    public async Task<ModeResult?> ActivateTargetAsync(
+        AppSettings settings,
+        StartupTarget target,
+        CancellationToken cancellationToken = default)
+    {
+        if (target.Kind == StartupTargetKind.Work)
+        {
+            return await ReconcileAsync(
+                settings,
+                explicitGamingStartup: false,
+                cancellationToken,
+                forceWorkTarget: true);
+        }
+
+        try
+        {
+            await _displayDiscoveryStabilizationService
+                .WaitForStableAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            return new ModeResult
+            {
+                Status = ModeResultStatus.TimedOut,
+                CurrentState = ModeState.Error,
+                Message = "StartupDisplayDiscoveryTimeout"
+            };
+        }
+
+        if (target.Kind == StartupTargetKind.Console)
+        {
+            return await _consoleSessionManager.EnterConsoleAsync(cancellationToken);
+        }
+
+        var profileName = _startupTargetResolver.ResolveProfileName(settings, target.ProfileId);
+        if (string.IsNullOrWhiteSpace(profileName))
+        {
+            _logger.LogWarning(
+                "[STARTUP TARGET] Behavior=AlwaysProfile ConfiguredProfileId={ConfiguredProfileId} Result=FallbackToWork Reason=ProfileUnavailable",
+                target.ProfileId ?? "null");
+            return new ModeResult
+            {
+                Status = ModeResultStatus.InvalidConfiguration,
+                CurrentState = ModeState.Error,
+                Message = "StartupProfileUnavailable"
+            };
+        }
+
+        return await _consoleSessionManager.EnterProfileAsync(profileName, cancellationToken);
     }
 
     public async Task<ModeResult?> ReconcileAsync(
         AppSettings settings,
         bool explicitGamingStartup,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool forceWorkTarget = false)
     {
         var session = _consoleSessionManager.GetSnapshot();
         var runtime = await _runtimeStateService.LoadAsync(cancellationToken);
 
-        if (explicitGamingStartup || IsRecoverableGamingState(runtime, session))
+        if (!forceWorkTarget && (explicitGamingStartup || IsRecoverableGamingState(runtime, session)))
         {
             _logger.LogInformation(
                 "[STARTUP RECONCILIATION] RuntimeMode={RuntimeMode} SessionState={SessionState} ActiveProfile={ActiveProfile} Result=PreserveGamingIntent",

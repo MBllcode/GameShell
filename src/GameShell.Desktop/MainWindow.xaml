@@ -10,7 +10,10 @@
         MinWidth="900"
         Width="1260"
         Background="#0E1116">
-    <Grid>
-        <wv2:WebView2 x:Name="WebView" />
+    <Grid Margin="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <wv2:WebView2 x:Name="WebView"
+                      Margin="0"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch" />
     </Grid>
 </Window>

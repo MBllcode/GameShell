@@ -15,6 +15,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     private readonly IWindowsWindowManagementService _windowManagementService;
     private readonly ILauncherProcessService _launcherProcessService;
     private readonly IDisplayTransitionStabilityGuard? _displayTransitionStabilityGuard;
+    private readonly IDesktopShellService? _desktopShellService;
 
     public NativeModeWorkflowService(
         ILogger<NativeModeWorkflowService> logger,
@@ -22,7 +23,8 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         IWindowsCursorService cursorService,
         IWindowsWindowManagementService windowManagementService,
         ILauncherProcessService launcherProcessService,
-        IDisplayTransitionStabilityGuard? displayTransitionStabilityGuard = null)
+        IDisplayTransitionStabilityGuard? displayTransitionStabilityGuard = null,
+        IDesktopShellService? desktopShellService = null)
     {
         _logger = logger;
         _runtimeStateService = runtimeStateService;
@@ -30,6 +32,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         _windowManagementService = windowManagementService;
         _launcherProcessService = launcherProcessService;
         _displayTransitionStabilityGuard = displayTransitionStabilityGuard;
+        _desktopShellService = desktopShellService;
     }
 
     public async Task<ModeWorkflowResult> PrepareGamingWorkflowAsync(
@@ -39,10 +42,22 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     {
         var warnings = new List<string>();
         var behaviour = mode == GameShellMode.GamingProfile ? settings.Gaming : settings.GameShell;
+        var explorerShellAvailable = !settings.Startup.ConsoleShellModeEnabled
+            || _desktopShellService?.IsExplorerShellRunning() == true;
+        var shellModeHideRequested = settings.Startup.ConsoleShellModeEnabled
+            && settings.Startup.CloseExplorerWhenEnteringGamingProfileInShellMode;
+
+        await TryStepAsync("prepare optional console shell", warnings, async () =>
+        {
+            if (_desktopShellService is not null)
+            {
+                await _desktopShellService.PrepareGamingAsync(settings, cancellationToken);
+            }
+        }, cancellationToken);
 
         await TryStepAsync("hide desktop icons", warnings, async () =>
         {
-            if (behaviour.HideDesktopIcons)
+            if (explorerShellAvailable && (behaviour.HideDesktopIcons || shellModeHideRequested))
             {
                 await RetryAsync(() => _windowManagementService.SetDesktopIconsVisible(false), cancellationToken);
             }
@@ -72,7 +87,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
 
         await TryStepAsync("hide taskbars", warnings, async () =>
         {
-            if (behaviour.HideTaskbar)
+            if (explorerShellAvailable && (behaviour.HideTaskbar || shellModeHideRequested))
             {
                 await RetryAsync(() => _windowManagementService.SetTaskbarsVisible(false), cancellationToken);
             }
@@ -266,6 +281,14 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         CancellationToken cancellationToken = default)
     {
         var warnings = new List<string>();
+
+        if (_desktopShellService is not null
+            && !await _desktopShellService.EnsureDesktopAsync(settings, cancellationToken))
+        {
+            return ModeWorkflowResult.Fail(
+                "Windows Explorer desktop did not become ready.",
+                "ExplorerDesktopUnavailable");
+        }
 
         await TryStepAsync("close launcher", warnings, async () =>
         {

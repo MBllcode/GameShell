@@ -1,18 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { LauncherType } from '../../../utils/modes';
+import type { FinishOptions } from '../../settings/hooks/useSettingsFormState';
 
 type WorkBehaviour = {
   closeLauncher: boolean;
   showTaskbars: boolean;
   showDesktopIcons: boolean;
   doNotMinimizeWindows: boolean;
-};
-
-type FinishOptions = {
-  startWithWindows: boolean;
-  startMinimized: boolean;
-  startMenuShortcut: boolean;
-  desktopShortcut: boolean;
 };
 
 type Options = {

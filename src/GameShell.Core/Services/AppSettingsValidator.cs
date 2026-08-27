@@ -5,7 +5,7 @@ namespace GameShell.Core.Services;
 
 public static class AppSettingsValidator
 {
-    public const int CurrentSettingsSchemaVersion = 4;
+    public const int CurrentSettingsSchemaVersion = 5;
 
     public static AppSettings Validate(AppSettings settings)
     {
@@ -22,6 +22,9 @@ public static class AppSettingsValidator
         settings.Controller ??= new ControllerSettings();
         settings.Hotkeys ??= new HotkeySettings();
         settings.Startup ??= new StartupSettings();
+        settings.Startup.StartupProfileId = string.IsNullOrWhiteSpace(settings.Startup.StartupProfileId)
+            ? null
+            : settings.Startup.StartupProfileId.Trim();
         settings.Ui ??= new UiSettings();
         settings.RemoteControl ??= new RemoteControlSettings();
         settings.RemoteControl.Port = Math.Clamp(settings.RemoteControl.Port, 1024, 65535);
@@ -47,6 +50,7 @@ public static class AppSettingsValidator
         ValidateControllerShortcut(settings.Controller.WorkMode);
 
         NormalizeGamingProfiles(settings.Display);
+        NormalizeStartupProfileReference(settings);
         KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings.Display);
         KnownPhysicalDisplayCatalogService.NormalizeCanonicalNames(settings.Display);
         NormalizeGamingProfileConfigurations(settings.Display, settings.Gaming, settings.Launcher, settings.Hotkeys);
@@ -61,6 +65,29 @@ public static class AppSettingsValidator
             || settings.Display?.KnownPhysicalDisplays?.Any(known => string.IsNullOrWhiteSpace(known.Id)) == true
             || settings.Display is not null
                 && KnownPhysicalDisplayCatalogService.HasKnownDisplayReconciliationCandidates(settings.Display);
+    }
+
+    public static bool HasLegacyProfileIds(AppSettings settings)
+    {
+        var profiles = settings.Display?.GamingProfiles ?? [];
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return profiles.Any(profile =>
+            string.IsNullOrWhiteSpace(profile.Id)
+            || !ids.Add(profile.Id));
+    }
+
+    public static bool HasLegacyStartupProfileReference(AppSettings settings)
+    {
+        if (settings.Startup?.StartupBehavior != StartupBehavior.AlwaysProfile
+            || string.IsNullOrWhiteSpace(settings.Startup.StartupProfileId))
+        {
+            return false;
+        }
+
+        var configured = settings.Startup.StartupProfileId;
+        return settings.Display?.GamingProfiles?.Any(profile =>
+            string.Equals(profile.Name, configured, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(profile.Id, configured, StringComparison.OrdinalIgnoreCase)) == true;
     }
 
     private static string NormalizeLanguage(string? value)
@@ -136,6 +163,7 @@ public static class AppSettingsValidator
     {
         var normalizedProfiles = new List<DisplayLayoutProfile>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var candidate in display.GamingProfiles.Where(profile => profile.Layout is not null))
         {
@@ -149,8 +177,19 @@ public static class AppSettingsValidator
                 uniqueName = $"{baseName} {suffix++}";
             }
 
+            var profileId = candidate.Id?.Trim();
+            if (string.IsNullOrWhiteSpace(profileId) || !usedIds.Add(profileId))
+            {
+                do
+                {
+                    profileId = Guid.NewGuid().ToString("N");
+                }
+                while (!usedIds.Add(profileId));
+            }
+
             normalizedProfiles.Add(new DisplayLayoutProfile
             {
+                Id = profileId,
                 Name = uniqueName,
                 Layout = candidate.Layout,
                 DisplayTopology = candidate.DisplayTopology
@@ -173,6 +212,26 @@ public static class AppSettingsValidator
         activeProfile ??= display.GamingProfiles[0];
         display.ActiveGamingProfileName = activeProfile.Name;
         display.GamingLayout = activeProfile.Layout;
+    }
+
+    private static void NormalizeStartupProfileReference(AppSettings settings)
+    {
+        if (settings.Startup.StartupBehavior != StartupBehavior.AlwaysProfile
+            || string.IsNullOrWhiteSpace(settings.Startup.StartupProfileId))
+        {
+            return;
+        }
+
+        var configured = settings.Startup.StartupProfileId;
+        var profile = settings.Display.GamingProfiles.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, configured, StringComparison.OrdinalIgnoreCase))
+            ?? settings.Display.GamingProfiles.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, configured, StringComparison.OrdinalIgnoreCase));
+
+        if (profile is not null && !string.IsNullOrWhiteSpace(profile.Id))
+        {
+            settings.Startup.StartupProfileId = profile.Id;
+        }
     }
 
     private static void NormalizeRefreshPolicies(GamingProfileDisplayTopology? topology)

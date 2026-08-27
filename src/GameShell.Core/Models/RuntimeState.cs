@@ -8,4 +8,9 @@ public sealed class RuntimeState
     public string LastRequestedMode { get; set; } = "Unknown";
     public DateTimeOffset? LastCompletedAt { get; set; }
     public string LastResult { get; set; } = "Unknown";
+    public string LastActiveMode { get; set; } = "Work";
+    public string? LastActiveProfileId { get; set; }
+    public DateTimeOffset? ShellStartupAttemptStarted { get; set; }
+    public DateTimeOffset? ShellStartupCompleted { get; set; }
+    public int ConsecutiveShellStartupFailures { get; set; }
 }

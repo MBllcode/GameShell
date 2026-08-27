@@ -25,6 +25,8 @@ export type BridgeCommand =
   | 'cancelControllerShortcutCapture'
   | 'acknowledgeControllerShortcutCapture'
   | 'getControllerStatus'
+  | 'getConsoleShellStatus'
+  | 'openGameBar'
   | 'enterGameShell'
   | 'enterGameShellWithProfile'
   | 'enterWorkMode';
@@ -188,6 +190,7 @@ export interface DisplayLayoutSnapshot {
 }
 
 export interface DisplayLayoutProfile {
+  id?: string | null;
   name: string;
   layout: DisplayLayoutSnapshot;
   displayTopology?: GamingProfileDisplayTopology | null;
@@ -332,6 +335,10 @@ export interface AppSettings {
     startMinimizedToTray: boolean;
     createStartMenuShortcut: boolean;
     createDesktopShortcut: boolean;
+    consoleShellModeEnabled: boolean;
+    startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile';
+    startupProfileId: string | null;
+    closeExplorerWhenEnteringGamingProfileInShellMode: boolean;
   };
   ui: {
     closeToTray: boolean;

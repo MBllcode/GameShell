@@ -157,6 +157,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 .ResolveBehaviour(settings.Display, settings.Gaming, profileName).CompletionDelaySeconds),
             runtimeMode: GameShellMode.GamingProfile,
             cancellationToken,
+            committedProfileId: profileName,
             preTransitionGate: async settings =>
             {
                 preparation = await _gamingProfileReadinessCoordinator.PrepareBeforeTransitionAsync(
@@ -196,6 +197,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         GameShellMode runtimeMode,
         CancellationToken cancellationToken,
         bool scriptFailureIsWarning = false,
+        string? committedProfileId = null,
         Func<AppSettings, Task<ModeResult?>>? preTransitionGate = null,
         Func<AppSettings, Task<ModeResult?>>? postTransitionGate = null)
     {
@@ -374,7 +376,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 if (scriptFailureIsWarning)
                 {
                     SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, message, runtimeMode);
-                    await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", cancellationToken);
+                    await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", cancellationToken, committedProfileId: committedProfileId);
 
                     return new ModeResult
                     {
@@ -407,7 +409,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
             stopwatch.Stop();
             SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, null, runtimeMode);
-            await SaveRuntimeResultAsync(runtimeMode, "Success", cancellationToken);
+            await SaveRuntimeResultAsync(runtimeMode, "Success", cancellationToken, committedProfileId: committedProfileId);
             _logger.LogInformation("{OperationName} [{TransitionId}] completed in {DurationMs} ms. CurrentState={CurrentState}.", operationName, transitionId, stopwatch.ElapsedMilliseconds, GetState());
 
             return new ModeResult
@@ -448,7 +450,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
             if (scriptFailureIsWarning && displayTransitionSucceeded)
             {
                 SetStatus(completedState, operationName, stopwatch.ElapsedMilliseconds, ex.Message, runtimeMode);
-                await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", CancellationToken.None);
+                await SaveRuntimeResultAsync(runtimeMode, "SuccessWithScriptWarning", CancellationToken.None, committedProfileId: committedProfileId);
                 _logger.LogWarning(ex, "WORK MODE TRANSITION [{TransitionId}] completed display transition but a later workflow step failed. ExceptionType={ExceptionType}, Message={Message}, InnerException={InnerException}.", transitionId, ex.GetType().FullName, ex.Message, ex.InnerException?.ToString() ?? "(none)");
 
                 return new ModeResult
@@ -517,7 +519,8 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         GameShellMode requestedMode,
         string result,
         CancellationToken cancellationToken,
-        GameShellMode? recoveredMode = null)
+        GameShellMode? recoveredMode = null,
+        string? committedProfileId = null)
     {
         var state = await _runtimeStateService.LoadAsync(cancellationToken);
         state.LastRequestedMode = requestedMode.ToString();
@@ -526,6 +529,24 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         if (result.StartsWith("Success", StringComparison.Ordinal))
         {
             state.CurrentMode = requestedMode;
+            state.LastActiveMode = requestedMode switch
+            {
+                GameShellMode.Work => "Work",
+                GameShellMode.Console => "Console",
+                _ => "Profile"
+            };
+            var persistedProfileId = requestedMode == GameShellMode.GamingProfile
+                ? _gamingProfileSettingsResolver.ResolveProfileId(
+                    (await _settingsService.LoadAsync(cancellationToken)).Display,
+                    committedProfileId)
+                : null;
+            state.LastActiveProfileId = requestedMode == GameShellMode.GamingProfile
+                ? persistedProfileId
+                : null;
+            _logger.LogInformation(
+                "[LAST ACTIVE MODE] Mode={Mode} ProfileId={ProfileId} Result=Persisted",
+                state.LastActiveMode,
+                state.LastActiveProfileId ?? "null");
         }
         else if (recoveredMode is not null)
         {

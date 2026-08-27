@@ -31,6 +31,16 @@ public sealed class GamingProfileRuntimeSettingsResolver
         return display.GamingProfiles.FirstOrDefault()?.Name;
     }
 
+    public string? ResolveProfileId(DisplaySettings display, string? requestedProfileName)
+    {
+        var profile = FindProfileByNameOrId(display, requestedProfileName)
+            ?? FindProfile(display, ResolveProfileName(display, requestedProfileName));
+
+        return profile is null
+            ? null
+            : string.IsNullOrWhiteSpace(profile.Id) ? profile.Name : profile.Id;
+    }
+
     public DisplayLayoutSnapshot? ResolveLayout(DisplaySettings display, string? requestedProfileName)
     {
         var profile = ResolveProfile(display, requestedProfileName);
@@ -104,6 +114,14 @@ public sealed class GamingProfileRuntimeSettingsResolver
         return string.IsNullOrWhiteSpace(profileName)
             ? null
             : display.GamingProfiles.FirstOrDefault(profile => NamesEqual(profile.Name, profileName));
+    }
+
+    private static DisplayLayoutProfile? FindProfileByNameOrId(DisplaySettings display, string? profileReference)
+    {
+        return string.IsNullOrWhiteSpace(profileReference)
+            ? null
+            : display.GamingProfiles.FirstOrDefault(profile =>
+                NamesEqual(profile.Name, profileReference) || NamesEqual(profile.Id, profileReference));
     }
 
     private static GamingProfileConfiguration? FindConfiguration(DisplaySettings display, string? profileName)

@@ -145,7 +145,10 @@ internal sealed class TrayHost : IDisposable
         _menu.Items.Add(profilesItem);
         _menu.Items.Add(new ToolStripSeparator());
 
-        var workModeItem = new ToolStripMenuItem(TrayMenuText.ReturnToWorkMode(language)) { Enabled = true };
+        var workModeItem = new ToolStripMenuItem(
+            _settings.Startup.ConsoleShellModeEnabled
+                ? TrayMenuText.OpenWindowsDesktop(language)
+                : TrayMenuText.ReturnToWorkMode(language)) { Enabled = true };
         workModeItem.Click += async (_, _) =>
         {
             _logger.LogInformation("Tray click: Work Mode");

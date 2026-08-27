@@ -87,17 +87,20 @@ public sealed class ModeOrchestratorTests
     public async Task EnterWorkMode_RunsCleanupBeforeDisplayRestoreAndPostWorkflow()
     {
         var order = new List<string>();
+        var runtime = new FakeRuntimeStateService(new RuntimeState { LastActiveMode = "Profile", LastActiveProfileId = "CONSOLE" });
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(new AppSettings()),
             new FakeModeWorkflowService(order),
             new FakeDisplayTransitionService(order),
-            new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.GamingProfile }),
+            runtime,
             NullLogger<ModeOrchestrator>.Instance);
 
         var result = await orchestrator.EnterWorkModeAsync();
 
         Assert.True(result.Success, result.Message);
         Assert.Equal(["prepare-work", "display-work", "post-work"], order);
+        Assert.Equal("Work", runtime.State.LastActiveMode);
+        Assert.Null(runtime.State.LastActiveProfileId);
     }
 
     [Fact]
@@ -124,6 +127,27 @@ public sealed class ModeOrchestratorTests
 
         Assert.True(result.Success, result.Message);
         Assert.Same(layout, display.WorkModeLayout);
+    }
+
+    [Fact]
+    public async Task EnterConsoleMode_SuccessPersistsCommittedConsoleTarget()
+    {
+        var runtime = new FakeRuntimeStateService(new RuntimeState
+        {
+            LastActiveMode = "Work"
+        });
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()),
+            new FakeModeWorkflowService(),
+            new FakeDisplayTransitionService(),
+            runtime,
+            NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterGameShellAsync();
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal("Console", runtime.State.LastActiveMode);
+        Assert.Null(runtime.State.LastActiveProfileId);
     }
 
     [Fact]
@@ -176,7 +200,12 @@ public sealed class ModeOrchestratorTests
     public async Task GamingDisplayFailureFromWork_RestoresTheFullWorkWorkflow()
     {
         var order = new List<string>();
-        var runtime = new FakeRuntimeStateService(new RuntimeState { CurrentMode = GameShellMode.Work });
+        var runtime = new FakeRuntimeStateService(new RuntimeState
+        {
+            CurrentMode = GameShellMode.Work,
+            LastActiveMode = "Profile",
+            LastActiveProfileId = "PC"
+        });
         var display = new FakeDisplayTransitionService(order)
         {
             ConsoleResult = DisplayTransitionResult.Fail("ApplyFailed", "display failed")
@@ -193,6 +222,8 @@ public sealed class ModeOrchestratorTests
         Assert.False(result.Success);
         Assert.Equal(["post-work"], order);
         Assert.Equal(GameShellMode.Work, runtime.State.CurrentMode);
+        Assert.Equal("Profile", runtime.State.LastActiveMode);
+        Assert.Equal("PC", runtime.State.LastActiveProfileId);
     }
 
     [Fact]
@@ -348,11 +379,12 @@ public sealed class ModeOrchestratorTests
         var display = new FakeDisplayTransitionService();
         var query = new FakeReadinessDisplayQuery();
         var evaluator = new GamingProfileTopologyReadinessEvaluator(query, NullLogger<GamingProfileTopologyReadinessEvaluator>.Instance);
+        var runtime = new FakeRuntimeStateService(new RuntimeState());
         var orchestrator = new ModeOrchestrator(
             new FakeSettingsService(settings),
             new FakeModeWorkflowService(),
             display,
-            new FakeRuntimeStateService(new RuntimeState()),
+            runtime,
             evaluator,
             NullLogger<ModeOrchestrator>.Instance);
 
@@ -366,6 +398,8 @@ public sealed class ModeOrchestratorTests
         Assert.Equal(1, display.GamingLayout.Displays[0].Identity.AdapterLuid);
         Assert.Equal((uint)7, display.GamingLayout.Displays[0].Identity.TargetId);
         Assert.Equal(144, settings.Display.KnownPhysicalDisplays.Single().BestKnownCapability!.MaxRefreshRateHz);
+        Assert.Equal("Profile", runtime.State.LastActiveMode);
+        Assert.Equal("KONSOLA", runtime.State.LastActiveProfileId);
     }
 
     [Fact]

@@ -49,6 +49,12 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        if (HasArgument(e.Args, "--disable-console-shell"))
+        {
+            await RunDisableConsoleShellCommandAsync();
+            return;
+        }
+
         _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var isFirstInstance);
         if (!isFirstInstance)
         {
@@ -75,15 +81,99 @@ public partial class App : System.Windows.Application
         _displayCapabilityDiagnostic = _serviceProvider.GetRequiredService<IDisplayCapabilityDiagnostic>();
         _gamingProfileSettingsResolver = _serviceProvider.GetRequiredService<GamingProfileRuntimeSettingsResolver>();
         var startupSettings = await _settingsService.LoadAsync();
+        var safeMode = HasArgument(e.Args, "--safe-mode");
+        var consoleShellStartup = HasArgument(e.Args, "--console-shell-startup");
 
         var startupStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var startupReconciliation = _serviceProvider.GetRequiredService<StartupReconciliationService>();
-            var reconciliationResult = await startupReconciliation.ReconcileAsync(
-                startupSettings,
-                explicitGamingStartup: GetCommandEventName(e.Args) is not null,
-                CancellationToken.None);
+            ModeResult? reconciliationResult;
+            var explicitCommand = GetCommandEventName(e.Args) is not null;
+            var shellHealth = _serviceProvider.GetRequiredService<ShellStartupHealthService>();
+            var desktopShell = _serviceProvider.GetRequiredService<IDesktopShellService>();
+            if (startupSettings.Startup.ConsoleShellModeEnabled && consoleShellStartup && !safeMode)
+            {
+                await _serviceProvider.GetRequiredService<IConsoleShellCompatibilityService>()
+                    .InitializeAsync(startupSettings, CancellationToken.None);
+            }
+
+            var shellRecovery = false;
+
+            if (startupSettings.Startup.ConsoleShellModeEnabled && consoleShellStartup && !safeMode)
+            {
+                shellRecovery = (await shellHealth.BeginAttemptAsync()).RequiresRecovery;
+            }
+
+            if (safeMode || shellRecovery)
+            {
+                await desktopShell.EnsureDesktopAsync(startupSettings);
+                _logger.LogWarning(
+                    "[SHELL RECOVERY] Reason={Reason} Action=StartExplorer Result={Result}",
+                    safeMode ? "SafeMode" : "RepeatedStartupFailure",
+                    desktopShell.IsExplorerShellRunning() ? "Success" : "Failed");
+                reconciliationResult = await startupReconciliation.ReconcileAsync(
+                    startupSettings,
+                    explicitGamingStartup: false,
+                    CancellationToken.None,
+                    forceWorkTarget: true);
+                if (shellRecovery && (reconciliationResult is null or { Success: true }))
+                {
+                    await shellHealth.CompleteAttemptAsync();
+                }
+            }
+            else if (!explicitCommand)
+            {
+                var runtimeState = await _serviceProvider.GetRequiredService<IRuntimeStateService>().LoadAsync();
+                var startupTarget = _serviceProvider.GetRequiredService<StartupTargetResolver>()
+                    .Resolve(startupSettings, runtimeState, safeMode: false);
+                _logger.LogInformation(
+                    "[STARTUP TARGET] ConsoleShellModeEnabled={ConsoleShellModeEnabled} Behavior={StartupBehavior} ResolvedTarget={ResolvedTarget} Reason={Reason}",
+                    startupSettings.Startup.ConsoleShellModeEnabled,
+                    startupSettings.Startup.StartupBehavior,
+                    startupTarget,
+                    startupTarget.Reason);
+
+                var desktopReady = !consoleShellStartup
+                    || startupTarget.Kind != StartupTargetKind.Work
+                    || await desktopShell.EnsureDesktopAsync(startupSettings);
+                if (!desktopReady)
+                {
+                    reconciliationResult = new ModeResult
+                    {
+                        Status = ModeResultStatus.Failed,
+                        CurrentState = ModeState.Error,
+                        Message = "ExplorerDesktopUnavailable"
+                    };
+                }
+                else
+                {
+                    reconciliationResult = await startupReconciliation.ActivateTargetAsync(
+                        startupSettings,
+                        startupTarget,
+                        CancellationToken.None);
+                }
+
+                if (consoleShellStartup && (reconciliationResult is null or { Success: true }))
+                {
+                    await shellHealth.CompleteAttemptAsync();
+                }
+                else if (consoleShellStartup && reconciliationResult is { Success: false })
+                {
+                    await desktopShell.EnsureDesktopAsync(startupSettings);
+                    _logger.LogWarning(
+                        "[SHELL RECOVERY] Reason=StartupTargetFailed Action=StartExplorer Result={Result}",
+                        desktopShell.IsExplorerShellRunning() ? "Success" : "Failed");
+                }
+            }
+            else
+            {
+                reconciliationResult = await startupReconciliation.ReconcileAsync(
+                    startupSettings,
+                    explicitGamingStartup: explicitCommand,
+                    CancellationToken.None);
+            }
+
             if (reconciliationResult is { Success: false })
             {
                 _logger.LogWarning(
@@ -94,6 +184,14 @@ public partial class App : System.Windows.Application
         catch (Exception exception)
         {
             _logger.LogError(exception, "Startup display reconciliation failed.");
+            if (startupSettings.Startup.ConsoleShellModeEnabled && consoleShellStartup)
+            {
+                var desktopShell = _serviceProvider.GetRequiredService<IDesktopShellService>();
+                await desktopShell.EnsureDesktopAsync(startupSettings);
+                _logger.LogWarning(
+                    "[SHELL RECOVERY] Reason=StartupException Action=StartExplorer Result={Result}",
+                    desktopShell.IsExplorerShellRunning() ? "Success" : "Failed");
+            }
         }
 
         await _remoteControlHost.StartAsync(startupSettings);
@@ -105,10 +203,17 @@ public partial class App : System.Windows.Application
         _webViewBridge.HotkeyCaptureStateChanged += OnHotkeyCaptureStateChanged;
         _ = _controllerShortcutService.StartAsync();
 
-        InitializeTray(startupSettings);
+        try
+        {
+            InitializeTray(startupSettings);
+            _logger.LogInformation("Tray initialized");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[CONSOLE SHELL] Component=Tray Result=Unavailable StartupContinues=True");
+        }
         InitializeHotkeys();
         _logger.LogInformation("Startup mode: {StartupMode}", startupSettings.Startup.StartMinimizedToTray ? "BackgroundTray" : "Interactive");
-        _logger.LogInformation("Tray initialized");
         _logger.LogInformation("Hotkeys initialized");
         _logger.LogInformation("Controller service initialized");
         _startupReady.TrySetResult(true);
@@ -116,7 +221,9 @@ public partial class App : System.Windows.Application
             "[STARTUP READY] DurationMs={DurationMs}",
             startupStopwatch.ElapsedMilliseconds);
 
-        if (!startupSettings.Startup.StartMinimizedToTray)
+        if ((!startupSettings.Startup.StartMinimizedToTray
+             && !startupSettings.Startup.ConsoleShellModeEnabled)
+            || safeMode)
         {
             await ShowMainWindowAsync();
         }
@@ -305,6 +412,19 @@ public partial class App : System.Windows.Application
 
         try
         {
+            if (_settingsService is not null && _serviceProvider is not null)
+            {
+                var shutdownSettings = await _settingsService.LoadAsync();
+                if (shutdownSettings.Startup.ConsoleShellModeEnabled)
+                {
+                    var desktopShell = _serviceProvider.GetRequiredService<IDesktopShellService>();
+                    await desktopShell.EnsureDesktopAsync(shutdownSettings);
+                    _logger?.LogInformation(
+                        "[SHELL RECOVERY] Reason=GameShellExit Action=StartExplorer Result={Result}",
+                        desktopShell.IsExplorerShellRunning() ? "Success" : "Failed");
+                }
+            }
+
             _logger?.LogInformation("Remote control host stop begin. Thread={ThreadId}", Environment.CurrentManagedThreadId);
             try
             {
@@ -442,6 +562,13 @@ public partial class App : System.Windows.Application
             _gamingProfileSettingsResolver!,
             _logger!,
             RunTrayCommandAsync,
+            async () =>
+            {
+                if (_serviceProvider is not null)
+                {
+                    await _serviceProvider.GetRequiredService<IConsoleShellCompatibilityService>().OpenGameBarAsync();
+                }
+            },
             () => _webViewBridge?.NotifyStatusChanged());
         _webViewBridge!.SettingsSaved += OnSettingsSaved;
         _hotkeyHost.Start();
@@ -565,6 +692,45 @@ public partial class App : System.Windows.Application
         return null;
     }
 
+    private async Task RunDisableConsoleShellCommandAsync()
+    {
+        var services = new ServiceCollection();
+        ConfigureServices(services);
+        await using var provider = services.BuildServiceProvider();
+        var logger = provider.GetRequiredService<ILogger<App>>();
+        try
+        {
+            var settingsService = provider.GetRequiredService<ISettingsService>();
+            var settings = await settingsService.LoadAsync();
+            var desktopShell = provider.GetRequiredService<IDesktopShellService>();
+            await desktopShell.EnsureDesktopAsync(settings);
+            var result = await provider.GetRequiredService<IConsoleShellRegistrationService>()
+                .ConfigureAsync(enabled: false);
+            if (result.Success)
+            {
+                settings.Startup.ConsoleShellModeEnabled = false;
+                await settingsService.SaveAsync(settings);
+                provider.GetRequiredService<IWindowsIntegrationService>().Apply(settings);
+                logger.LogInformation("[SHELL DISABLE] RestoredShell=explorer.exe Result=Success");
+            }
+            else
+            {
+                logger.LogError("[SHELL DISABLE] RestoredShell=explorer.exe Result=Failed Reason={Reason}", result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[SHELL DISABLE] RestoredShell=explorer.exe Result=Failed");
+        }
+        finally
+        {
+            Shutdown();
+        }
+    }
+
+    private static bool HasArgument(IEnumerable<string> args, string expected) =>
+        args.Any(arg => string.Equals(arg, expected, StringComparison.OrdinalIgnoreCase));
+
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddLogging(builder =>
@@ -581,6 +747,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<LegacySettingsPropertyMigrator>();
         services.AddSingleton<IModeWorkflowService, NativeModeWorkflowService>();
         services.AddSingleton<IRuntimeStateService, RuntimeStateService>();
+        services.AddSingleton<StartupTargetResolver>();
+        services.AddSingleton<ShellStartupHealthService>();
         services.AddSingleton<ConsoleDisplayLayoutBuilder>();
         services.AddSingleton<GamingProfileRuntimeSettingsResolver>();
         services.AddSingleton<GamingProfileTopologyReadinessEvaluator>();
@@ -606,6 +774,10 @@ public partial class App : System.Windows.Application
         services.AddSingleton<RemoteControlHost>();
         services.AddSingleton<IDependencyDetectionService, DependencyDetectionService>();
         services.AddSingleton<IWindowsIntegrationService, WindowsIntegrationService>();
+        services.AddSingleton<IConsoleShellRegistrationService, WindowsConsoleShellRegistrationService>();
+        services.AddSingleton<IDesktopShellService, WindowsDesktopShellService>();
+        services.AddSingleton<IConsoleShellCompatibilityService, WindowsConsoleShellCompatibilityService>();
+        services.AddSingleton<WindowsCoreAudioVolumeService>();
         services.AddSingleton<SdlControllerShortcutService>();
         services.AddSingleton<WebView.WebViewBridge>();
         services.AddSingleton<IWindowPlacementService, WindowsWindowPlacementService>();

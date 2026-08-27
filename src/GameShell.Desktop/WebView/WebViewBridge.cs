@@ -27,6 +27,8 @@ public sealed class WebViewBridge
     private readonly IDependencyDetectionService _dependencyDetectionService;
     private readonly IDisplayTransitionService _displayTransitionService;
     private readonly IWindowsIntegrationService _windowsIntegrationService;
+    private readonly IConsoleShellRegistrationService _consoleShellRegistrationService;
+    private readonly IConsoleShellCompatibilityService _consoleShellCompatibilityService;
     private readonly DisplayDiscoveryCoordinator _displayDiscoveryCoordinator;
     private readonly ITransientOperationStateService _transientOperationStateService;
     private readonly WebViewDisplayCommandHandler _displayCommandHandler;
@@ -46,6 +48,8 @@ public sealed class WebViewBridge
         DisplayDiscoveryCoordinator displayDiscoveryCoordinator,
         IDisplayTransitionService displayTransitionService,
         IWindowsIntegrationService windowsIntegrationService,
+        IConsoleShellRegistrationService consoleShellRegistrationService,
+        IConsoleShellCompatibilityService consoleShellCompatibilityService,
         ITransientOperationStateService transientOperationStateService,
         ILogger<WebViewBridge> logger,
         ILoggerFactory loggerFactory)
@@ -55,6 +59,8 @@ public sealed class WebViewBridge
         _dependencyDetectionService = dependencyDetectionService;
         _displayTransitionService = displayTransitionService;
         _windowsIntegrationService = windowsIntegrationService;
+        _consoleShellRegistrationService = consoleShellRegistrationService;
+        _consoleShellCompatibilityService = consoleShellCompatibilityService;
         _displayDiscoveryCoordinator = displayDiscoveryCoordinator;
         _transientOperationStateService = transientOperationStateService;
         _displayCommandHandler = new WebViewDisplayCommandHandler(
@@ -323,6 +329,8 @@ public sealed class WebViewBridge
             ["cancelControllerShortcutCapture"] = payload => Task.FromResult<object>(CancelControllerShortcutCapture(payload)),
             ["acknowledgeControllerShortcutCapture"] = payload => Task.FromResult<object>(AcknowledgeControllerShortcutCapture(payload)),
             ["getControllerStatus"] = _ => Task.FromResult<object>(GetControllerStatus()),
+            ["getConsoleShellStatus"] = async _ => await _consoleShellRegistrationService.GetSupportStatusAsync(),
+            ["openGameBar"] = async _ => await _consoleShellCompatibilityService.OpenGameBarAsync(),
             ["enterGameShell"] = async _ => await _modeCommandService.EnterGameShellAsync(),
             ["enterGameShellWithProfile"] = async payload => await _modeCommandService.EnterGameShellWithDisplayProfileAsync(WebViewPayloadReader.ReadOptionalProfileName(payload) ?? string.Empty),
             ["enterWorkMode"] = async _ => await _modeCommandService.EnterWorkModeAsync()
@@ -483,7 +491,40 @@ public sealed class WebViewBridge
     private async Task SaveAndApplySettingsAsync(AppSettings settings)
     {
         GamingProfileTopologyValidator.EnsureValid(settings);
-        await _settingsService.SaveAsync(settings);
+        var persisted = await _settingsService.LoadAsync();
+        var enablingConsoleShell = !persisted.Startup.ConsoleShellModeEnabled
+            && settings.Startup.ConsoleShellModeEnabled;
+        var disablingConsoleShell = persisted.Startup.ConsoleShellModeEnabled
+            && !settings.Startup.ConsoleShellModeEnabled;
+
+        if (enablingConsoleShell)
+        {
+            // Persist intent before registering the custom shell. If the app is
+            // interrupted here, Explorer remains the registered shell; there is
+            // no black-screen failure mode.
+            await _settingsService.SaveAsync(settings);
+            var registration = await _consoleShellRegistrationService.ConfigureAsync(enabled: true);
+            if (!registration.Success)
+            {
+                await _settingsService.SaveAsync(persisted);
+                _windowsIntegrationService.Apply(persisted);
+                throw new InvalidOperationException($"Console Shell Mode could not be changed: {registration.Message}");
+            }
+        }
+        else
+        {
+            if (disablingConsoleShell)
+            {
+                var registration = await _consoleShellRegistrationService.ConfigureAsync(enabled: false);
+                if (!registration.Success)
+                {
+                    throw new InvalidOperationException($"Console Shell Mode could not be changed: {registration.Message}");
+                }
+            }
+
+            await _settingsService.SaveAsync(settings);
+        }
+
         _windowsIntegrationService.Apply(settings);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
         _logger.LogInformation("Settings saved from WebView. Path: {SettingsPath}", _settingsService.SettingsPath);

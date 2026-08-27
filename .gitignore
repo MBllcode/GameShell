@@ -7,6 +7,9 @@ dist/
 *.suo
 *.log
 docs/
+!docs/
+docs/*
+!docs/console-shell-mode.md
 scripts/
 artifacts/
 src/GameShell.Ui/tsconfig.tsbuildinfo

@@ -12,6 +12,14 @@ export type DisplayProfileDraft = { profileName: string; topology: GamingProfile
 export type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
 export type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
 
+function createProfileId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `profile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 type Options = {
   displayProfileDraftRef: { current: DisplayProfileDraft };
   displays: DisplayDeviceInfo[];
@@ -82,7 +90,7 @@ export function useDisplayProfileWorkflow(options: Options) {
     const resolvedProfileName = profileBeingUpdated?.name === trimmedName ? profileBeingUpdated.name : trimmedName;
     const nextProfiles = profileBeingUpdated
       ? profiles.map((profile) => profile.name.toLowerCase() === profileBeingUpdated.name.toLowerCase() ? { ...profile, name: resolvedProfileName, displayTopology: topology, layout: topologyToLegacy(topology, displays) } : profile)
-      : [...profiles, { name: trimmedName, displayTopology: topology, layout: topologyToLegacy(topology, displays) }];
+      : [...profiles, { id: createProfileId(), name: trimmedName, displayTopology: topology, layout: topologyToLegacy(topology, displays) }];
     const sourceProfileName = profileBeingUpdated?.name;
     const nextProfileBehaviours = { ...profileBehaviours };
     const nextProfileLaunchers = { ...profileLaunchers };

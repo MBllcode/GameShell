@@ -123,6 +123,27 @@ public sealed class StartupReconciliationTests
         Assert.True(query.CaptureCount <= 6);
     }
 
+    [Fact]
+    public async Task ProfileStartupTargetUsesExistingProfilePipelineWithoutRestoringWorkFirst()
+    {
+        var work = Snapshot(Path("DELL", "PATH-DELL", 0, 0, 1920, 1080, isPrimary: true));
+        var session = new FakeSessionManager();
+        var service = CreateService(work, new RuntimeState { CurrentMode = GameShellMode.Work }, session);
+        var settings = Settings(work);
+        settings.Display.GamingProfiles =
+        [
+            new DisplayLayoutProfile { Id = "profile-console", Name = "CONSOLE", Layout = work }
+        ];
+
+        var result = await service.ActivateTargetAsync(
+            settings,
+            StartupTarget.Profile("profile-console", "AlwaysProfile"));
+
+        Assert.True(result?.Success, result?.Message);
+        Assert.Equal(0, session.WorkCalls);
+        Assert.Equal(["CONSOLE"], session.ProfileCalls);
+    }
+
     private static StartupReconciliationService CreateService(
         DisplayLayoutSnapshot actual,
         RuntimeState runtime,
@@ -230,9 +251,14 @@ public sealed class StartupReconciliationTests
     private sealed class FakeSessionManager : IConsoleSessionManager
     {
         public int WorkCalls { get; private set; }
+        public List<string> ProfileCalls { get; } = [];
         public ConsoleSessionSnapshot GetSnapshot() => new();
-        public Task<ModeResult> EnterConsoleAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ModeResult());
-        public Task<ModeResult> EnterProfileAsync(string profileName, CancellationToken cancellationToken = default) => Task.FromResult(new ModeResult());
+        public Task<ModeResult> EnterConsoleAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ModeResult { Status = ModeResultStatus.Success, CurrentState = ModeState.GameShell });
+        public Task<ModeResult> EnterProfileAsync(string profileName, CancellationToken cancellationToken = default)
+        {
+            ProfileCalls.Add(profileName);
+            return Task.FromResult(new ModeResult { Status = ModeResultStatus.Success, CurrentState = ModeState.GameShell });
+        }
         public Task<ModeResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)
         {
             WorkCalls++;
