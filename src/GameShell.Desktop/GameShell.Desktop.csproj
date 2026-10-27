@@ -12,6 +12,7 @@
          The WinForms analyzer assumes ApplicationConfiguration.Initialize is used. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <AssemblyName>GameShell</AssemblyName>
+    <Version>0.1.0</Version>
     <RootNamespace>GameShell.Desktop</RootNamespace>
     <ApplicationIcon>Assets\GameShell.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -20,8 +21,6 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.7" />
     <PackageReference Include="SDL3-CS" Version="3.4.14" />
     <PackageReference Include="SDL3-CS.Windows" Version="3.4.14" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />

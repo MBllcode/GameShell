@@ -1,6 +1,8 @@
 param(
     [ValidateSet('win-x64')]
     [string]$Runtime = 'win-x64',
+    [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')]
+    [string]$Version,
     [switch]$SkipNpmInstall,
     [switch]$NoLaunch
 )
@@ -85,6 +87,9 @@ Remove-WorkspaceDirectory $stagedUiPath
 New-Item -ItemType Directory -Force -Path $stagedUiPath | Out-Null
 Copy-Item -Path (Join-Path $uiPath 'dist\*') -Destination $stagedUiPath -Recurse -Force
 
+$versionArguments = @()
+if ($Version) { $versionArguments = @("-p:Version=$Version") }
+
 Write-Host 'Publishing self-contained single-file GameShell.exe...'
 Remove-WorkspaceDirectory $publishTempPath
 New-Item -ItemType Directory -Force -Path $installerPath | Out-Null
@@ -102,7 +107,8 @@ Invoke-Native {
         /p:IncludeNativeLibrariesForSelfExtract=true `
         /p:EnableCompressionInSingleFile=true `
         /p:DebugType=none `
-        /p:DebugSymbols=false
+        /p:DebugSymbols=false `
+        @versionArguments
 }
 
 $publishedExe = Join-Path $publishTempPath 'GameShell.exe'
