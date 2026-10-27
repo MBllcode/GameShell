@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { LauncherType } from '../../../utils/modes';
+import type { LauncherType } from '../../profiles/profileCommands';
 import type { FinishOptions } from '../../settings/hooks/useSettingsFormState';
 
 type WorkBehaviour = {

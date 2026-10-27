@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { sendBridgeCommand } from '../../../services/webViewBridge';
+import { sendBridgeCommand } from '../../../bridge/webViewBridge';
 import type { Dispatch, SetStateAction } from 'react';
-import type { AppSettings, AppStatus } from '../../../types/bridge';
+import type { AppSettings, AppStatus } from '../../../bridge/contracts';
 import type { SettingsPayloadOverrides } from '../buildSettingsPayload';
 import type { SetupMode } from '../../setup/setupFlow';
 import { resolvePersistedCompletion, resolvePostSaveSetupComplete, resolveSaveCompletion } from '../../setup/setupRouting';
@@ -12,8 +12,6 @@ type UseSettingsPersistenceOptions = {
   isSetupComplete: boolean;
   hasUnsavedChanges: boolean;
   setupMode: SetupMode;
-  bootstrapRoute: BootstrapRoute;
-  gamingProfilesCount: number;
   preferredProfileName: () => string;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
   buildSettingsPayload: (isFirstRunCompleted: boolean, overrides?: SettingsPayloadOverrides) => AppSettings;
@@ -36,8 +34,6 @@ export function useSettingsPersistence({
   isSetupComplete,
   hasUnsavedChanges,
   setupMode,
-  bootstrapRoute,
-  gamingProfilesCount,
   preferredProfileName,
   pendingSettingsOverrideRef,
   buildSettingsPayload,
@@ -65,18 +61,13 @@ export function useSettingsPersistence({
       ...current,
       selectedConsoleDisplay: savedSettings.display.consoleDisplay?.friendlyName ?? null,
       hasGamingProfiles: Boolean(savedSettings.display.gamingLayout) || (savedSettings.display.gamingProfiles?.length ?? 0) > 0,
-      activeLauncher: current.currentMode === 'Work' ? null : savedSettings.launcher.type
+      activeLauncher: current.currentMode === 'Work' || savedSettings.launcher.type === 'None' || !savedSettings.gaming.startLauncher ? null : savedSettings.launcher.type
     }));
     return savedSettings;
   }
 
   async function persistAndReturnToDashboard() {
     setError(null);
-
-    if (gamingProfilesCount === 0) {
-      setError(t('setup.requireProfile'));
-      return;
-    }
 
     const hasPendingSettingsOverride = pendingSettingsOverrideRef.current !== null;
     if (!hasUnsavedChanges && !hasPendingSettingsOverride) {

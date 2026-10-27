@@ -1,88 +1,40 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { useSettingsFormState } from './useSettingsFormState';
+import type { useDisplayConfigurationState } from '../../profiles/hooks/useDisplayConfigurationState';
+import type { useSetupWorkflowState } from '../../setup/hooks/useSetupWorkflowState';
+import type { useAppRuntimeState } from '../../../app/hooks/useAppRuntimeState';
 import { useGameShellBridge } from '../../../bridge/useGameShellBridge';
-import type { AppSettings, AppStatus, ControllerStatusInfo, DisplayDeviceInfo, DisplayIdentity } from '../../../types/bridge';
-import { useSettingsHydration } from './useSettingsHydration';
-import { useSettingsPayload } from './useSettingsPayload';
+import type { ControllerStatusInfo } from '../../../bridge/contracts';
+import { hydrateSettings } from '../hydrateSettings';
+import type { AppSettings } from '../../../bridge/contracts';
+import { buildSettingsPayload as createSettingsPayload } from '../buildSettingsPayload';
 import { useSettingsPersistence } from './useSettingsPersistence';
-import type { SettingsPayloadOverrides, BuildSettingsPayloadState } from '../buildSettingsPayload';
-import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
-import type { LauncherType } from '../../../utils/modes';
-import type { SetupMode } from '../../setup/setupFlow';
-import { assertSetupStateInvariants, resolveBootstrapState, type BootstrapRoute } from '../../setup/setupRouting';
+import type { SettingsPayloadOverrides } from '../buildSettingsPayload';
+import { assertSetupStateInvariants, resolveBootstrapState } from '../../setup/setupRouting';
 import { steps } from '../../setup/setupFlow';
-import type { SupportedLanguage } from '../../../i18n/language';
 
-type Options = BuildSettingsPayloadState & {
-  isSetupComplete: boolean;
-  setupMode: SetupMode;
-  bootstrapRoute: BootstrapRoute;
-  gamingProfilesCount: number;
+type Options = {
+  form: ReturnType<typeof useSettingsFormState>;
+  display: ReturnType<typeof useDisplayConfigurationState>;
+  setup: ReturnType<typeof useSetupWorkflowState>;
+  runtime: ReturnType<typeof useAppRuntimeState>;
   preferredProfileName: () => string;
-  pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
-  setSelectedConsoleDisplays: (value: DisplayIdentity[]) => void;
-  setSelectedConsoleDisplay: (value: DisplayIdentity | null) => void;
-  setProfiles: (value: NonNullable<AppSettings['display']['gamingProfiles']>) => void;
-  setActiveProfileName: (value: string | null) => void;
-  setProfileBehaviours: (value: GamingProfileBehaviourMap) => void;
-  setProfileLaunchers: (value: GamingProfileLauncherMap) => void;
-  setProfileHotkeys: (value: GamingProfileHotkeysMap) => void;
-  setProfileControllerShortcuts: (value: GamingProfileControllerShortcutMap) => void;
-  setWorkModeControllerShortcut: (value: AppSettings['controller']['workMode']) => void;
-  setSelectedProfileName: (value: string) => void;
-  setLayout: (value: AppSettings['display']['gamingLayout']) => void;
-  setWorkModeLayout: (value: AppSettings['workMode']['defaultDisplayLayout']) => void;
-  setHotkeys: (value: BuildSettingsPayloadState['hotkeys']) => void;
-  setLauncher: (value: LauncherType) => void;
-  setLanguage: (value: SupportedLanguage) => void;
-  setConsoleBehaviour: (value: BuildSettingsPayloadState['consoleBehaviour']) => void;
-  setGamingBehaviour: (value: BuildSettingsPayloadState['gamingBehaviour']) => void;
-  setWorkBehaviour: (value: BuildSettingsPayloadState['workBehaviour']) => void;
-  setFinishOptions: (value: BuildSettingsPayloadState['finishOptions']) => void;
-  setSetupMode: (value: SetupMode) => void;
-  setEditingProfileId: (value: string | null) => void;
-  setIsSetupComplete: (value: boolean) => void;
-  hasUnsavedChanges: boolean;
-  setHasUnsavedChanges: (value: boolean) => void;
-  setSettings: (value: AppSettings) => void;
-  setStatus: Dispatch<SetStateAction<AppStatus>>;
-  setIsHydrated: (value: boolean) => void;
-  setBootstrapRoute: (value: BootstrapRoute) => void;
-  setStepIndex: (value: number) => void;
-  setIsSaving: (value: boolean) => void;
-  setError: (value: string | null) => void;
-  setMessage: (value: string) => void;
-  applyControllerStatus: (value: ControllerStatusInfo) => void;
-  setDisplays: (value: DisplayDeviceInfo[]) => void;
-  setDisplaySettling: (value: boolean) => void;
-  setIsRefreshingDisplays: (value: boolean) => void;
-  setDisplayListError: (value: string) => void;
-  setInitialLoading: (value: boolean) => void;
+  setSelectedProfileName: (name: string) => void;
+  applyControllerStatus: (status: ControllerStatusInfo) => void;
 };
 
-export function useSettingsIntegrationFeature(options: Options) {
-  const applySettingsToState = useSettingsHydration({
-    setSelectedConsoleDisplays: options.setSelectedConsoleDisplays,
-    setSelectedConsoleDisplay: options.setSelectedConsoleDisplay,
-    setProfiles: options.setProfiles,
-    setActiveProfileName: options.setActiveProfileName,
-    setProfileBehaviours: options.setProfileBehaviours,
-    setProfileLaunchers: options.setProfileLaunchers,
-    setProfileHotkeys: options.setProfileHotkeys,
-    setProfileControllerShortcuts: options.setProfileControllerShortcuts,
-    setWorkModeControllerShortcut: options.setWorkModeControllerShortcut,
-    setSelectedProfileName: options.setSelectedProfileName,
-    setLayout: options.setLayout,
-    setWorkModeLayout: options.setWorkModeLayout,
-    setHotkeys: options.setHotkeys,
-    setLauncher: options.setLauncher,
-    setLanguage: options.setLanguage,
-    setConsoleBehaviour: options.setConsoleBehaviour,
-    setGamingBehaviour: options.setGamingBehaviour,
-    setWorkBehaviour: options.setWorkBehaviour,
-    setFinishOptions: options.setFinishOptions,
-    setHasUnsavedChanges: options.setHasUnsavedChanges,
-    pendingSettingsOverrideRef: options.pendingSettingsOverrideRef
-  });
+export function useSettingsIntegrationFeature(input: Options) {
+  const options = {
+    ...input.form, ...input.display, ...input.setup, ...input.runtime,
+    preferredProfileName: input.preferredProfileName,
+    setSelectedProfileName: input.setSelectedProfileName,
+    applyControllerStatus: input.applyControllerStatus,
+    setProfiles: input.display.setGamingProfiles,
+    setActiveProfileName: input.display.setActiveGamingProfileName,
+    setLayout: input.display.setGamingLayout,
+    setDisplaySettling: input.display.setIsDisplaySettling,
+    setInitialLoading: input.setup.setIsInitialLoading
+  };
+  const applySettingsToState = (settings: AppSettings) => hydrateSettings(settings, options);
 
   useGameShellBridge({
     onStatus: options.setStatus,
@@ -126,13 +78,12 @@ export function useSettingsIntegrationFeature(options: Options) {
     ,onHydrationComplete: () => options.setIsHydrated(true)
   });
 
-  const buildSettingsPayload = useSettingsPayload(options);
+  const buildSettingsPayload = (isFirstRunCompleted = true, overrides?: SettingsPayloadOverrides) =>
+    createSettingsPayload(options, isFirstRunCompleted, overrides);
   const persistence = useSettingsPersistence({
     isSetupComplete: options.isSetupComplete,
     settings: options.settings,
     setupMode: options.setupMode,
-    bootstrapRoute: options.bootstrapRoute,
-    gamingProfilesCount: options.gamingProfilesCount,
     preferredProfileName: options.preferredProfileName,
     pendingSettingsOverrideRef: options.pendingSettingsOverrideRef,
     buildSettingsPayload,

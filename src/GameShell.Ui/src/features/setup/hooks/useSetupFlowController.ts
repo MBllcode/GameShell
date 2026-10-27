@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile } from '../../../types/bridge';
-import type { ControllerCaptureApi } from '../../controller/hooks/useControllerCapture';
+import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile } from '../../../bridge/contracts';
+import type { ControllerCaptureApi } from '../../shortcuts/hooks/useControllerCapture';
 import type { GamingProfileBehaviourMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
-import type { LauncherType } from '../../../utils/modes';
+import type { LauncherType } from '../../profiles/profileCommands';
 import type { GamingBehaviourState, HotkeySettingsState } from '../../settings/hooks/useSettingsFormState';
 import { syncActiveDisplaySelections } from '../../displays/syncActiveDisplaySelections';
 import { defaultProfileHotkeys } from '../../settings/hooks/useSettingsFormState';
 import { resolveSetupSteps, steps, type SetupMode, type StepId } from '../setupFlow';
-import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
+import { normalizeHotkeyForDisplay } from '../../shortcuts/hotkeys';
 
 type Options = {
   stepIndex: number;
@@ -34,8 +34,7 @@ type Options = {
 };
 
 export function useSetupFlowController(options: Options) {
-  const indexedStep = steps[options.stepIndex] ?? steps[0];
-  const { activeSteps, activeStepIndexes } = resolveSetupSteps(options.setupMode, indexedStep.id);
+  const { activeSteps, activeStepIndexes } = resolveSetupSteps(options.setupMode);
   const fallbackStepIndex = activeStepIndexes[0] ?? 0;
   const currentFlowPosition = activeStepIndexes.indexOf(options.stepIndex);
   const resolvedFlowPosition = currentFlowPosition >= 0 ? currentFlowPosition : 0;
@@ -58,8 +57,9 @@ export function useSetupFlowController(options: Options) {
   }, [options.displays, options.selectedConsoleDisplay, options.selectedConsoleDisplays, options.setSelectedConsoleDisplay, options.setSelectedConsoleDisplays]);
 
   useEffect(() => {
-    if (options.setupMode === 'FirstRun') {
-      options.setSelectedProfileName('');
+    if (options.setupMode === 'FirstRun' || options.setupMode === 'CreateProfile') {
+      // New profiles must not inherit the selected dashboard profile's application or actions.
+      if (options.setupMode === 'FirstRun') options.setSelectedProfileName('');
       return;
     }
     const hasSelectedProfile = options.selectedProfileName.length > 0

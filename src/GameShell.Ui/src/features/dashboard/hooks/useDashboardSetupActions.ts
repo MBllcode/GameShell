@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
-import type { DisplayLayoutProfile, GamingProfileDisplayTopology } from '../../../types/bridge';
-import { getProfileTopology } from '../../../utils/displays';
+import type { DisplayLayoutProfile, GamingProfileDisplayTopology } from '../../../bridge/contracts';
+import { getProfileTopology } from '../../displays/displayTopology';
 import type { SetupMode } from '../../setup/setupFlow';
 import { assertSetupStateInvariants, type BootstrapRoute } from '../../setup/setupRouting';
 import { defaultGamingBehaviour, type GamingBehaviourState } from '../../settings/hooks/useSettingsFormState';
@@ -33,6 +33,7 @@ type Options = {
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
+  setLauncher: (launcher: 'None') => void;
   setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
   setShowOverwriteProfileDialog: Dispatch<SetStateAction<boolean>>;
   setMessage: Dispatch<SetStateAction<string>>;
@@ -51,6 +52,7 @@ export function useDashboardSetupActions(options: Options) {
     options.setHasUnsavedChanges(false);
     options.setIsSetupComplete(false);
     options.setGamingBehaviour({ ...defaultGamingBehaviour });
+    options.setLauncher('None');
     options.syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } });
     options.setProfileHotkeyValidationError(null);
     options.setProfileControllerValidationError(null);

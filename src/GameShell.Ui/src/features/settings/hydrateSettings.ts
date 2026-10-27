@@ -1,0 +1,60 @@
+import { profilesFromSettings, profileViews, type Profile } from '../profiles/profileModel';
+import type { AppSettings, DisplayIdentity } from '../../bridge/contracts';
+import { setI18nLanguage } from '../../i18n/i18n';
+import { detectPreferredLanguage, normalizeLanguageCode, type SupportedLanguage } from '../../i18n/language';
+import { normalizeControllerShortcut } from '../shortcuts/controllers';
+import { normalizeHotkeyForDisplay } from '../shortcuts/hotkeys';
+import { toLauncherType } from '../profiles/profileCommands';
+import { resolveActiveGamingProfile, toGamingBehaviourState } from '../profiles/utils';
+import { defaultConsoleBehaviour, defaultFinishOptions, defaultGamingBehaviour, defaultWorkBehaviour } from './hooks/useSettingsFormState';
+import type { SettingsPayloadOverrides } from './buildSettingsPayload';
+
+type Options = {
+  setSelectedConsoleDisplays: (value: DisplayIdentity[]) => void;
+  setSelectedConsoleDisplay: (value: DisplayIdentity | null) => void;
+  setProfiles: (value: Profile[]) => void;
+  setActiveProfileName: (value: string | null) => void;
+  setWorkModeControllerShortcut: (value: AppSettings['controller']['workMode']) => void;
+  setSelectedProfileName: (value: string) => void;
+  setLayout: (value: AppSettings['display']['gamingLayout']) => void;
+  setWorkModeLayout: (value: AppSettings['workMode']['defaultDisplayLayout']) => void;
+  setHotkeys: (value: { consoleMode: string; gamingMode: string; workMode: string }) => void;
+  setLauncher: (value: ReturnType<typeof toLauncherType>) => void;
+  setLanguage: (value: SupportedLanguage) => void;
+  setConsoleBehaviour: (value: Pick<AppSettings['gameShell'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>) => void;
+  setGamingBehaviour: (value: ReturnType<typeof toGamingBehaviourState>) => void;
+  setWorkBehaviour: (value: Pick<AppSettings['workMode'], 'closeLauncher' | 'showTaskbars' | 'showDesktopIcons' | 'doNotMinimizeWindows'>) => void;
+  setFinishOptions: (value: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean; startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile'; startupProfileId: string | null }) => void;
+  setHasUnsavedChanges: (value: boolean) => void;
+  pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
+};
+
+export function hydrateSettings(loadedSettings: AppSettings, options: Options) {
+  const consoleDisplays = loadedSettings.display?.consoleDisplays?.length ? loadedSettings.display.consoleDisplays : loadedSettings.display?.consoleDisplay ? [loadedSettings.display.consoleDisplay] : [];
+  const loadedProfiles = profilesFromSettings(loadedSettings);
+  const activeProfile = resolveActiveGamingProfile(loadedSettings.display?.activeGamingProfileName ?? null, loadedProfiles);
+  const defaultBehaviour = toGamingBehaviourState(loadedSettings.gaming);
+  const defaultLauncher = toLauncherType(loadedSettings.launcher?.type || 'Playnite');
+  const { gamingProfileBehaviours: nextProfileBehaviours, gamingProfileLaunchers: nextProfileLaunchers } = profileViews(loadedProfiles);
+  const selectedProfileName = activeProfile?.name ?? loadedProfiles[0]?.name ?? '';
+  options.setSelectedConsoleDisplays(consoleDisplays);
+  options.setSelectedConsoleDisplay(consoleDisplays[0] ?? null);
+  options.setProfiles(loadedProfiles);
+  options.setActiveProfileName(activeProfile?.name ?? null);
+  options.setWorkModeControllerShortcut(normalizeControllerShortcut(loadedSettings.controller?.workMode ?? null));
+  options.setSelectedProfileName(selectedProfileName);
+  options.setLayout(activeProfile?.layout ?? loadedSettings.display?.gamingLayout ?? null);
+  options.setWorkModeLayout(loadedSettings.workMode?.defaultDisplayLayout ?? null);
+  options.setHotkeys({ consoleMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.consoleMode || ''), gamingMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.gamingMode || ''), workMode: normalizeHotkeyForDisplay(loadedSettings.hotkeys?.workMode || '') });
+  options.setLauncher(loadedSettings.ui?.isFirstRunCompleted ? nextProfileLaunchers[selectedProfileName] ?? defaultLauncher : 'None');
+  const detectedLanguage = normalizeLanguageCode(loadedSettings.ui?.language ?? detectPreferredLanguage());
+  setI18nLanguage(detectedLanguage);
+  options.setLanguage(detectedLanguage);
+  const isFirstRun = !(loadedSettings.ui?.isFirstRunCompleted ?? false);
+  options.setConsoleBehaviour(isFirstRun ? defaultConsoleBehaviour : toGamingBehaviourState(loadedSettings.gameShell));
+  options.setGamingBehaviour(isFirstRun ? defaultGamingBehaviour : nextProfileBehaviours[selectedProfileName] ?? defaultBehaviour);
+  options.setWorkBehaviour(isFirstRun ? defaultWorkBehaviour : { closeLauncher: loadedSettings.workMode?.closeLauncher ?? true, showTaskbars: loadedSettings.workMode?.showTaskbars ?? true, showDesktopIcons: loadedSettings.workMode?.showDesktopIcons ?? true, doNotMinimizeWindows: loadedSettings.workMode?.doNotMinimizeWindows ?? true });
+  options.setFinishOptions(isFirstRun ? defaultFinishOptions : { startWithWindows: loadedSettings.startup?.startWithWindows ?? true, startMinimized: loadedSettings.startup?.startMinimizedToTray ?? false, startMenuShortcut: loadedSettings.startup?.createStartMenuShortcut ?? true, desktopShortcut: loadedSettings.startup?.createDesktopShortcut ?? true, startupBehavior: loadedSettings.startup?.startupBehavior ?? 'AlwaysWorkMode', startupProfileId: loadedSettings.startup?.startupProfileId ?? null });
+  options.setHasUnsavedChanges(false);
+  options.pendingSettingsOverrideRef.current = null;
+}

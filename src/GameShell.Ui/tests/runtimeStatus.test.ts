@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatCurrentMode, formatTransientOperation } from '../src/utils/status.ts';
-import type { AppStatus } from '../src/types/bridge.ts';
+import { formatCurrentMode, formatTransientOperation } from '../src/app/status.ts';
+import type { AppStatus } from '../src/bridge/contracts.ts';
 
 const workModeStatus: AppStatus = {
   state: 'WorkMode',
@@ -28,7 +28,7 @@ const workModeStatus: AppStatus = {
 };
 
 test('Work Mode runtime snapshot renders Work Mode instead of gaming mode', () => {
-  assert.equal(formatCurrentMode(workModeStatus), 'Work Mode');
+  assert.equal(formatCurrentMode(workModeStatus), 'Default setup');
   assert.equal(workModeStatus.sessionState, 'Idle');
   assert.equal(workModeStatus.activeProfileName, null);
   assert.equal(workModeStatus.activeLauncher, null);
@@ -51,4 +51,12 @@ test('transient operation phase maps to localized status text', () => {
   assert.equal(formatTransientOperation(operation, (key) => ({
     'status.transient.restoringDisplays': 'Przywracanie ekranów...'
   }[key] ?? key)), 'Przywracanie ekranów...');
+});
+
+test('profiles without an application show profile progress instead of application startup', () => {
+  const operation = {
+    kind: 'EnterProfile' as const, phase: 'ApplyingProfileSettings' as const,
+    isActive: true, messageKey: null, startedAt: null, transitionId: 'profile-1'
+  };
+  assert.equal(formatTransientOperation(operation, (key) => key), 'status.transient.applyingProfileSettings');
 });

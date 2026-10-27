@@ -1,6 +1,6 @@
-import type { ControllerShortcutSettings } from '../../types/bridge.ts';
-import { isDuplicateProfileControllerShortcut, isDuplicateWorkModeControllerShortcut, isSameControllerShortcut, normalizeControllerButtons } from '../../utils/controllers.ts';
-import { normalizeHotkeyForDisplay } from '../../utils/hotkeys.ts';
+import type { ControllerShortcutSettings } from '../../bridge/contracts.ts';
+import { isDuplicateProfileControllerShortcut, isDuplicateWorkModeControllerShortcut, isSameControllerShortcut, normalizeControllerButtons } from '../shortcuts/controllers.ts';
+import { normalizeHotkeyForDisplay } from '../shortcuts/hotkeys.ts';
 import { isDuplicateProfileEnterHotkey, isDuplicateWorkModeHotkey, type GamingProfileControllerShortcutMap, type GamingProfileHotkeysMap } from './utils.ts';
 
 type HotkeyState = { enterProfile: string };

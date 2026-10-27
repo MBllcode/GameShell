@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { sendBridgeCommand, subscribeBridgeEvent } from '../services/webViewBridge';
-import type { AppSettings, AppStatus, ControllerStatusInfo, DisplayDeviceInfo, DisplayDiscoveryState } from '../types/bridge';
+import { sendBridgeCommand, subscribeBridgeEvent } from './webViewBridge';
+import type { AppSettings, AppStatus, ControllerStatusInfo, DisplayDeviceInfo, DisplayDiscoveryState } from './contracts';
 
 export function useGameShellBridge({
   onStatus,

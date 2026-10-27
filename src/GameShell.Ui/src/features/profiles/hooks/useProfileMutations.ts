@@ -1,52 +1,34 @@
+import { updateProfile, type Profile, type ProfileBehaviour } from '../profileModel';
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  normalizeControllerButtons
-} from '../../../utils/controllers';
-import { normalizeHotkeyForDisplay } from '../../../utils/hotkeys';
+import { normalizeHotkeyForDisplay } from '../../shortcuts/hotkeys';
 import {
   type GamingProfileBehaviourMap,
   type GamingProfileControllerShortcutMap,
   type GamingProfileHotkeysMap,
-  type GamingProfileLauncherMap,
   type ProfileHotkeysState
 } from '../utils';
 import { tryAssignProfileControllerShortcut, tryAssignProfileHotkey, tryAssignWorkModeControllerShortcut, tryAssignWorkModeHotkey } from '../shortcutAssignment';
-import type { ControllerShortcutSettings } from '../../../types/bridge';
-import type { LauncherType } from '../../../utils/modes';
-import { triggerValidationError } from '../../../utils/validation';
+import type { ControllerShortcutSettings } from '../../../bridge/contracts';
+import type { LauncherType } from '../profileCommands';
+import { triggerValidationError } from '../../../shared/validation';
 
-type GamingBehaviourState = {
-  hideDesktopIcons: boolean;
-  hideTaskbar: boolean;
-  closeVisibleWindows: boolean;
-  minimizeRemainingWindows: boolean;
-  moveCursorToCorner: boolean;
-  hideCursor: boolean;
-  startLauncher: boolean;
-  bringLauncherToForeground: boolean;
-};
+type GamingBehaviourState = ProfileBehaviour;
 
 type GamingBehaviourKey = keyof GamingBehaviourState;
 
-const defaultProfileHotkeys: ProfileHotkeysState = { enterProfile: '' };
-const defaultControllerShortcutHoldDurationMs = 700;
 
 type UseProfileMutationsOptions = {
+  setProfiles: Dispatch<SetStateAction<Profile[]>>;
   workingProfileName: string;
   gamingBehaviour: GamingBehaviourState;
   profileBehaviours: GamingProfileBehaviourMap;
-  profileLaunchers: GamingProfileLauncherMap;
   profileHotkeys: GamingProfileHotkeysMap;
   profileControllerShortcuts: GamingProfileControllerShortcutMap;
   workModeControllerShortcut: ControllerShortcutSettings | null;
   workModeHotkey: string;
   setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
-  setProfileBehaviours: Dispatch<SetStateAction<GamingProfileBehaviourMap>>;
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
-  setProfileLaunchers: Dispatch<SetStateAction<GamingProfileLauncherMap>>;
-  setProfileHotkeys: Dispatch<SetStateAction<GamingProfileHotkeysMap>>;
-  setProfileControllerShortcuts: Dispatch<SetStateAction<GamingProfileControllerShortcutMap>>;
   setWorkModeControllerShortcut: Dispatch<SetStateAction<ControllerShortcutSettings | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
@@ -56,20 +38,16 @@ type UseProfileMutationsOptions = {
 };
 
 export function useProfileMutations({
+  setProfiles,
   workingProfileName,
   gamingBehaviour,
   profileBehaviours,
-  profileLaunchers,
   profileHotkeys,
   profileControllerShortcuts,
   workModeControllerShortcut,
   workModeHotkey,
   setGamingBehaviour,
-  setProfileBehaviours,
   setLauncher,
-  setProfileLaunchers,
-  setProfileHotkeys,
-  setProfileControllerShortcuts,
   setWorkModeControllerShortcut,
   setHotkeys,
   setProfileHotkeyValidationError,
@@ -80,10 +58,10 @@ export function useProfileMutations({
   const { t } = useTranslation();
 
   const setGamingBehaviourForProfile = useCallback((profileName: string, behaviour: GamingBehaviourState) => {
-    setProfileBehaviours((current) => ({ ...current, [profileName]: behaviour }));
+    setProfiles(current => updateProfile(current, profileName, { behaviour }));
     setGamingBehaviour(behaviour);
     markUnsavedChanges();
-  }, [markUnsavedChanges, setGamingBehaviour, setProfileBehaviours]);
+  }, [markUnsavedChanges, setGamingBehaviour, setProfiles]);
 
   const updateGamingBehaviourFlag = useCallback((key: GamingBehaviourKey, value: boolean) => {
     if (!workingProfileName) {
@@ -93,13 +71,16 @@ export function useProfileMutations({
 
     const currentProfileBehaviour = profileBehaviours[workingProfileName] ?? gamingBehaviour;
     setGamingBehaviourForProfile(workingProfileName, { ...currentProfileBehaviour, [key]: value });
-  }, [gamingBehaviour, profileBehaviours, workingProfileName, setGamingBehaviour, setGamingBehaviourForProfile]);
+  }, [gamingBehaviour, profileBehaviours, workingProfileName, setGamingBehaviour, setGamingBehaviourForProfile, setProfiles, setGamingBehaviour]);
 
   const setProfileLauncher = useCallback((profileName: string, nextLauncher: LauncherType) => {
-    setProfileLaunchers((current) => ({ ...current, [profileName]: nextLauncher }));
     setLauncher(nextLauncher);
+    const behaviour = profileBehaviours[profileName] ?? gamingBehaviour;
+    const nextBehaviour = { ...behaviour, startLauncher: nextLauncher !== 'None', bringLauncherToForeground: nextLauncher !== 'None' && (behaviour.startLauncher ? behaviour.bringLauncherToForeground : true) };
+    setProfiles(current => updateProfile(current, profileName, { application: nextLauncher, behaviour: nextBehaviour }));
+    setGamingBehaviour(nextBehaviour);
     markUnsavedChanges();
-  }, [markUnsavedChanges, setLauncher, setProfileLaunchers]);
+  }, [markUnsavedChanges, setLauncher, setProfiles, profileBehaviours, gamingBehaviour, setGamingBehaviourForProfile, setProfiles, setGamingBehaviour]);
 
   const updateProfileHotkey = useCallback((profileName: string, key: keyof ProfileHotkeysState, value: string): boolean => {
     const normalizedValue = normalizeHotkeyForDisplay(value);
@@ -114,7 +95,7 @@ export function useProfileMutations({
 
     setProfileHotkeyValidationError(null);
     setError(null);
-    setProfileHotkeys(assignment.value);
+    setProfiles(current => updateProfile(current, profileName, { hotkeys: assignment.value[profileName] }));
     markUnsavedChanges();
 
     if (workingProfileName === profileName) {
@@ -122,7 +103,7 @@ export function useProfileMutations({
     }
     console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileHotkeys[profileName]?.enterProfile ?? '', Candidate: normalizedValue, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
     return true;
-  }, [markUnsavedChanges, profileHotkeys, setError, setHotkeys, setProfileHotkeyValidationError, setProfileHotkeys, workModeHotkey, workingProfileName]);
+  }, [markUnsavedChanges, profileHotkeys, setError, setHotkeys, setProfileHotkeyValidationError, setProfiles, workModeHotkey, workingProfileName]);
 
   const updateProfileControllerShortcut = useCallback((profileName: string, buttons: string[]): boolean => {
     const assignment = tryAssignProfileControllerShortcut(profileName, buttons, profileControllerShortcuts, workModeControllerShortcut);
@@ -134,11 +115,11 @@ export function useProfileMutations({
 
     setProfileControllerValidationError(null);
     setError(null);
-    setProfileControllerShortcuts(assignment.value);
+    setProfiles(current => updateProfile(current, profileName, { controllerShortcut: assignment.value[profileName] }));
     markUnsavedChanges();
     console.info('[SHORTCUT ASSIGNMENT]', { CurrentSaved: profileControllerShortcuts[profileName]?.buttons ?? [], Candidate: buttons, ValidationResult: 'Valid', DraftUpdated: true, Persisted: false });
     return true;
-  }, [markUnsavedChanges, profileControllerShortcuts, setError, setProfileControllerShortcuts, setProfileControllerValidationError, workModeControllerShortcut]);
+  }, [markUnsavedChanges, profileControllerShortcuts, setError, setProfiles, setProfileControllerValidationError, workModeControllerShortcut]);
 
   const updateWorkModeControllerShortcut = useCallback((buttons: string[]): boolean => {
     const assignment = tryAssignWorkModeControllerShortcut(buttons, profileControllerShortcuts, workModeControllerShortcut);

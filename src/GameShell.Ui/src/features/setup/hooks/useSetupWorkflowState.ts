@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { GamingProfileDisplayTopology } from '../../../types/bridge';
+import type { GamingProfileDisplayTopology } from '../../../bridge/contracts';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { DisplayProfileDraft, DisplayValidationState, OverwriteProfileAction } from '../../profiles/hooks/useDisplayProfileWorkflow';
 import type { PendingNavigationAction } from './useSetupNavigation';
@@ -21,7 +21,7 @@ const DEFAULT_TRANSIENT_MESSAGE_DURATION_MS = 2500;
 export function useSetupWorkflowState() {
   const { t, i18n } = useTranslation();
   const [stepIndex, setStepIndex] = useState(0);
-  const [message, setMessageState] = useState(t('setup.ready'));
+  const [message, setMessageState] = useState('');
   const messageRef = useRef(message);
   const transientMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageVersionRef = useRef(0);

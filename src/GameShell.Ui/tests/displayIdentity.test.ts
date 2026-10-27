@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { areIdentitySetsEqual, deduplicatePhysicalDisplays, formatDisplayResolution, isSamePhysicalDisplay } from '../src/utils/displays.ts';
-import type { DisplayDeviceInfo, DisplayIdentity } from '../src/types/bridge.ts';
+import { areIdentitySetsEqual, deduplicatePhysicalDisplays, formatDisplayResolution, isSamePhysicalDisplay } from '../src/features/displays/displayTopology.ts';
+import type { DisplayDeviceInfo, DisplayIdentity } from '../src/bridge/contracts.ts';
 
 function identity(overrides: Partial<DisplayIdentity> = {}): DisplayIdentity {
   return {

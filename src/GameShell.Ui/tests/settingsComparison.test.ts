@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { areSettingsEquivalent } from '../src/features/settings/settingsComparison.ts';
-import type { AppSettings } from '../src/types/bridge.ts';
+import type { AppSettings } from '../src/bridge/contracts.ts';
 
 function createSettings(): AppSettings {
   return {

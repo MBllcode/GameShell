@@ -4,11 +4,11 @@ import test from 'node:test';
 import { FIRST_RUN_STEPS } from '../src/features/setup/setupFlow.ts';
 import { getI18n, setI18nLanguage } from '../src/i18n/i18n.ts';
 import { DEFAULT_LANGUAGE, detectPreferredLanguage, normalizeLanguageCode } from '../src/i18n/language.ts';
-import { summarizeLayout } from '../src/utils/displays.ts';
-import { formatCurrentMode, formatSessionState } from '../src/utils/status.ts';
-import { scheduleValidationErrorClear, triggerValidationError } from '../src/utils/validation.ts';
+import { summarizeLayout } from '../src/features/displays/displayTopology.ts';
+import { formatCurrentMode, formatSessionState } from '../src/app/status.ts';
+import { scheduleValidationErrorClear, triggerValidationError } from '../src/shared/validation.ts';
 import { isDuplicateProfileEnterHotkey, isDuplicateWorkModeHotkey } from '../src/features/profiles/utils.ts';
-import { isDuplicateProfileControllerShortcut, isDuplicateWorkModeControllerShortcut } from '../src/utils/controllers.ts';
+import { isDuplicateProfileControllerShortcut, isDuplicateWorkModeControllerShortcut } from '../src/features/shortcuts/controllers.ts';
 import { tryAssignProfileControllerShortcut, tryAssignProfileHotkey, tryAssignWorkModeControllerShortcut, tryAssignWorkModeHotkey } from '../src/features/profiles/shortcutAssignment.ts';
 
 test('normalizes supported locales to the canonical language codes', () => {
@@ -121,8 +121,8 @@ test('dashboard footer strings use Polish translations instead of falling back t
   assert.equal(i18n.t('dashboard.editSection'), 'Edytujesz wybraną sekcję.');
   assert.equal(i18n.t('dashboard.createProfileHint'), 'Utwórz nowy profil i przejdź przez kroki konfiguracji.');
   assert.equal(i18n.t('dashboard.switchingTo', { mode: 'Work Mode' }), 'Przełączanie do Work Mode...');
-  assert.equal(i18n.t('dashboard.enterWorkModeCompleted'), 'Wejście do Work Mode zakończone.');
-  assert.equal(i18n.t('dashboard.enterGamingProfileCompleted'), 'Wejście do profilu gamingowego zakończone.');
+  assert.equal(i18n.t('dashboard.enterWorkModeCompleted'), 'Przywrócono konfigurację domyślną.');
+  assert.equal(i18n.t('dashboard.enterGamingProfileCompleted'), 'Wejście do profilu zakończone.');
 
   setI18nLanguage('en');
 });
@@ -185,15 +185,15 @@ test('the same validation error can reappear after it has been cleared', async (
 
 test('first-run components rely on translation keys rather than hardcoded Polish literals', () => {
   const firstRunFiles = [
-    '../src/components/WelcomeStep.tsx',
-    '../src/components/AppBehaviourStep.tsx',
-    '../src/components/DisplaysStep.tsx',
-    '../src/components/LauncherStep.tsx',
-    '../src/components/ProfileBehaviourStep.tsx',
-    '../src/components/WorkBehaviourStep.tsx',
-    '../src/components/ControllerStep.tsx',
-    '../src/components/FinishStep.tsx',
-    '../src/pages/ProfileSetupPage.tsx'
+    '../src/features/setup/components/WelcomeStep.tsx',
+    '../src/features/settings/components/AppBehaviourStep.tsx',
+    '../src/features/displays/components/DisplaysStep.tsx',
+    '../src/features/profiles/components/LauncherStep.tsx',
+    '../src/features/profiles/components/ProfileBehaviourStep.tsx',
+    '../src/features/settings/components/WorkBehaviourStep.tsx',
+    '../src/features/shortcuts/components/ControllerStep.tsx',
+    '../src/features/setup/components/FinishStep.tsx',
+    '../src/features/setup/ProfileSetupPage.tsx'
   ];
 
   for (const filePath of firstRunFiles) {
@@ -201,4 +201,13 @@ test('first-run components rely on translation keys rather than hardcoded Polish
 
     assert.doesNotMatch(source, /Konfiguracja GameShell|Wróć|Dalej|Pierwsza konfiguracja|Ekrany|Launcher profilu|Zachowanie profilu|Zachowanie aplikacji|Podsumowanie ustawień|Język interfejsu|Aktywny profil|Brak zaznaczonego profilu|Gotowe\.|ZAPISANO|Uruchom launcher/);
   }
+});
+
+test('transition completion confirms the actual target in both languages', () => {
+  setI18nLanguage('en');
+  assert.equal(getI18n().t('dashboard.profileActivated', { name: 'Football' }), 'Profile activated: Football.');
+  assert.equal(getI18n().t('dashboard.enterWorkModeCompleted'), 'Default setup restored.');
+  setI18nLanguage('pl');
+  assert.equal(getI18n().t('dashboard.profileActivated', { name: 'Football' }), 'Aktywowano profil: Football.');
+  assert.equal(getI18n().t('dashboard.enterWorkModeCompleted'), 'Przywrócono konfigurację domyślną.');
 });

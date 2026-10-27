@@ -1,11 +1,12 @@
+import { createProfile, type Profile } from '../profileModel';
+import type { LauncherType } from '../profileCommands';
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
-import { sendBridgeCommand } from '../../../services/webViewBridge';
+import { sendBridgeCommand } from '../../../bridge/webViewBridge';
 import { normalizeGamingProfileName } from '../utils';
-import { areTopologiesEqual, getProfileTopology, topologyToLegacy, validateTopology } from '../../../utils/displays';
-import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../types/bridge';
+import { areTopologiesEqual, getProfileTopology, topologyToLegacy, validateTopology } from '../../displays/displayTopology';
+import type { DisplayDeviceInfo, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../bridge/contracts';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
-import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../utils';
 import { canContinueWorkingProfile } from '../../setup/setupRouting';
 
 export type DisplayProfileDraft = { profileName: string; topology: GamingProfileDisplayTopology };
@@ -23,30 +24,21 @@ function createProfileId(): string {
 type Options = {
   displayProfileDraftRef: { current: DisplayProfileDraft };
   displays: DisplayDeviceInfo[];
-  profiles: DisplayLayoutProfile[];
+  profiles: Profile[];
   selectedProfileName: string;
   isCreatingProfileFlow: boolean;
   isFirstRun: boolean;
   isEditingSection: boolean;
   gamingBehaviour: Record<string, boolean>;
-  launcher: string;
-  hotkeys: { gamingMode: string };
-  profileBehaviours: GamingProfileBehaviourMap;
-  profileLaunchers: GamingProfileLauncherMap;
-  profileHotkeys: GamingProfileHotkeysMap;
-  profileControllerShortcuts: GamingProfileControllerShortcutMap;
+  launcher: LauncherType;
   setDisplays: Dispatch<SetStateAction<DisplayDeviceInfo[]>>;
   setIsRefreshingDisplays: Dispatch<SetStateAction<boolean>>;
   setDisplayListError: Dispatch<SetStateAction<string | null>>;
   setDisplayValidationState: Dispatch<SetStateAction<DisplayValidationState>>;
-  setProfiles: Dispatch<SetStateAction<DisplayLayoutProfile[]>>;
+  setProfiles: Dispatch<SetStateAction<Profile[]>>;
   setActiveProfileName: Dispatch<SetStateAction<string | null>>;
   setLayout: Dispatch<SetStateAction<DisplayLayoutSnapshot | null>>;
   setSelectedProfileName: Dispatch<SetStateAction<string>>;
-  setProfileBehaviours: Dispatch<SetStateAction<GamingProfileBehaviourMap>>;
-  setProfileLaunchers: Dispatch<SetStateAction<GamingProfileLauncherMap>>;
-  setProfileHotkeys: Dispatch<SetStateAction<GamingProfileHotkeysMap>>;
-  setProfileControllerShortcuts: Dispatch<SetStateAction<GamingProfileControllerShortcutMap>>;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
   setPendingOverwriteProfileAction: (value: SetStateAction<OverwriteProfileAction | null>) => void;
   setShowOverwriteProfileDialog: (value: boolean) => void;
@@ -66,7 +58,7 @@ export function useDisplayProfileWorkflow(options: Options) {
     ready: (name: string) => name ? t('profile.layoutReadyContinue', { name }) : t('profile.refreshListUpdated'),
     empty: t('profile.noDisplaysFound')
   };
-  const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isFirstRun, isEditingSection, gamingBehaviour, launcher, hotkeys, profileBehaviours, profileLaunchers, profileHotkeys, profileControllerShortcuts, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, setProfileBehaviours, setProfileLaunchers, setProfileHotkeys, setProfileControllerShortcuts, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
+  const { displayProfileDraftRef, displays, profiles, selectedProfileName, isCreatingProfileFlow, isFirstRun, isEditingSection, gamingBehaviour, launcher, setDisplays, setIsRefreshingDisplays, setDisplayListError, setDisplayValidationState, setProfiles, setActiveProfileName, setLayout, setSelectedProfileName, pendingSettingsOverrideRef, setPendingOverwriteProfileAction, setShowOverwriteProfileDialog, markUnsavedChanges, setError, setMessage } = options;
 
   async function refreshDisplays() {
     setIsRefreshingDisplays(true); setDisplayListError(null); setError(null);
@@ -88,32 +80,20 @@ export function useDisplayProfileWorkflow(options: Options) {
     const isRenamingSelectedProfile = Boolean(selectedProfile && !existingProfile);
     const profileBeingUpdated = isRenamingSelectedProfile ? selectedProfile : existingProfile;
     const resolvedProfileName = profileBeingUpdated?.name === trimmedName ? profileBeingUpdated.name : trimmedName;
-    const nextProfiles = profileBeingUpdated
-      ? profiles.map((profile) => profile.name.toLowerCase() === profileBeingUpdated.name.toLowerCase() ? { ...profile, name: resolvedProfileName, displayTopology: topology, layout: topologyToLegacy(topology, displays) } : profile)
-      : [...profiles, { id: createProfileId(), name: trimmedName, displayTopology: topology, layout: topologyToLegacy(topology, displays) }];
-    const sourceProfileName = profileBeingUpdated?.name;
-    const nextProfileBehaviours = { ...profileBehaviours };
-    const nextProfileLaunchers = { ...profileLaunchers };
-    const nextProfileHotkeys = { ...profileHotkeys };
-    const nextProfileControllerShortcuts = { ...profileControllerShortcuts };
-    if (sourceProfileName && sourceProfileName !== resolvedProfileName) {
-      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[sourceProfileName] ?? gamingBehaviour;
-      nextProfileLaunchers[resolvedProfileName] = nextProfileLaunchers[sourceProfileName] ?? launcher;
-      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[sourceProfileName] ?? { enterProfile: hotkeys.gamingMode };
-      nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[sourceProfileName] ?? null;
-      delete nextProfileBehaviours[sourceProfileName];
-      delete nextProfileLaunchers[sourceProfileName];
-      delete nextProfileHotkeys[sourceProfileName];
-      delete nextProfileControllerShortcuts[sourceProfileName];
-    } else {
-      nextProfileBehaviours[resolvedProfileName] = nextProfileBehaviours[resolvedProfileName] ?? gamingBehaviour;
-      nextProfileLaunchers[resolvedProfileName] = nextProfileLaunchers[resolvedProfileName] ?? launcher;
-      nextProfileHotkeys[resolvedProfileName] = nextProfileHotkeys[resolvedProfileName] ?? (profileBeingUpdated ? { enterProfile: hotkeys.gamingMode } : { enterProfile: '' });
-      nextProfileControllerShortcuts[resolvedProfileName] = nextProfileControllerShortcuts[resolvedProfileName] ?? (profileBeingUpdated ? null : null);
-    }
     const layout = topologyToLegacy(topology, displays);
-    setProfiles(nextProfiles); setActiveProfileName(resolvedProfileName); setLayout(layout); setSelectedProfileName(resolvedProfileName); setProfileBehaviours(nextProfileBehaviours); setProfileLaunchers(nextProfileLaunchers); setProfileHotkeys(nextProfileHotkeys); setProfileControllerShortcuts(nextProfileControllerShortcuts);
-    pendingSettingsOverrideRef.current = { gamingProfiles: nextProfiles, activeGamingProfileName: resolvedProfileName, gamingLayout: layout, gamingProfileBehaviours: nextProfileBehaviours, gamingProfileLaunchers: nextProfileLaunchers, gamingProfileHotkeys: nextProfileHotkeys, gamingProfileControllerShortcuts: nextProfileControllerShortcuts };
+    const updated = profileBeingUpdated
+      ? { ...profileBeingUpdated, name: resolvedProfileName, displayTopology: topology, layout }
+      : createProfile({ id: createProfileId(), name: trimmedName, displayTopology: topology, layout }, {
+          behaviour: { ...gamingBehaviour } as Profile['behaviour'], application: launcher
+        });
+    const nextProfiles = profileBeingUpdated
+      ? profiles.map(profile => profile === profileBeingUpdated ? updated : profile)
+      : [...profiles, updated];
+    setProfiles(nextProfiles);
+    setActiveProfileName(resolvedProfileName);
+    setLayout(layout);
+    setSelectedProfileName(resolvedProfileName);
+    pendingSettingsOverrideRef.current = { gamingProfiles: nextProfiles, activeGamingProfileName: resolvedProfileName, gamingLayout: layout };
     markUnsavedChanges(); setError(null); setMessage(isEditingSection ? messages.prepared(resolvedProfileName) : messages.ready(resolvedProfileName));
   }
 

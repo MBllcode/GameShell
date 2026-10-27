@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import type { ControllerShortcutSettings, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
-import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../utils';
+import { useMemo, useState } from 'react';
+import type { ControllerShortcutSettings, DisplayDeviceInfo, DisplayIdentity, DisplayLayoutSnapshot } from '../../../bridge/contracts';
+import { profileViews, type Profile } from '../profileModel';
 
 type Options = {
   selectedProfileName: string;
@@ -15,17 +15,16 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
   const [selectedConsoleDisplays, setSelectedConsoleDisplays] = useState<DisplayIdentity[]>([]);
   const [gamingLayout, setGamingLayout] = useState<DisplayLayoutSnapshot | null>(null);
   const [workModeLayout, setWorkModeLayout] = useState<DisplayLayoutSnapshot | null>(null);
-  const [gamingProfiles, setGamingProfiles] = useState<DisplayLayoutProfile[]>([]);
+  const [gamingProfiles, setGamingProfiles] = useState<Profile[]>([]);
   const [activeGamingProfileName, setActiveGamingProfileName] = useState<string | null>(null);
-  const [gamingProfileBehaviours, setGamingProfileBehaviours] = useState<GamingProfileBehaviourMap>({});
-  const [gamingProfileLaunchers, setGamingProfileLaunchers] = useState<GamingProfileLauncherMap>({});
-  const [gamingProfileHotkeys, setGamingProfileHotkeys] = useState<GamingProfileHotkeysMap>({});
-  const [gamingProfileControllerShortcuts, setGamingProfileControllerShortcuts] = useState<GamingProfileControllerShortcutMap>({});
   const [workModeControllerShortcut, setWorkModeControllerShortcut] = useState<ControllerShortcutSettings | null>(null);
   const [profileHotkeyValidationError, setProfileHotkeyValidationError] = useState<string | null>(null);
   const [profileControllerValidationError, setProfileControllerValidationError] = useState<string | null>(null);
 
+  const views = useMemo(() => profileViews(gamingProfiles), [gamingProfiles]);
+
   return {
+    ...views,
     selectedProfileName,
     displays,
     setDisplays,
@@ -47,14 +46,6 @@ export function useDisplayConfigurationState({ selectedProfileName }: Options) {
     setGamingProfiles,
     activeGamingProfileName,
     setActiveGamingProfileName,
-    gamingProfileBehaviours,
-    setGamingProfileBehaviours,
-    gamingProfileLaunchers,
-    setGamingProfileLaunchers,
-    gamingProfileHotkeys,
-    setGamingProfileHotkeys,
-    gamingProfileControllerShortcuts,
-    setGamingProfileControllerShortcuts,
     workModeControllerShortcut,
     setWorkModeControllerShortcut,
     profileHotkeyValidationError,

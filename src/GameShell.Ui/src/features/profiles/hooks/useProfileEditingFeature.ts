@@ -1,36 +1,24 @@
+import type { Profile, ProfileBehaviour } from '../profileModel';
 import { useEffect, type Dispatch, type SetStateAction } from 'react';
-import { useControllerCapture } from '../../controller/hooks/useControllerCapture';
+import { useControllerCapture } from '../../shortcuts/hooks/useControllerCapture';
 import { useProfileMutations } from './useProfileMutations';
-import type { ControllerShortcutSettings } from '../../../types/bridge';
-import type { LauncherType } from '../../../utils/modes';
-import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../utils';
+import type { ControllerShortcutSettings } from '../../../bridge/contracts';
+import type { LauncherType } from '../profileCommands';
+import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap } from '../utils';
 
-type BehaviourState = {
-  hideDesktopIcons: boolean;
-  hideTaskbar: boolean;
-  closeVisibleWindows: boolean;
-  minimizeRemainingWindows: boolean;
-  moveCursorToCorner: boolean;
-  hideCursor: boolean;
-  startLauncher: boolean;
-  bringLauncherToForeground: boolean;
-};
+type BehaviourState = ProfileBehaviour;
 
 type Options = {
+  setProfiles: Dispatch<SetStateAction<Profile[]>>;
   workingProfileName: string;
   gamingBehaviour: BehaviourState;
   profileBehaviours: GamingProfileBehaviourMap;
-  profileLaunchers: GamingProfileLauncherMap;
   profileHotkeys: GamingProfileHotkeysMap;
   profileControllerShortcuts: GamingProfileControllerShortcutMap;
   workModeControllerShortcut: ControllerShortcutSettings | null;
   workModeHotkey: string;
   setGamingBehaviour: Dispatch<SetStateAction<BehaviourState>>;
-  setProfileBehaviours: Dispatch<SetStateAction<GamingProfileBehaviourMap>>;
   setLauncher: Dispatch<SetStateAction<LauncherType>>;
-  setProfileLaunchers: Dispatch<SetStateAction<GamingProfileLauncherMap>>;
-  setProfileHotkeys: Dispatch<SetStateAction<GamingProfileHotkeysMap>>;
-  setProfileControllerShortcuts: Dispatch<SetStateAction<GamingProfileControllerShortcutMap>>;
   setWorkModeControllerShortcut: Dispatch<SetStateAction<ControllerShortcutSettings | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;

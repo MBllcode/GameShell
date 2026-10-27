@@ -1,4 +1,4 @@
-import type { DisplayDeviceInfo, DisplayIdentity } from '../../types/bridge';
+import type { DisplayDeviceInfo, DisplayIdentity } from '../../bridge/contracts';
 
 export function syncActiveDisplaySelections(detectedDisplays: DisplayDeviceInfo[]): { consoleDisplays: DisplayIdentity[]; primaryDisplay: DisplayIdentity | null } {
   const activeDisplays = detectedDisplays.filter((display) => display.isEnabled);

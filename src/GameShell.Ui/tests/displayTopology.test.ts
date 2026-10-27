@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyEdgeSnap, canvasToTopology, computeTopologyBounds, createCanvasTransform, getDockingGuides, placeRectNextToTopology, rectFromPosition, rectsOverlap, resolveCollision, topologyToCanvas } from '../src/utils/displayTopologyGeometry.ts';
-import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, normalizeTopologyPrimary, profileTargetForAddition, profileTargetFromDisplay, topologyFromLegacy, topologyToLegacy, validateTopology } from '../src/utils/displays.ts';
-import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../src/types/bridge.ts';
+import { applyEdgeSnap, canvasToTopology, computeTopologyBounds, createCanvasTransform, getDockingGuides, placeRectNextToTopology, rectFromPosition, rectsOverlap, resolveCollision, topologyToCanvas } from '../src/features/displays/geometry.ts';
+import { getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, normalizeTopologyPrimary, profileTargetForAddition, profileTargetFromDisplay, topologyFromLegacy, topologyToLegacy, validateTopology } from '../src/features/displays/displayTopology.ts';
+import type { DisplayDeviceInfo, DisplayIdentity, DisplayLayoutSnapshot, DisplayModeInfo, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../src/bridge/contracts.ts';
 
 function identity(name: string): DisplayIdentity {
   const targetId = [...name].reduce((total, character) => total + character.charCodeAt(0), 0);

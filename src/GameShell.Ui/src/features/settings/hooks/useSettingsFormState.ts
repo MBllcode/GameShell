@@ -1,21 +1,12 @@
+import { DEFAULT_PROFILE_BEHAVIOUR, type ProfileBehaviour } from '../../profiles/profileModel';
 import { useState } from 'react';
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '../../../i18n/language';
-import type { LauncherType } from '../../../utils/modes';
+import type { LauncherType } from '../../profiles/profileCommands';
 
 export type HotkeySettingsState = { consoleMode: string; gamingMode: string; workMode: string };
 
-export type ConsoleBehaviourState = {
-  hideDesktopIcons: boolean;
-  hideTaskbar: boolean;
-  closeVisibleWindows: boolean;
-  minimizeRemainingWindows: boolean;
-  moveCursorToCorner: boolean;
-  hideCursor: boolean;
-  startLauncher: boolean;
-  bringLauncherToForeground: boolean;
-};
-
-export type GamingBehaviourState = ConsoleBehaviourState;
+export type ConsoleBehaviourState = ProfileBehaviour;
+export type GamingBehaviourState = ProfileBehaviour;
 
 export type WorkBehaviourState = {
   closeLauncher: boolean;
@@ -46,9 +37,7 @@ export const defaultConsoleBehaviour: ConsoleBehaviourState = {
   bringLauncherToForeground: true
 };
 
-export const defaultGamingBehaviour: GamingBehaviourState = {
-  ...defaultConsoleBehaviour
-};
+export const defaultGamingBehaviour = DEFAULT_PROFILE_BEHAVIOUR;
 
 export const defaultWorkBehaviour: WorkBehaviourState = {
   closeLauncher: true,
@@ -68,7 +57,7 @@ export const defaultFinishOptions: FinishOptions = {
 
 export function useSettingsFormState() {
   const [hotkeys, setHotkeys] = useState<HotkeySettingsState>({ consoleMode: '', gamingMode: '', workMode: '' });
-  const [launcher, setLauncher] = useState<LauncherType>('Playnite Fullscreen');
+  const [launcher, setLauncher] = useState<LauncherType>('None');
   const [language, setLanguage] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
   const [consoleBehaviour, setConsoleBehaviour] = useState<ConsoleBehaviourState>({ ...defaultConsoleBehaviour });
   const [gamingBehaviour, setGamingBehaviour] = useState<GamingBehaviourState>({ ...defaultGamingBehaviour });

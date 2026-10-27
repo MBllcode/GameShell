@@ -21,7 +21,7 @@ const requiredPolishCopy = [
   'Zapisz zmiany',
   'Panel główny',
   'Przywróć otwarte okna',
-  'Przenieś launcher na pierwszy plan',
+  'Przenieś aplikację na pierwszy plan',
   'Uruchamianie',
 ];
 

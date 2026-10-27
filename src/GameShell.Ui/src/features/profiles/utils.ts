@@ -1,7 +1,6 @@
-import type { AppSettings, ControllerShortcutSettings, DisplayIdentity, DisplayLayoutProfile } from '../../types/bridge.ts';
-import { normalizeControllerShortcut } from '../../utils/controllers.ts';
-import { normalizeHotkeyForDisplay, normalizeHotkeyValue } from '../../utils/hotkeys.ts';
-import { toLauncherType, type LauncherType } from '../../utils/modes.ts';
+import type { AppSettings, ControllerShortcutSettings, DisplayLayoutProfile } from '../../bridge/contracts.ts';
+import { normalizeHotkeyValue } from '../shortcuts/hotkeys.ts';
+import { type LauncherType } from './profileCommands.ts';
 
 type ProfileHotkeysState = { enterProfile: string };
 type GamingBehaviourState = {
@@ -38,45 +37,6 @@ export function toGamingBehaviourState(behaviour: Partial<GamingBehaviourState> 
 
 export function resolveGamingBehaviourProfileName(activeName: string | null, profiles: DisplayLayoutProfile[]) {
   return resolveActiveGamingProfile(activeName, profiles)?.name ?? null;
-}
-
-export function buildProfileBehaviourMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, savedBehaviours: NonNullable<AppSettings['display']['gamingProfileBehaviours']>, fallbackBehaviour: GamingBehaviourState): GamingProfileBehaviourMap {
-  const map: GamingProfileBehaviourMap = {};
-  profiles.forEach((profile) => {
-    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    const saved = savedBehaviours.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    map[profile.name] = toGamingBehaviourState(configured?.behaviour ?? saved?.behaviour ?? fallbackBehaviour);
-  });
-  return map;
-}
-
-export function buildProfileLauncherMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, fallbackLauncher: LauncherType): GamingProfileLauncherMap {
-  const map: GamingProfileLauncherMap = {};
-  profiles.forEach((profile) => {
-    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    map[profile.name] = toLauncherType(configured?.launcher?.type ?? fallbackLauncher);
-  });
-  return map;
-}
-
-export function buildProfileHotkeysMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, fallbackHotkey: ProfileHotkeysState): GamingProfileHotkeysMap {
-  const map: GamingProfileHotkeysMap = {};
-  profiles.forEach((profile) => {
-    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    map[profile.name] = {
-      enterProfile: normalizeHotkeyForDisplay(configured?.hotkeys?.enterProfile ?? fallbackHotkey.enterProfile)
-    };
-  });
-  return map;
-}
-
-export function buildProfileControllerShortcutMap(profiles: DisplayLayoutProfile[], configurations: NonNullable<AppSettings['display']['gamingProfileConfigurations']>, fallbackShortcut: ControllerShortcutSettings | null): GamingProfileControllerShortcutMap {
-  const map: GamingProfileControllerShortcutMap = {};
-  profiles.forEach((profile) => {
-    const configured = configurations.find((entry) => entry.profileName.toLowerCase() === profile.name.toLowerCase());
-    map[profile.name] = normalizeControllerShortcut(configured?.controllerShortcut ?? fallbackShortcut);
-  });
-  return map;
 }
 
 export function isDuplicateProfileEnterHotkey(profileName: string, candidateHotkey: string, profileHotkeys: GamingProfileHotkeysMap) {

@@ -1,15 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
-import type { AppSettings } from '../../../types/bridge';
+import type { AppSettings } from '../../../bridge/contracts';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import type { SetupMode } from '../setupFlow';
 import type { BootstrapRoute } from '../setupRouting';
 
-export type PendingNavigationAction = 'goBack' | 'goNext' | 'returnToDashboard';
+export type PendingNavigationAction = 'goBack' | 'goNext' | 'returnToDashboard' | 'skipProfile';
 export type OverwriteProfileAction = 'next' | 'save' | 'save-then-continue';
 export type SetupStepId = string;
 
 type UseSetupNavigationOptions = {
+  hasDefaultLayout: boolean;
   setupMode: SetupMode;
   hasAdvancedInCreateProfileFlow: boolean;
   hasUnsavedChanges: boolean;
@@ -83,6 +84,10 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
 
   async function goNextInternal() {
     setError(null);
+    if (currentStepId === 'work-display' && !options.hasDefaultLayout) {
+      setError(t('setup.defaultRequired'));
+      return;
+    }
     if (currentStepId === 'gaming-display') {
       await continueFromGamingDisplayStep(false);
       return;
@@ -110,6 +115,14 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
   }
 
   async function executeNavigation(action: PendingNavigationAction) {
+    if (action === 'skipProfile') {
+      if (setupMode === 'FirstRun' && currentStepId === 'gaming-display') {
+        resetDisplayProfileDraft();
+        setError(null);
+        setStepIndex(resolveStepIndex('app-behaviour'));
+      }
+      return;
+    }
     if (action === 'goBack') {
       setError(null);
       const previousIndex = activeStepIndexes[resolvedFlowPosition - 1];

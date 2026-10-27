@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
-import type { AppStatus, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../types/bridge';
-import type { ProfileSetupPageProps } from '../../../pages/ProfileSetupPage';
-import { useProfileSetupPageModel } from './useProfileSetupPageModel';
+import type { AppStatus, DisplayLayoutSnapshot, GamingProfileDisplayTopology } from '../../../bridge/contracts';
+import type { ProfileSetupPageProps } from '../ProfileSetupPage';
 import type { useSetupWorkflowState } from './useSetupWorkflowState';
 import type { useDisplayConfigurationState } from '../../profiles/hooks/useDisplayConfigurationState';
 import type { useSettingsFormState } from '../../settings/hooks/useSettingsFormState';
@@ -53,7 +52,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
     }
   }, [displayState.setProfileControllerValidationError, displayState.setProfileHotkeyValidationError, flow.currentStep.id, setupState.setupMode]);
 
-  return useProfileSetupPageModel({
+  const page = {
     flow: {
       activeSteps: flow.activeSteps,
       resolvedFlowPosition: flow.resolvedFlowPosition,
@@ -92,7 +91,6 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
     },
     profile: {
       launcher,
-      setLauncher: setupPageActions.updateProfileLauncher,
       language,
       setLanguage,
       gamingBehaviour,
@@ -138,10 +136,7 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
       setShowUnsavedDialog,
       handleSidebarStepSelect: navigation.handleSidebarStepSelect,
       updateProfileLauncher: setupPageActions.updateProfileLauncher,
-      updateProfileHotkey: setupPageActions.updateProfileHotkey,
-      updateProfileControllerShortcut: setupPageActions.updateProfileControllerShortcut,
-      updateWorkModeHotkey: profileMutations.updateWorkModeHotkey,
-      updateWorkModeControllerShortcut: profileMutations.updateWorkModeControllerShortcut
     }
-  });
+  };
+  return { ...page.flow, ...page.displays, ...page.profile, ...page.controller, ...page.actions };
 }

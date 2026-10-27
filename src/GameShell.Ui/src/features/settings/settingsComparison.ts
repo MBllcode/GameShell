@@ -1,4 +1,4 @@
-import type { AppSettings } from '../../types/bridge';
+import type { AppSettings } from '../../bridge/contracts';
 
 const WINDOW_STATE_KEYS = new Set(['windowLeft', 'windowTop', 'windowWidth', 'windowHeight']);
 const DISPLAY_LAYOUT_METADATA_KEYS = new Set(['id', 'capturedAt']);

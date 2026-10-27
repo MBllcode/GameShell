@@ -31,7 +31,7 @@ test('profile setup modes do not expose global settings', () => {
 });
 
 test('FirstRun exposes all global sections', () => {
-  assert.deepEqual(getSetupSteps('FirstRun').map((step) => step.id), ['welcome', 'gaming-display', 'launcher', 'profile-behaviour', 'controller', 'work-display', 'work-behaviour', 'work-shortcuts', 'app-behaviour', 'finish']);
+  assert.deepEqual(getSetupSteps('FirstRun').map((step) => step.id), ['welcome', 'work-display', 'work-behaviour', 'work-shortcuts', 'gaming-display', 'launcher', 'profile-behaviour', 'controller', 'app-behaviour', 'finish']);
 });
 
 test('Dashboard global settings remain separate from profile setup', () => {

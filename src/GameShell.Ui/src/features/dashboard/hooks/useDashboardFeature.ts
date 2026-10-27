@@ -1,11 +1,11 @@
+import type { Profile } from '../../profiles/profileModel';
 import type { Dispatch, SetStateAction } from 'react';
-import type { AppStatus, DisplayIdentity, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../../types/bridge';
-import type { DashboardPageProps } from '../../../pages/DashboardPage';
-import type { GamingProfileBehaviourMap, GamingProfileControllerShortcutMap, GamingProfileHotkeysMap, GamingProfileLauncherMap } from '../../profiles/utils';
+import type { AppStatus, DisplayLayoutSnapshot } from '../../../bridge/contracts';
+import type { DashboardPageProps } from '../DashboardPage';
+import type { GamingProfileLauncherMap } from '../../profiles/utils';
 import type { SettingsPayloadOverrides } from '../../settings/buildSettingsPayload';
 import { steps } from '../../setup/setupFlow';
 import { useDashboardActions } from './useDashboardActions';
-import { useDashboardPageModel } from './useDashboardPageModel';
 import { useDashboardSetupActions } from './useDashboardSetupActions';
 import type { SetupMode } from '../../setup/setupFlow';
 import type { BootstrapRoute } from '../../setup/setupRouting';
@@ -15,9 +15,8 @@ type Options = {
   status: AppStatus;
   launcher: DashboardPageProps['launcher'];
   gamingLayout: DisplayLayoutSnapshot | null;
-  gamingProfiles: DisplayLayoutProfile[];
+  gamingProfiles: Profile[];
   gamingProfileLaunchers: GamingProfileLauncherMap;
-  gamingProfileHotkeys: GamingProfileHotkeysMap;
   activeGamingProfileName: string | null;
   selectedProfileName: string;
   globalWorkModeHotkey: string;
@@ -27,10 +26,6 @@ type Options = {
   hasError: boolean;
   hasUnsavedChanges: boolean;
   isSetupComplete: boolean;
-  profileBehaviours: GamingProfileBehaviourMap;
-  profileLaunchers: GamingProfileLauncherMap;
-  profileHotkeys: GamingProfileHotkeysMap;
-  profileControllerShortcuts: GamingProfileControllerShortcutMap;
   saveCurrentSettings: (isFirstRunCompleted?: boolean, overrides?: SettingsPayloadOverrides) => Promise<unknown>;
   setStatus: Dispatch<SetStateAction<AppStatus>>;
   setIsRemovingProfile: (value: boolean) => void;
@@ -40,7 +35,7 @@ type Options = {
   setError: (value: string | null) => void;
   setMessage: Dispatch<SetStateAction<string>>;
   setTransientMessage: (value: string, durationMs?: number) => void;
-  syncDisplayProfileDraft: (draft: { profileName: string; topology: import('../../../types/bridge').GamingProfileDisplayTopology }) => void;
+  syncDisplayProfileDraft: (draft: { profileName: string; topology: import('../../../bridge/contracts').GamingProfileDisplayTopology }) => void;
   setStepIndex: Dispatch<SetStateAction<number>>;
   setSetupMode: Dispatch<SetStateAction<SetupMode>>;
   setBootstrapRoute: Dispatch<SetStateAction<BootstrapRoute>>;
@@ -51,6 +46,7 @@ type Options = {
   setProfileHotkeyValidationError: Dispatch<SetStateAction<string | null>>;
   setProfileControllerValidationError: Dispatch<SetStateAction<string | null>>;
   setHotkeys: Dispatch<SetStateAction<{ consoleMode: string; gamingMode: string; workMode: string }>>;
+  setLauncher: (launcher: 'None') => void;
   setGamingBehaviour: Dispatch<SetStateAction<GamingBehaviourState>>;
   setShowOverwriteProfileDialog: Dispatch<SetStateAction<boolean>>;
 };
@@ -62,10 +58,6 @@ export function useDashboardFeature(options: Options) {
     selectedProfileName: options.selectedProfileName,
     profiles: options.gamingProfiles,
     activeProfileName: options.activeGamingProfileName,
-    profileBehaviours: options.profileBehaviours,
-    profileLaunchers: options.profileLaunchers,
-    profileHotkeys: options.profileHotkeys,
-    profileControllerShortcuts: options.profileControllerShortcuts,
     saveCurrentSettings: options.saveCurrentSettings,
     setStatus: options.setStatus,
     setIsRemovingProfile: options.setIsRemovingProfile,
@@ -92,32 +84,28 @@ export function useDashboardFeature(options: Options) {
     setProfileControllerValidationError: options.setProfileControllerValidationError,
     setHotkeys: options.setHotkeys,
     setGamingBehaviour: options.setGamingBehaviour,
+    setLauncher: options.setLauncher,
     setShowOverwriteProfileDialog: options.setShowOverwriteProfileDialog,
     setMessage: options.setMessage
   });
 
-  return useDashboardPageModel({
-    state: {
+  return {
       status: options.status,
       launcher: options.launcher,
       gamingLayout: options.gamingLayout,
       gamingProfiles: options.gamingProfiles,
       gamingProfileLaunchers: options.gamingProfileLaunchers,
-      gamingProfileHotkeys: options.gamingProfileHotkeys,
       activeProfileName: options.activeGamingProfileName,
       selectedProfileName: options.selectedProfileName,
       globalWorkModeHotkey: options.globalWorkModeHotkey,
       isModeSwitching: options.isModeSwitching,
       isRemovingProfile: options.isRemovingProfile,
       message: options.message,
-      hasError: options.hasError
-    },
-    actions: {
+      hasError: options.hasError,
       runModeCommand: dashboardActions.runModeCommand,
       deleteSelectedProfile: dashboardActions.deleteSelectedProfile,
       selectProfile: options.setSelectedProfileName,
       createProfile: setupActions.createProfile,
       editSettings: setupActions.editSettings
-    }
-  });
+  };
 }

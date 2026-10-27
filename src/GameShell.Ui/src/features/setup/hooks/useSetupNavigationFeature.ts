@@ -1,24 +1,18 @@
 import { useSetupNavigation } from './useSetupNavigation';
-import { useSetupSaveWorkflow } from './useSetupSaveWorkflow';
 
-type SaveOptions = Parameters<typeof useSetupSaveWorkflow>[0];
-type NavigationOptions = Parameters<typeof useSetupNavigation>[0];
-
-type Options = SaveOptions & Omit<NavigationOptions, 'saveAndReturnToDashboard'>;
+type Options = Omit<Parameters<typeof useSetupNavigation>[0], 'saveAndReturnToDashboard'>;
 
 export function useSetupNavigationFeature(options: Options) {
-  const saveAndReturnToDashboard = useSetupSaveWorkflow({
-    setupMode: options.setupMode,
-    currentStepId: options.currentStepId,
-    hasShortcutValidationError: options.hasShortcutValidationError,
-    commitGamingDisplayDraft: options.commitGamingDisplayDraft,
-    persistAndReturnToDashboard: options.persistAndReturnToDashboard
-  });
+  async function saveAndReturnToDashboard() {
+    if (options.hasShortcutValidationError) return;
+    if (options.setupMode === 'CreateProfile' || options.currentStepId === 'gaming-display') {
+      if (!await options.commitGamingDisplayDraft(false, 'save')) return;
+      // The pending payload override also covers this commit before React publishes state.
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    await options.persistAndReturnToDashboard();
+  }
 
-  const navigation = useSetupNavigation({
-    ...options,
-    saveAndReturnToDashboard
-  });
-
+  const navigation = useSetupNavigation({ ...options, saveAndReturnToDashboard });
   return { saveAndReturnToDashboard, navigation };
 }
