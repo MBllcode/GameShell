@@ -30,6 +30,10 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
+          fetch-depth: 0
+      - name: Scan Git history for secrets
+        shell: pwsh
+        run: ./scripts/check-secrets.ps1
       - name: Validate version tag
         shell: pwsh
         run: |
@@ -39,7 +43,7 @@ jobs:
           "RELEASE_VERSION=$($env:RELEASE_TAG.Substring(1))" >> $env:GITHUB_ENV
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -51,6 +55,8 @@ jobs:
         run: |
           npm ci
           if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+          npm audit --audit-level=high
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency audit failed.' }
           npm test
           if ($LASTEXITCODE -ne 0) { throw 'Frontend tests failed.' }
       - name: Test backend
