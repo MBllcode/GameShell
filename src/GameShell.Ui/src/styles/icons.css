@@ -1,0 +1,631 @@
+/* Focused visual polish: keep semantic iconography and framed boundaries consistent. */
+
+.icon-badge .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.panel-leading-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.language-panel {
+  grid-template-columns: 28px minmax(150px, 1fr) minmax(250px, 420px);
+}
+
+.section-frame {
+  width: 100%;
+  min-width: 0;
+}
+
+.section-frame-heading {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 -7px;
+  padding-inline: 10px;
+}
+
+/* The pseudo-element below is the single framing boundary for these headers. */
+
+.profile-settings-heading,
+.display-module-header,
+.shortcut-module-header {
+  border-bottom: 0;
+}
+
+/* The properties title owns the first boundary; later groups own their own. */
+
+.display-properties-panel > .display-property-section:first-of-type {
+  border-top: 0;
+}
+
+.profile-module-title-wrap > .icon-badge,
+.profile-target-line > .icon-badge,
+.display-inventory-header > .icon-badge,
+.display-property-heading > .icon-badge,
+.summary-list div > .icon-badge {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+}
+
+.secondary-button,
+.danger-button {
+  min-height: 38px;
+  border-radius: var(--gs-radius-control);
+}
+
+.secondary-button.compact,
+.danger-button.compact {
+  min-height: 34px;
+  padding: 6px 12px;
+}
+
+.danger-button {
+  border-color: rgba(184, 92, 92, 0.58);
+  background: rgba(24, 17, 18, 0.82);
+  color: #d88787;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--gs-danger);
+  background: rgba(184, 92, 92, 0.12);
+  color: #f0a1a1;
+}
+
+.summary-list div {
+  grid-template-columns: 28px 176px minmax(0, 1fr);
+}
+
+@media (max-width: 480px) {
+  .language-panel {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .summary-list div {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Golden-reference parity: shared icon-led rows, controls and hierarchy. */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 4px 7px;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius-chip);
+  color: var(--gs-text-muted);
+  font-family: var(--font-technical);
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-badge-active {
+  border-color: rgba(122, 201, 67, 0.52);
+  color: var(--gs-green-bright);
+  background: rgba(78, 159, 61, 0.08);
+}
+
+.status-badge-danger {
+  border-color: rgba(184, 92, 92, 0.58);
+  color: #d88787;
+}
+
+.status-badge-warning {
+  border-color: rgba(183, 163, 90, 0.58);
+  color: #c7b26b;
+}
+
+.icon-badge {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 28px;
+  border: 1px solid rgba(122, 201, 67, 0.38);
+  border-radius: 4px;
+  color: var(--gs-green-bright);
+  background: rgba(78, 159, 61, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(122, 201, 67, 0.035);
+}
+
+.icon-badge .ui-icon {
+  color: inherit;
+}
+
+.setting-row.has-icon {
+  grid-template-columns: 20px 28px minmax(0, 1fr) auto;
+}
+
+.setting-row:not(.has-icon):not(.has-trailing) {
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.setting-row:not(.has-icon).has-trailing {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+}
+
+.setting-row.has-icon:not(.has-trailing) {
+  grid-template-columns: 20px 28px minmax(0, 1fr);
+}
+
+.setting-row-icon {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+}
+
+.setting-row-icon .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.setting-row.is-disabled .setting-row-icon {
+  border-color: var(--gs-border);
+  color: var(--gs-text-muted);
+  background: rgba(27, 33, 29, 0.38);
+  box-shadow: none;
+}
+
+.setting-row-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.setting-row-info {
+  display: inline-grid;
+  place-items: center;
+  color: var(--gs-text-muted);
+}
+
+.setting-row-info .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.setting-row.is-disabled .setting-row-info {
+  opacity: 0.7;
+}
+
+.setting-row.has-icon .setting-row-helper {
+  grid-column: 3 / -1;
+}
+
+.startup-form-row {
+  grid-template-columns: 28px minmax(150px, 1fr) minmax(240px, 420px);
+  padding-left: 16px;
+}
+
+.startup-form-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.startup-form-icon .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.primary-button > .ui-icon,
+.secondary-button > .ui-icon,
+.danger-button > .ui-icon {
+  flex: 0 0 auto;
+}
+
+.secondary-button.compact,
+.primary-button.compact {
+  min-height: 34px;
+  padding-inline: 12px;
+}
+
+.profile-quick-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Profile names own the first visual column; only the metadata may ellipsize. */
+
+.profile-quick-main > strong {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: min(42%, 300px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-quick-main > small {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-quick-row > .profile-quick-meta {
+  flex: 0 0 auto;
+}
+
+.profile-module-title-wrap > .icon-badge {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+}
+
+.profile-quick-row:focus-visible,
+.section-shortcuts button:focus-visible,
+.launcher-card:focus-visible,
+.display-inventory-item:focus-visible {
+  outline: 2px solid var(--gs-green-bright);
+  outline-offset: 2px;
+}
+
+.section-shortcuts button,
+.display-inventory-item,
+.launcher-card,
+.shortcut-module,
+.dashboard-shortcut-group,
+.quick-switch-panel.profile-module {
+  box-shadow: var(--gs-shadow-panel), inset 0 0 0 1px rgba(122, 201, 67, 0.025);
+}
+
+.section-shortcuts button:hover,
+.display-inventory-item:hover:not(:disabled),
+.launcher-card:hover:not(:disabled) {
+  box-shadow: var(--gs-shadow-panel), inset 0 0 0 1px rgba(122, 201, 67, 0.1);
+}
+
+.section-shortcuts button > .icon-badge {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  color: var(--gs-green-bright);
+  font-size: initial;
+  font-weight: 400;
+}
+
+.section-shortcuts button > span:not(.icon-badge) {
+  grid-column: 2;
+}
+
+.sidebar-global-links button > .icon-badge {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+}
+
+.sidebar-global-links button > .icon-badge .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.profile-settings-heading,
+.display-module-header,
+.shortcut-module-header {
+  position: relative;
+}
+
+.profile-target-line > .icon-badge {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  color: var(--gs-green-bright);
+}
+
+.profile-target-line > .icon-badge + span {
+  margin-right: auto;
+}
+
+.profile-target-line > .icon-badge + span,
+.profile-target-line > strong {
+  min-width: 0;
+}
+
+.setup-footer .footer-actions-left,
+.setup-footer .footer-actions-right {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-footer .footer-actions-right {
+  justify-content: flex-end;
+}
+
+.setup-footer .footer-actions-left > button,
+.setup-footer .footer-actions-right > button {
+  white-space: nowrap;
+}
+
+.profile-settings-heading::after,
+.display-module-header::after,
+.shortcut-module-header::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: var(--gs-border-strong);
+  pointer-events: none;
+}
+
+.shortcut-module-header {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-module-header > .icon-badge {
+  width: 28px;
+  height: 28px;
+}
+
+.shortcut-module-header > div {
+  min-width: 0;
+}
+
+.shortcut-module-header > .icon-badge + div {
+  grid-column: 2;
+}
+
+.controller-module-header > .controller-status-pill {
+  grid-column: 3;
+}
+
+.display-inventory-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.display-inventory-header .icon-badge {
+  width: 26px;
+  height: 26px;
+}
+
+.display-inventory-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.display-inventory-icon .ui-icon {
+  color: var(--gs-green-bright);
+}
+
+.display-property-heading > .icon-badge {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+}
+
+.display-property-heading > .icon-badge .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.display-topology-toolbar .secondary-button,
+.display-diagnostics-actions .secondary-button {
+  white-space: nowrap;
+}
+
+.setup-footer > p {
+  min-width: 0;
+  color: var(--gs-text-secondary);
+}
+
+@media (max-width: 760px) {
+  .setting-row.has-icon,
+  .setting-row.has-icon:not(.has-trailing) {
+    grid-template-columns: 20px 28px minmax(0, 1fr);
+  }
+
+  .setting-row.has-icon.has-trailing {
+    grid-template-columns: 20px 28px minmax(0, 1fr) auto;
+  }
+
+  .setting-row.has-icon .setting-row-helper {
+    grid-column: 3 / -1;
+  }
+
+  .startup-form-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .startup-form-row .field-label,
+  .startup-form-row .language-select {
+    grid-column: 2;
+  }
+
+  .startup-form-row .language-select {
+    width: 100%;
+  }
+
+  .shortcut-module-header {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .controller-module-header > .controller-status-pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-list div {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+
+  .summary-list dt,
+  .summary-list dd {
+    grid-column: 2;
+  }
+
+  .profile-quick-main > strong {
+    max-width: 46%;
+  }
+
+  .setting-row.has-icon,
+  .setting-row.has-icon.has-trailing {
+    grid-template-columns: 20px 28px minmax(0, 1fr);
+  }
+
+  .setting-row.has-icon .setting-row-trailing {
+    grid-column: 3;
+    justify-self: start;
+    margin-top: 5px;
+  }
+}
+
+/* Final shared geometry overrides for compact IconBadge contexts. */
+
+.profile-module-title-wrap > .icon-badge,
+.profile-target-line > .icon-badge,
+.display-inventory-header > .icon-badge,
+.display-property-heading > .icon-badge,
+.summary-list div > .icon-badge,
+.sidebar-global-links button > .icon-badge {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+}
+
+.sidebar-global-links button > .icon-badge {
+  border-radius: 4px;
+}
+
+.sidebar-global-links button > .icon-badge .ui-icon,
+.display-property-heading > .icon-badge .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 480px) {
+  .summary-list div {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+}
+
+/* Corrective polish: reserve the chevron column and balance the dashboard cards. */
+
+.sidebar-global-links button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 18px;
+  align-items: center;
+  column-gap: 10px;
+  padding-right: 10px;
+}
+
+.sidebar-global-links button > .icon-badge {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+}
+
+.sidebar-global-links button > span:not(.icon-badge) {
+  grid-column: 2;
+  min-width: 0;
+  width: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-global-links button::after {
+  position: static;
+  right: auto;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  align-self: center;
+}
+
+.profile-settings-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.profile-settings-heading > .icon-badge {
+  flex: 0 0 28px;
+}
+
+.profile-settings-heading > h3 {
+  min-width: 0;
+}
+
+.profile-settings-heading > .profile-context {
+  margin-left: auto;
+}
+
+.section-shortcuts button {
+  align-content: center;
+}
+
+.section-shortcuts button > .icon-badge {
+  align-self: center;
+}
+
+/* The title divider and first property group are one boundary, not two. */
+
+.display-properties-panel > .display-properties-title + .display-property-section {
+  border-top: 0;
+  padding-block: 6px;
+  gap: 6px;
+}
+
+.profile-actions .delete-action {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: var(--gs-radius-control);
+}
+
+@media (max-width: 760px) {
+  .profile-settings-heading {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-settings-heading > .profile-context {
+    margin-left: 0;
+  }
+}

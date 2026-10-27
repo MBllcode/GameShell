@@ -1,0 +1,312 @@
+.summary-list {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--border-strong);
+  background: var(--border-default);
+}
+
+.summary-list div {
+  display: grid;
+}
+
+.summary-list dt {
+  font-weight: 750;
+}
+
+.summary-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.setup-footer {
+  display: grid;
+  align-items: center;
+}
+
+.setup-footer > p:only-child {
+  grid-column: 1 / -1;
+}
+
+.operation-line,
+.error-line {
+  margin: 0;
+  font-weight: 600;
+  text-align: center;
+}
+
+.error-line {
+  color: var(--danger);
+}
+
+.hint-line {
+  color: var(--text-secondary);
+}
+
+.footer-actions-left,
+.footer-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-actions-left {
+  justify-content: flex-start;
+}
+
+.footer-actions-right {
+  justify-content: flex-end;
+}
+
+.primary-button,
+.secondary-button {
+  min-width: 88px;
+  border: 1px solid var(--border-default);
+  background: linear-gradient(180deg, rgba(20, 25, 22, 0.98), rgba(12, 16, 14, 0.98));
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgba(167, 241, 110, 0.03);
+}
+
+.secondary-button:hover:not(:disabled),
+.primary-button:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: linear-gradient(180deg, rgba(25, 31, 27, 0.98), rgba(15, 18, 16, 0.98));
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(167, 241, 110, 0.09);
+}
+
+.secondary-button.compact,
+.primary-button.compact {
+  border-radius: 0;
+  letter-spacing: 0.01em;
+}
+
+.secondary-button:focus-visible,
+.primary-button:focus-visible {
+  outline: 2px solid rgba(122, 201, 67, 0.8);
+  outline-offset: 2px;
+}
+
+.primary-button:active:not(:disabled),
+.secondary-button:active:not(:disabled) {
+  box-shadow: inset 0 2px 0 rgba(13, 17, 16, 0.18);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.primary-button.compact,
+.secondary-button.compact {
+  min-width: auto;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(14, 16, 14, 0.66);
+  animation: backdrop-enter var(--motion-normal) var(--ease-standard) both;
+}
+
+.dialog-panel {
+  width: min(520px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-active);
+  animation: dialog-enter var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dialog-panel h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.02rem;
+}
+
+.dialog-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.screen-test-action,
+.download-action,
+.file-action,
+.configure-action,
+.profile-test-action {
+  border-color: var(--border-active);
+  background: var(--bg-panel-active);
+  color: var(--accent-strong);
+}
+
+.launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.launcher-card {
+  --launcher-accent: var(--accent);
+  --launcher-border: var(--border-default);
+  --launcher-tint: var(--bg-panel);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-items: start;
+  gap: 9px;
+  border: 1px solid var(--border-default);
+  border-left-color: var(--launcher-border);
+  color: var(--text-primary);
+  text-align: left;
+  transition: background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
+}
+
+.launcher-card--playnite {
+  --launcher-accent: var(--playnite-accent);
+  --launcher-border: rgba(255, 138, 0, 0.68);
+  --launcher-tint: rgba(255, 138, 0, 0.1);
+}
+
+.launcher-card--steam {
+  --launcher-accent: var(--steam-accent);
+  --launcher-border: rgba(102, 192, 244, 0.62);
+  --launcher-tint: rgba(102, 192, 244, 0.1);
+}
+
+.launcher-card--xbox {
+  --launcher-accent: var(--xbox-accent);
+  --launcher-border: rgba(16, 124, 16, 0.7);
+  --launcher-tint: rgba(16, 124, 16, 0.1);
+}
+
+.launcher-card:not(:disabled) {
+  cursor: pointer;
+}
+
+.launcher-card:hover {
+  border-color: var(--launcher-border);
+  background: var(--bg-panel-hover);
+  box-shadow: inset 2px 0 0 var(--launcher-accent);
+}
+
+.launcher-card.selected {
+  border-color: var(--launcher-accent);
+  background: var(--launcher-tint);
+}
+
+.launcher-card-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launcher-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--launcher-accent);
+}
+
+.launcher-badge {
+  min-height: 22px;
+  color: var(--launcher-accent);
+  border: 1px solid var(--launcher-border);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.launcher-card strong {
+  line-height: 1.18;
+}
+
+.launcher-card small {
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.launcher-status {
+  margin-top: auto;
+  color: var(--text-muted);
+}
+
+.launcher-status.detected {
+  color: var(--accent-strong);
+  border-color: var(--border-active);
+}
+
+.launcher-status.missing {
+  color: var(--warning);
+  border-color: rgba(185, 149, 74, 0.52);
+}
+
+.launcher-install-panel {
+  width: min(960px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+}
+
+.launcher-install-panel h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.launcher-install-panel p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+
+.displays-step {
+  width: 100%;
+}
+
+.displays-step .settings-section {
+  width: 100%;
+  margin-top: 9px;
+}
+
+.displays-step .settings-section p {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  line-height: 1.32;
+}
+
+.displays-step .hint-line {
+  margin-top: 5px !important;
+}
