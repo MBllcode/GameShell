@@ -2,7 +2,7 @@
 
 [← Back to README](../README.md) · [Home Assistant setup](home-assistant.md)
 
-The optional HTTP API lets another device on your private LAN request the same profile and Work Mode commands as the UI. It is **disabled by default**.
+The optional HTTP API lets another device on your private LAN request the same profile and Default setup commands as the UI. It is **disabled by default**.
 
 ## Enable it
 
@@ -18,7 +18,7 @@ The host listens on the configured port and filters requests by their source add
 | GET | `/api/v1/status` | Current mode, session state, profile, launcher |
 | GET | `/api/v1/profiles` | Configured profile IDs and names |
 | POST | `/api/v1/profiles/{profileId}/activate` | Request an existing profile |
-| POST | `/api/v1/work-mode` | Request Work Mode |
+| POST | `/api/v1/work-mode` | Request Default setup |
 
 All endpoints except health require `Authorization: Bearer <token>`. Use the actual ID returned by `/profiles` and URL-encode it in the path.
 

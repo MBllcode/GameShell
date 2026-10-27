@@ -2,7 +2,7 @@
 
 [← Back to README](../README.md) · [API reference](remote-control.md)
 
-Use Home Assistant's REST commands to activate a gaming profile or return to Work Mode. First enable [Remote Control](remote-control.md), check LAN connectivity, and read the real profile IDs from `/api/v1/profiles`.
+Use Home Assistant's REST commands to activate a gaming profile or return to Default setup. First enable [Remote Control](remote-control.md), check LAN connectivity, and read the real profile IDs from `/api/v1/profiles`.
 
 ## 1. Keep the token in secrets.yaml
 
@@ -68,7 +68,7 @@ Use an actual ID returned by GameShell rather than assuming the profile name is 
 2. Request `/api/v1/profiles` with the bearer header; expect the configured profiles.
 3. In **Developer Tools → Actions**, run `rest_command.gameshell_activate_profile` with `profile_id` set to a real ID.
 4. Confirm the profile actually changes displays and starts its launcher when enabled.
-5. Run `script.gameshell_work`; confirm the normal Work Mode restoration.
+5. Run `script.gameshell_work`; confirm the normal Default setup restoration.
 6. Repeat with another profile and check that no duplicate transition starts.
 
 An accepted command returns `202`; verify the finished result in GameShell. `401` points to token/header issues, `409` means a transition is busy, and no HTTP response usually points to routing/firewall/host configuration. GameShell logs accepted requests as `[REMOTE COMMAND]` followed by normal transition logs; never include the token in shared evidence.

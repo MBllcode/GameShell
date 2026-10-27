@@ -1,92 +1,82 @@
 <div align="center">
   <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg"><img src="docs/assets/wordmark-light.svg" width="324" height="88" alt="GameShell"></picture></h1>
-  <p><strong>One PC. Your desk setup. Your gaming setup. One click to switch.</strong></p>
-  <p>A Windows desktop app that switches displays, launches your gaming frontend, and prepares the desktop using profiles you control.</p>
+  <p><strong>One PC. Your desk. Your TV. Your profiles. One click to switch.</strong></p>
+  <p>Switch displays, optionally launch an application, and prepare your desktop with profiles you control.</p>
+  <p>
+    <a href="https://github.com/MBllcode/GameShell/releases/latest/download/GameShell.exe"><strong>Download GameShell.exe</strong></a> ·
+    <a href="https://github.com/MBllcode/GameShell/releases/latest/download/GameShell-win-x64.zip">Download ZIP</a> ·
+    <a href="https://github.com/MBllcode/GameShell/releases">All releases</a>
+  </p>
   <p>
     <a href="https://github.com/MBllcode/GameShell/actions/workflows/ci.yml"><img src="https://github.com/MBllcode/GameShell/actions/workflows/ci.yml/badge.svg" alt="Build and test"></a>
     <img src="https://img.shields.io/badge/platform-Windows_x64-0078D4" alt="Windows x64">
     <img src="https://img.shields.io/badge/UI-English_%2F_Polski-7AC943" alt="English and Polish">
   </p>
-  <p><a href="#first-launch-setup">First launch</a> · <a href="#see-it-in-action">Screenshots</a> · <a href="#build-and-run">Build & run</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/architecture.md">Architecture</a></p>
+  <p><a href="#download-and-run">Get started</a> · <a href="#first-launch-setup">First launch</a> · <a href="#see-it-in-action">Screenshots</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/code-tour.md">Code tour</a></p>
 </div>
 
-[![GameShell dashboard: gaming profiles and their display, launcher, behaviour, and shortcut settings](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
+[![Current GameShell dashboard with user-defined profiles and profile settings](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
 
-Keep a monitor layout for work and another for the TV, projector, or gaming desk. Select a profile and press **Run profile**. Return through **Work Mode** when you are done.
+Keep profiles for your desk, TV, projector, or gaming setup. Profiles can share the same displays and use different applications. Press **Run profile** to switch, then **Restore default setup** to return.
+
+## Download and run
+
+1. Download [GameShell.exe](https://github.com/MBllcode/GameShell/releases/latest/download/GameShell.exe), or extract the [ZIP](https://github.com/MBllcode/GameShell/releases/latest/download/GameShell-win-x64.zip).
+2. Put the EXE in a permanent folder and open it. Keep this location when enabling **Start with Windows**.
+3. Complete the first-launch setup below.
+
+Requires **Windows x64** and the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The download includes .NET; you do not need Node.js, a .NET SDK, or build scripts. Applications such as Playnite are needed only by profiles that launch them.
 
 ## First launch setup
 
-On a fresh PC, when no `settings.json` exists yet, GameShell creates its local settings and opens a guided setup wizard. This is the app's initial configuration, not a separate installer — you do not need to create or edit the JSON file yourself.
+When no `settings.json` exists, GameShell creates its local settings and opens a guided wizard:
 
-1. **Choose your language** — English or Polish.
-2. **Create your first gaming profile** — displays, launcher, desktop behaviour, and keyboard/controller shortcuts.
-3. **Set up Work Mode** — the display layout, desktop behaviour, and shortcuts used when returning to work.
-4. **Choose startup options, review, and save** — including automatic startup and desktop/Start-menu shortcuts.
+1. Choose **English or Polish**.
+2. Save your **default setup**: displays, desktop restoration actions, and optional shortcuts.
+3. Optionally create your first **profile**. Choose **Create a profile later** to skip it.
+4. Review startup options and finish setup.
 
-Completing the wizard opens the dashboard. Later launches go straight to it; unfinished setup appears again until completed. Your configuration is stored in `%LOCALAPPDATA%\GameShell\settings.json`. [Step-by-step guide →](docs/user-guide.md#first-launch-setup)
+Later launches open the dashboard; unfinished setup resumes until completed. Settings live in `%LOCALAPPDATA%\GameShell\settings.json`. [Full walkthrough →](docs/user-guide.md#first-launch-setup)
 
 ## See it in action
 
-Click a screenshot to view its full-resolution, lossless PNG.
+Screenshots below are fresh, lossless captures of the running app. Click to view full resolution.
 
 ### 1. Choose your displays
 
-Name a profile, add detected displays, and drag them into position. Select a screen to set its resolution, primary status, and refresh rate.
+Add detected screens, drag them into position, and set the primary display, resolution, and refresh policy.
 
-[![Display profile editor with a TV selected and two desk monitors available to add](docs/screenshots/displays.png)](docs/screenshots/displays.png)
+[![Displays page with the profile layout preview and per-monitor settings](docs/screenshots/displays.png)](docs/screenshots/displays.png)
 
-### 2. Decide what changes
+### 2. Choose an application — or none
 
-Choose whether to hide desktop icons or the taskbar, move the cursor, minimize windows, or start a launcher. Each profile keeps its own choices. A profile can also change displays only.
+The **Application** page offers **Don't launch anything**, Playnite Fullscreen, Steam Big Picture, and Xbox App. A TV profile can switch displays without opening a launcher; another profile can use that same TV with an application.
 
-[![Profile behaviour: desktop, window, cursor, and launcher options](docs/screenshots/behaviour.png)](docs/screenshots/behaviour.png)
+[![Application page with no-application, Playnite, Steam and Xbox choices](docs/screenshots/application.png)](docs/screenshots/application.png)
 
-### 3. Switch without opening the app
+### 3. Decide what happens to the desktop
 
-Assign a keyboard shortcut or controller combination to a profile. Set a separate **Work Mode** shortcut to return to your desk. The tray menu also provides profile activation and Work Mode.
+Choose whether to hide desktop icons or the taskbar, move the cursor, close or minimize windows, and bring a selected application to the foreground.
 
-[![Keyboard and controller shortcuts for a gaming profile](docs/screenshots/shortcuts.png)](docs/screenshots/shortcuts.png)
+[![Profile behaviour page with desktop, window and application actions](docs/screenshots/behaviour.png)](docs/screenshots/behaviour.png)
 
-**Launchers:** Playnite Fullscreen, Steam Big Picture, and Xbox App. Xbox opens in its normal windowed mode.
+### 4. Switch with a shortcut
 
-After setup, use **Profile settings** to edit a gaming profile and **Global settings** to change Work Mode or startup options. [Full setup guide →](docs/user-guide.md)
+Assign keyboard shortcuts or controller combinations to profiles and a separate shortcut to restore your default setup. The tray menu provides the same actions.
 
-## Build and run
-
-You need **Windows x64**, the **.NET 9 SDK**, **Node.js 22.6+ with npm**, and the **Microsoft Edge WebView2 Runtime**. A packaged build includes .NET; WebView2 and your chosen launcher are separate prerequisites.
-
-```powershell
-git clone https://github.com/MBllcode/GameShell.git
-cd GameShell
-.\scripts\build.ps1
-.\src\GameShell.Desktop\bin\Debug\net9.0-windows\GameShell.exe
-```
-
-Create a portable, self-contained EXE:
-
-```powershell
-.\scripts\package.ps1
-# Output: artifacts\installer\GameShell.exe
-```
-
-Packaging closes any running GameShell instance and launches the new build. Use `-NoLaunch` to build without launching it. Keep the packaged EXE in a stable location before enabling **Start with Windows**.
+[![Profile shortcuts page with keyboard and controller configuration](docs/screenshots/shortcuts.png)](docs/screenshots/shortcuts.png)
 
 ## Inside the project
 
-| Layer | Responsibility |
+| Project | Responsibility |
 | --- | --- |
-| `GameShell.Ui` | React 19 + TypeScript interface, profile editor, EN/PL translations |
-| `GameShell.Desktop` | WPF + WebView2 host, tray, global shortcuts, optional LAN API |
-| `GameShell.Core` | Profile transitions, session state, validation, settings persistence |
-| `GameShell.Windows` | Native display configuration, process launching, window and cursor control |
+| `GameShell.Ui` | React + TypeScript editor, first-launch setup, EN/PL translations |
+| `GameShell.Desktop` | WPF + WebView2 host, tray, shortcuts, optional LAN API |
+| `GameShell.Core` | Profiles, transitions, validation, settings and runtime state |
+| `GameShell.Windows` | Native displays, application processes, windows and cursor control |
 
-The app uses Windows DisplayConfig APIs directly. It waits for display discovery to settle before starting a launcher, keeps settings and runtime state separate, and routes UI, tray, shortcut, and API commands through the same transition pipeline.
+Start with the [code tour](docs/code-tour.md) to follow a profile activation through the source. [Development](docs/development.md) covers building, tests, packaging and releases.
 
-```powershell
-dotnet test tests\GameShell.Core.Tests\GameShell.Core.Tests.csproj
-npm --prefix src/GameShell.Ui test
-```
+[User guide](docs/user-guide.md) · [Architecture](docs/architecture.md) · [Remote Control](docs/remote-control.md) · [Changelog](docs/CHANGELOG.md)
 
-[Documentation](docs/README.md) · [Architecture](docs/architecture.md) · [Development & verification](docs/development.md) · [Changelog](docs/CHANGELOG.md)
-
-GameShell is a personal project under active development. Display switching depends on the modes Windows and the connected hardware expose; cold boot, hotplug, and launcher behaviour need testing on the target PC. Screenshots show the running application with an example local configuration.
+GameShell is under active development. Display modes depend on Windows and connected hardware. Screenshots show real configured profiles; their names are user-defined.

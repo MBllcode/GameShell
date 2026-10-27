@@ -32,10 +32,10 @@ flowchart LR
 1. UI, tray, shortcut, or API resolves a command through `IModeCommandService`.
 2. The session manager serializes lifecycle work and resolves the profile's own launcher, behaviour, and shortcuts.
 3. Display discovery waits for stable inventory. The transition service applies the requested topology and verifies it.
-4. The Windows workflow performs enabled desktop/cursor/window actions and starts the launcher.
-5. Session monitoring tracks game/launcher activity. Work Mode runs the restoration path; transition failures can use the captured rollback layout.
+4. The Windows workflow performs enabled desktop/cursor/window actions and starts the selected application, if any.
+5. `ProfileApplicationPolicy` enables game monitoring only for supported applications with launch enabled. Display-only profiles stay `ProfileActive` without monitoring or recovery. Default setup runs the restoration path; transition failures can use the captured rollback layout.
 
-Startup resolves one target from startup preferences and committed runtime state. Work Mode reconciliation also restores desktop behaviour when the display topology already matches; matching monitors alone does not imply that the taskbar, cursor, or launcher state is correct.
+Startup resolves one target from startup preferences and committed runtime state. Default setup reconciliation also restores desktop behaviour when the display topology already matches; matching monitors alone does not imply that the taskbar, cursor, or launcher state is correct.
 
 ## Display identity
 
@@ -63,3 +63,39 @@ The WebView bridge accepts privileged messages only from `https://app.gameshell.
 Launcher process creation uses a shared Windows adapter. Optional Remote Control is disabled by default, accepts predefined commands, checks a bearer token, and defaults to private/local source addresses. It shares the normal mode-command pipeline rather than changing displays directly. See [Remote Control](remote-control.md).
 
 Builds and automated tests exercise logic and contracts. Real display-driver behaviour, DPI changes at sign-in, hotplug, game detection, and launcher focus still require Windows hardware testing.
+
+## Finding your way through the code
+
+The two active states are **Default setup** and **a selected profile**. Console/PC are not profile types. A profile owns its display layout, optional application, desktop actions, and shortcuts; identical display layouts are allowed.
+
+| To understand or change… | Start here |
+| --- | --- |
+| Application choices and whether games are monitored | `src/GameShell.Core/Profiles/ProfileApplicationPolicy.cs` |
+| Which profile settings a command uses | `src/GameShell.Core/Profiles/ProfileSettingsResolver.cs` |
+| Activation, reactivation, and late game callbacks | `src/GameShell.Core/Profiles/ProfileSessionManager.cs` |
+| Display/workflow order, rollback, and runtime commits | `src/GameShell.Core/Runtime/ModeOrchestrator.cs` |
+| Profile creation and layout persistence | `src/GameShell.Desktop/Bridge/WebViewDisplayCommandHandler.cs` |
+| Form state → settings payload | `src/GameShell.Ui/src/features/settings/buildSettingsPayload.ts` |
+| First-run/profile/edit navigation | `src/GameShell.Ui/src/features/setup/setupFlow.ts` and its hooks |
+
+[Read the code tour](code-tour.md) for an ordered walkthrough and a map of the feature folders.
+
+Follow a command from the bridge through the session manager and orchestrator before looking into native Windows adapters. Tests next to these responsibilities cover the policy independently of hardware.
+
+### Compatibility boundary
+
+Persisted fields such as `gamingProfiles`, `gaming`, and `workMode`, plus older command aliases, retain their names so existing settings and integrations keep loading. The historical `Console` runtime enum value is reserved for deserialization; it is normalized to the profile state and never emitted by activation. Old Console startup requests resolve an existing selected profile or fall back to the default setup. There is one activation pipeline.
+
+`launcher.type = "None"` is explicit. It clears launch arguments/path and disables launch/foreground flags. Existing profiles with `startLauncher = false` hydrate as no application, preserving their behaviour. Changing the application updates the launch flag; the UI no longer exposes a second competing start checkbox.
+
+## Source organization
+
+Core groups contracts and implementations under `Profiles`, `Displays`, `Runtime`, `Settings`, `Applications`, and `Shortcuts`. Windows adapters are grouped under `Displays`, `Desktop`, and `Applications`. Desktop owns `Hosting`, `Bridge`, `Tray`, `Shortcuts`, `Windowing`, `Displays`, and `RemoteControl`.
+
+The React entry point is `src/GameShell.Ui/src/app/App.tsx`. Feature components live beside their actions and data helpers. Shared primitives live in `shared/ui`; WebView transport and DTOs live together in `bridge`.
+
+`features/profiles/profileModel.ts` defines one editable profile record. Behaviour/application/shortcut maps are derived views, not independently stored state. `profilesFromSettings` handles historical configuration shapes, while `buildSettingsPayload` projects records back to the compatible JSON contract. Backend persisted settings remain versioned DTOs; native observed display snapshots remain distinct from requested profile topologies.
+
+The monitor catalogue facade delegates identity matching, capability policy, projection, and reconciliation to small modules under `Displays/Catalog`. Its public operations remain the entry point for discovery and validation.
+
+Styles enter through `styles.css`, which imports named modules in a fixed cascade order. Edit the relevant component/theme/geometry module instead of appending another global override. TypeScript rejects unused locals and parameters during the standard build.
