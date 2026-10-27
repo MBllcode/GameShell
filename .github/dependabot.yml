@@ -34,7 +34,7 @@ updates:
     groups:
       sdl-runtime:
         patterns: ["SDL3-CS*", "sdl3-cs*"]
-      dotnet-maintenance:
+      dotnet-routine:
         patterns: ["*"]
         exclude-patterns: ["SDL3-CS*", "sdl3-cs*"]
         update-types: [minor, patch]
