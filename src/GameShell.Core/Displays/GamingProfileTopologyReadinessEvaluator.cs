@@ -1,0 +1,532 @@
+using GameShell.Core.Settings;
+using Microsoft.Extensions.Logging;
+
+namespace GameShell.Core.Displays;
+
+public sealed class GamingProfileTopologyReadinessEvaluator : IGamingProfileTopologyReadinessEvaluator
+{
+    private const double RefreshToleranceHz = 0.25;
+    private readonly IDisplayQueryService _displayQueryService;
+    private readonly IDisplayDiscoveryStabilizationService? _displayDiscoveryStabilizationService;
+    private readonly ILogger<GamingProfileTopologyReadinessEvaluator> _logger;
+
+    public GamingProfileTopologyReadinessEvaluator(
+        IDisplayQueryService displayQueryService,
+        ILogger<GamingProfileTopologyReadinessEvaluator> logger,
+        IDisplayDiscoveryStabilizationService? displayDiscoveryStabilizationService = null)
+    {
+        _displayQueryService = displayQueryService;
+        _logger = logger;
+        _displayDiscoveryStabilizationService = displayDiscoveryStabilizationService;
+    }
+
+    public async Task<GamingProfileTopologyReadiness> EvaluateAsync(
+        string profileId,
+        string profileName,
+        GamingProfileDisplayTopology topology,
+        CancellationToken cancellationToken = default,
+        bool deferInactiveModeValidation = false,
+        DisplaySettings? displaySettings = null)
+    {
+        var inventory = await GetStableInventoryAsync(cancellationToken);
+        var targets = new List<ProfileDisplayTargetReadiness>(topology.Displays.Count);
+        var identityCatalogChanged = false;
+
+        foreach (var savedTarget in topology.Displays)
+        {
+            var readiness = await EvaluateTargetAsync(
+                savedTarget,
+                inventory,
+                cancellationToken,
+                deferInactiveModeValidation,
+                displaySettings,
+                () => identityCatalogChanged = true);
+            targets.Add(readiness);
+            _logger.LogInformation(
+                "[DISPLAY PHYSICAL MATCH] KnownDisplayId={KnownDisplayId} SavedName={SavedName} CurrentName={CurrentName} SavedAdapterLuid={SavedAdapterLuid} CurrentAdapterLuid={CurrentAdapterLuid} SavedTargetId={SavedTargetId} CurrentTargetId={CurrentTargetId} Connector={Connector} EdidIdsValid={EdidIdsValid} PhysicalMatch={PhysicalMatch} MatchConfidence={MatchConfidence} ResolvedSource={ResolvedSource}",
+                savedTarget.KnownPhysicalDisplayId,
+                savedTarget.Identity.FriendlyName,
+                readiness.ResolvedTarget?.Name ?? readiness.ResolvedTarget?.Identity.FriendlyName ?? "-",
+                savedTarget.Identity.AdapterLuid,
+                readiness.ResolvedTarget?.Identity.AdapterLuid ?? 0,
+                savedTarget.Identity.TargetId,
+                readiness.ResolvedTarget?.Identity.TargetId ?? 0,
+                FormatConnector(savedTarget.Identity, readiness.ResolvedTarget?.Identity),
+                FormatEdidValidity(savedTarget.Identity, readiness.ResolvedTarget?.Identity),
+                readiness.ResolvedTarget is not null,
+                readiness.PhysicalMatchConfidence,
+                readiness.ResolvedTarget?.SourceDeviceName ?? "-");
+            _logger.LogInformation(
+                "[DISPLAY CAPABILITY READINESS] PhysicalId={PhysicalId} BestKnown={BestKnown} Current={Current} Policy={Policy} Result={Result} Reason={Reason}",
+                FormatPhysicalId(readiness.ResolvedTarget?.Identity ?? savedTarget.Identity),
+                FormatCapability(readiness.BestKnownCapability),
+                FormatCapability(readiness.CurrentCapability),
+                savedTarget.EffectiveRefreshPolicy,
+                readiness.Result,
+                readiness.Reason);
+            _logger.LogInformation(
+                "[{Phase}] ProfileId={ProfileId} ProfileName={ProfileName} SavedName={SavedName} Enabled={Enabled} ResolvedName={ResolvedName} Active={Active} Available={Available} RequestedMode={RequestedMode} AvailableModesForRequestedResolution={AvailableModesForRequestedResolution} Result={Result} Reason={Reason}",
+                deferInactiveModeValidation ? "PROFILE TOPOLOGY PRECHECK" : "PROFILE TOPOLOGY POSTCHECK",
+                profileId,
+                profileName,
+                savedTarget.Identity.FriendlyName,
+                savedTarget.Enabled,
+                readiness.ResolvedTarget?.Name ?? readiness.ResolvedTarget?.Identity.FriendlyName ?? "-",
+                readiness.ResolvedTarget?.IsEnabled ?? false,
+                readiness.ResolvedTarget?.IsAvailable ?? false,
+                FormatMode(savedTarget),
+                readiness.AvailableModesForRequestedResolution,
+                readiness.Result,
+                readiness.Reason);
+        }
+
+        var result = new GamingProfileTopologyReadiness
+        {
+            ProfileId = profileId,
+            ProfileName = profileName,
+            Targets = targets,
+            IdentityCatalogChanged = identityCatalogChanged
+        };
+        _logger.LogInformation(
+            "[{Phase}] ProfileId={ProfileId} ProfileName={ProfileName} ProfileResult={ProfileResult}",
+            deferInactiveModeValidation ? "PROFILE TOPOLOGY PRECHECK" : "PROFILE TOPOLOGY POSTCHECK",
+            profileId,
+            profileName,
+            result.ProfileResult);
+        return result;
+    }
+
+    private async Task<ProfileDisplayTargetReadiness> EvaluateTargetAsync(
+        ProfileDisplayTarget savedTarget,
+        IReadOnlyList<DisplayDeviceInfo> inventory,
+        CancellationToken cancellationToken,
+        bool deferInactiveModeValidation,
+        DisplaySettings? displaySettings,
+        Action onIdentityCatalogChanged)
+    {
+        if (!savedTarget.Enabled)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                Result = ProfileDisplayReadiness.Disabled,
+                Reason = ProfileDisplayReadinessReason.None
+            };
+        }
+
+        if (savedTarget.Width <= 0 || savedTarget.Height <= 0)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                Result = ProfileDisplayReadiness.InvalidConfiguration,
+                Reason = ProfileDisplayReadinessReason.InvalidExpectedMode
+            };
+        }
+
+        if (savedTarget.EffectiveRefreshPolicy == RefreshPolicy.Fixed && !IsValidFixedRefresh(savedTarget))
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                Result = ProfileDisplayReadiness.InvalidConfiguration,
+                Reason = ProfileDisplayReadinessReason.InvalidExpectedMode
+            };
+        }
+
+        var resolution = Resolve(savedTarget, inventory, displaySettings);
+        if (resolution.IsAmbiguous)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                Result = ProfileDisplayReadiness.Ambiguous,
+                Reason = ProfileDisplayReadinessReason.AmbiguousIdentity
+            };
+        }
+
+        if (resolution.Target is null)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                Result = ProfileDisplayReadiness.Missing,
+                Reason = ProfileDisplayReadinessReason.PhysicalTargetMissing
+            };
+        }
+
+        if (displaySettings is not null
+            && resolution.Known is not null
+            && resolution.Match.IsMatch
+            && KnownPhysicalDisplayCatalogService.RecordIdentityObservation(displaySettings, resolution.Target.Identity))
+        {
+            onIdentityCatalogChanged();
+        }
+
+        if (!resolution.Target.IsEnabled && resolution.Target.IsAvailable && deferInactiveModeValidation)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
+                BestKnownCapability = FindBestKnown(displaySettings, resolution, resolution.Target.Identity),
+                Result = ProfileDisplayReadiness.ResolvableInactive,
+                Reason = ProfileDisplayReadinessReason.TargetInactive
+            };
+        }
+
+        if (!resolution.Target.IsAvailable)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
+                BestKnownCapability = FindBestKnown(displaySettings, resolution, resolution.Target.Identity),
+                Result = ProfileDisplayReadiness.Missing,
+                Reason = ProfileDisplayReadinessReason.PhysicalTargetMissing
+            };
+        }
+
+        var deferredBestKnownCapability = FindBestKnown(displaySettings, resolution, resolution.Target.Identity);
+        if (deferInactiveModeValidation
+            && savedTarget.EffectiveRefreshPolicy == RefreshPolicy.AutoHighest
+            && deferredBestKnownCapability is null)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
+                BestKnownCapability = deferredBestKnownCapability,
+                Result = ProfileDisplayReadiness.Ready,
+                Reason = ProfileDisplayReadinessReason.None
+            };
+        }
+
+        var modeQuery = await _displayQueryService.GetAvailableDisplayModesAsync(resolution.Target.Identity, cancellationToken);
+        if (!modeQuery.InventoryValid)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
+                AvailableModes = modeQuery.Modes,
+                AvailableModesForRequestedResolution = modeQuery.Modes.Count(mode => mode.Width == savedTarget.Width && mode.Height == savedTarget.Height),
+                Result = ProfileDisplayReadiness.InvalidConfiguration,
+                Reason = ProfileDisplayReadinessReason.ModeInventoryInvalid
+            };
+        }
+        if (!modeQuery.Success)
+        {
+            return new ProfileDisplayTargetReadiness
+            {
+                SavedTarget = savedTarget,
+                ResolvedTarget = resolution.Target,
+                PhysicalMatchConfidence = resolution.Confidence,
+                AvailableModes = [],
+                Result = ProfileDisplayReadiness.Degraded,
+                Reason = ProfileDisplayReadinessReason.ModeInformationUnavailable
+            };
+        }
+
+        var matchingResolutionModes = modeQuery.Modes
+            .Where(mode => mode.Width == savedTarget.Width && mode.Height == savedTarget.Height)
+            .ToList();
+        var currentCapability = CreateCapability(matchingResolutionModes);
+        var bestKnownCapability = FindBestKnown(displaySettings, resolution, resolution.Target.Identity);
+        var hasRequestedMode = savedTarget.EffectiveRefreshPolicy == RefreshPolicy.AutoHighest
+            ? matchingResolutionModes.Count > 0
+            : IsValidFixedRefresh(savedTarget)
+                && matchingResolutionModes.Any(mode => RefreshMatches(
+                    mode.RefreshRateNumerator,
+                    mode.RefreshRateDenominator,
+                    savedTarget.EffectiveFixedRefreshRateNumerator,
+                    savedTarget.EffectiveFixedRefreshRateDenominator));
+        var capabilityBelowBestKnown = savedTarget.EffectiveRefreshPolicy == RefreshPolicy.AutoHighest
+            && IsComparableCapability(bestKnownCapability, savedTarget.Width, savedTarget.Height)
+            && currentCapability is not null
+            && currentCapability.MaxRefreshRateHz + RefreshToleranceHz < bestKnownCapability!.MaxRefreshRateHz;
+
+        if (capabilityBelowBestKnown && resolution.Target.IsEnabled)
+        {
+            _logger.LogInformation(
+                "[DISPLAY CAPABILITY DEGRADATION] KnownDisplayId={KnownDisplayId} CanonicalName={CanonicalName} ObservedName={ObservedName} RequestedResolution={RequestedResolution} BestKnownRefresh={BestKnownRefresh} CurrentMaxRefresh={CurrentMaxRefresh} CurrentModeCount={CurrentModeCount} BestKnownModeCount={BestKnownModeCount} State=DegradedCurrentCapability Action=UseCurrentAvailableMode",
+                resolution.Known?.Id ?? savedTarget.KnownPhysicalDisplayId,
+                resolution.Known?.CanonicalFriendlyName ?? savedTarget.Identity.FriendlyName,
+                resolution.Target.Name,
+                $"{savedTarget.Width}x{savedTarget.Height}",
+                FormatRefresh(bestKnownCapability?.MaxRefreshRateHz ?? 0),
+                FormatRefresh(currentCapability?.MaxRefreshRateHz ?? 0),
+                modeQuery.Modes.Count,
+                "unknown");
+        }
+
+        return new ProfileDisplayTargetReadiness
+        {
+            SavedTarget = savedTarget,
+            ResolvedTarget = resolution.Target,
+            PhysicalMatchConfidence = resolution.Confidence,
+            AvailableModes = matchingResolutionModes,
+            CurrentCapability = currentCapability,
+            BestKnownCapability = bestKnownCapability,
+            AvailableModesForRequestedResolution = matchingResolutionModes.Count,
+            Result = hasRequestedMode ? ProfileDisplayReadiness.Ready : ProfileDisplayReadiness.Degraded,
+            Reason = hasRequestedMode
+                ? capabilityBelowBestKnown
+                    ? ProfileDisplayReadinessReason.CapabilityBelowBestKnown
+                    : ProfileDisplayReadinessReason.None
+                : ProfileDisplayReadinessReason.ExpectedModeUnavailable
+        };
+    }
+
+    private static IdentityResolution Resolve(
+        ProfileDisplayTarget savedTarget,
+        IReadOnlyList<DisplayDeviceInfo> inventory,
+        DisplaySettings? displaySettings)
+    {
+        var known = displaySettings is null
+            ? null
+            : KnownPhysicalDisplayCatalogService.FindKnownById(displaySettings, savedTarget.KnownPhysicalDisplayId)
+                ?? KnownPhysicalDisplayCatalogService.FindKnownByIdentity(displaySettings, savedTarget.Identity);
+
+        if (known is not null)
+        {
+            var referenced = inventory
+                .Select(device => new
+                {
+                    Device = device,
+                    RuntimeDevice = UseCurrentObservation(device),
+                    Match = DisplayIdentityMatcher.ResolveKnownDisplay(
+                        known,
+                        GetRuntimeIdentity(device)),
+                    Score = DisplayIdentityMatcher.GetStableIdentityScore(
+                        known,
+                        GetRuntimeIdentity(device))
+                })
+                .Where(candidate => candidate.Match.IsMatch
+                    || (string.Equals(candidate.Device.KnownPhysicalDisplayId, known.Id, StringComparison.OrdinalIgnoreCase)
+                        && candidate.Device.CurrentObservation is not null
+                        && !candidate.Match.HasConflict))
+                .OrderByDescending(candidate => candidate.Match.MatchConfidence)
+                .ThenByDescending(candidate => candidate.Score)
+                .ToList();
+            if (referenced.Count == 1)
+            {
+                return new IdentityResolution(
+                    referenced[0].RuntimeDevice,
+                    false,
+                    referenced[0].Match.IsMatch
+                        ? referenced[0].Match.MatchConfidence
+                        : DisplayIdentityMatchConfidence.ExactMonitorDevicePath,
+                    known,
+                    referenced[0].Match);
+            }
+
+            if (referenced.Count > 1)
+            {
+                return new IdentityResolution(null, true);
+            }
+        }
+
+        var saved = savedTarget.Identity;
+        var candidates = inventory
+            .Select(device => new
+            {
+                Device = device,
+                Confidence = DisplayIdentityMatcher.GetMatchConfidence(saved, device.Identity),
+                Score = DisplayIdentityMatcher.GetStableIdentityScore(saved, device.Identity)
+            })
+            .Where(candidate => DisplayIdentityMatcher.IsReliableMatch(saved, candidate.Device.Identity))
+            .OrderByDescending(candidate => candidate.Confidence)
+            .ThenByDescending(candidate => candidate.Score)
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return new IdentityResolution();
+        }
+
+        var highestScore = candidates[0].Score;
+        var highestConfidence = candidates[0].Confidence;
+        var highest = candidates
+            .Where(candidate => candidate.Confidence == highestConfidence && candidate.Score == highestScore)
+            .ToList();
+        return highest.Count == 1
+            ? new IdentityResolution(UseCurrentObservation(highest[0].Device), false, highest[0].Confidence, null, new DisplayIdentityMatchResult(
+                highest[0].Confidence,
+                true,
+                false,
+                false,
+                false,
+                false,
+                false))
+            : new IdentityResolution(null, true);
+    }
+
+    private static bool RefreshMatches(uint leftNumerator, uint leftDenominator, uint rightNumerator, uint rightDenominator)
+    {
+        if (leftDenominator == 0 || rightDenominator == 0)
+        {
+            return false;
+        }
+
+        var left = (double)leftNumerator / leftDenominator;
+        var right = (double)rightNumerator / rightDenominator;
+        return Math.Abs(left - right) <= RefreshToleranceHz;
+    }
+
+    private static bool IsValidFixedRefresh(ProfileDisplayTarget target)
+    {
+        return target.EffectiveFixedRefreshRateNumerator > 0
+            && target.EffectiveFixedRefreshRateDenominator > 0
+            && double.IsFinite((double)target.EffectiveFixedRefreshRateNumerator / target.EffectiveFixedRefreshRateDenominator);
+    }
+
+    private static bool IsComparableCapability(DisplayCapabilitySnapshot? capability, int width, int height)
+    {
+        return capability is not null
+            && capability.Width == width
+            && capability.Height == height
+            && capability.MaxRefreshRateNumerator > 0
+            && capability.MaxRefreshRateDenominator > 0
+            && double.IsFinite(capability.MaxRefreshRateHz);
+    }
+
+    private static DisplayCapabilitySnapshot? CreateCapability(IReadOnlyList<DisplayModeInfo> modes)
+    {
+        var mode = modes
+            .Where(mode => mode.RefreshRateNumerator > 0 && mode.RefreshRateDenominator > 0)
+            .OrderByDescending(mode => mode.RefreshRateHz)
+            .FirstOrDefault();
+        return mode is null
+            ? null
+            : new DisplayCapabilitySnapshot
+            {
+                Width = mode.Width,
+                Height = mode.Height,
+                MaxRefreshRateNumerator = mode.RefreshRateNumerator,
+                MaxRefreshRateDenominator = mode.RefreshRateDenominator
+            };
+    }
+
+    private static DisplayCapabilitySnapshot? FindBestKnown(DisplaySettings? settings, DisplayIdentity identity)
+    {
+        return settings is null ? null : KnownPhysicalDisplayCatalogService.FindBestKnown(settings, identity);
+    }
+
+    private static DisplayCapabilitySnapshot? FindBestKnown(
+        DisplaySettings? settings,
+        IdentityResolution resolution,
+        DisplayIdentity identity)
+    {
+        return resolution.Known is not null
+            ? KnownPhysicalDisplayCatalogService.GetBestKnownCapability(resolution.Known)
+            : FindBestKnown(settings, identity);
+    }
+
+    private async Task<IReadOnlyList<DisplayDeviceInfo>> GetStableInventoryAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_displayDiscoveryStabilizationService is not null)
+        {
+            var stable = await _displayDiscoveryStabilizationService.GetStableDisplaysAsync(cancellationToken);
+            if (stable.Count > 0)
+            {
+                return stable;
+            }
+        }
+
+        return await _displayQueryService.GetAvailableDisplaysAsync(cancellationToken);
+    }
+
+    private static DisplayIdentity GetRuntimeIdentity(DisplayDeviceInfo device)
+    {
+        return device.CurrentObservation?.Identity ?? device.Identity;
+    }
+
+    private static DisplayDeviceInfo UseCurrentObservation(DisplayDeviceInfo device)
+    {
+        var observation = device.CurrentObservation;
+        if (observation is null)
+        {
+            return device;
+        }
+
+        return new DisplayDeviceInfo
+        {
+            Id = device.Id,
+            KnownPhysicalDisplayId = device.KnownPhysicalDisplayId,
+            Name = string.IsNullOrWhiteSpace(observation.CurrentObservedName) ? device.Name : observation.CurrentObservedName,
+            IsPrimary = device.IsPrimary,
+            IsEnabled = observation.IsActive,
+            IsAvailable = observation.IsAvailable,
+            Identity = observation.Identity,
+            SourceDeviceName = observation.CurrentSourceDeviceName,
+            SourceId = device.SourceId,
+            TargetId = device.TargetId,
+            AdapterLuid = device.AdapterLuid,
+            ConnectionTechnology = observation.CurrentConnectionTechnology,
+            PositionX = device.PositionX,
+            PositionY = device.PositionY,
+            Width = device.Width,
+            Height = device.Height,
+            Orientation = device.Orientation,
+            RefreshRateNumerator = device.RefreshRateNumerator,
+            RefreshRateDenominator = device.RefreshRateDenominator,
+            IsRemembered = device.IsRemembered,
+            CatalogState = device.CatalogState,
+            CurrentObservation = observation,
+            EnumeratedModes = observation.EnumeratedModes,
+            LastKnownGoodCapability = device.LastKnownGoodCapability,
+            LastVerifiedActiveCapability = device.LastVerifiedActiveCapability
+        };
+    }
+
+    private static string FormatMode(ProfileDisplayTarget target)
+    {
+        var numerator = target.EffectiveRefreshPolicy == RefreshPolicy.Fixed ? target.EffectiveFixedRefreshRateNumerator : 0;
+        var denominator = target.EffectiveRefreshPolicy == RefreshPolicy.Fixed ? target.EffectiveFixedRefreshRateDenominator : 0;
+        var refresh = denominator == 0
+            ? "?"
+            : ((double)numerator / denominator).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        return $"{target.Width}x{target.Height}@{refresh} Hz";
+    }
+
+    private static string FormatCapability(DisplayCapabilitySnapshot? capability)
+    {
+        return capability is null || capability.Width <= 0 || capability.Height <= 0 || capability.MaxRefreshRateHz <= 0
+            ? "none"
+            : $"{capability.Width}x{capability.Height}@{capability.MaxRefreshRateHz:0.##}";
+    }
+
+    private static string FormatRefresh(double refreshRate)
+    {
+        return refreshRate > 0 ? refreshRate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : "unknown";
+    }
+
+    private static string FormatPhysicalId(DisplayIdentity identity)
+    {
+        return identity.AdapterLuid != 0 && identity.TargetId != 0
+            ? $"{identity.AdapterLuid}:{identity.TargetId}"
+            : string.IsNullOrWhiteSpace(identity.MonitorDevicePath) ? "fallback" : identity.MonitorDevicePath;
+    }
+
+    private static string FormatConnector(DisplayIdentity saved, DisplayIdentity? detected)
+    {
+        return $"{saved.ConnectorInstance}/{detected?.ConnectorInstance ?? 0}";
+    }
+
+    private static string FormatEdidValidity(DisplayIdentity saved, DisplayIdentity? detected)
+    {
+        return $"{saved.EdidIdsValid}/{detected?.EdidIdsValid ?? false}";
+    }
+
+    private readonly record struct IdentityResolution(
+        DisplayDeviceInfo? Target = null,
+        bool IsAmbiguous = false,
+        DisplayIdentityMatchConfidence Confidence = DisplayIdentityMatchConfidence.None,
+        KnownPhysicalDisplay? Known = null,
+        DisplayIdentityMatchResult Match = null!);
+}

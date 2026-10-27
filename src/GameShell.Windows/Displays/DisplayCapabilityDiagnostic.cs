@@ -1,6 +1,5 @@
-using GameShell.Core.Interfaces;
-using GameShell.Core.Models;
-using GameShell.Core.Services;
+using GameShell.Core.Displays;
+using GameShell.Core.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace GameShell.Windows.Displays;

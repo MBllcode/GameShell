@@ -1,14 +1,18 @@
+using GameShell.Core.Displays;
+using GameShell.Core.Profiles;
+using GameShell.Core.Runtime;
+using GameShell.Core.Settings;
+using GameShell.Desktop.Bridge;
+using GameShell.Desktop.Displays;
+using GameShell.Desktop.RemoteControl;
+using GameShell.Desktop.Shortcuts;
+using GameShell.Desktop.Tray;
+using GameShell.Desktop.Hosting;
 using System.Windows;
 using System.Windows.Threading;
-using GameShell.Core.Interfaces;
-using GameShell.Core.Models;
-using GameShell.Core.Services;
 using GameShell.Desktop.Logging;
-using GameShell.Desktop.Remote;
-using GameShell.Desktop.Services;
 using GameShell.Windows.Detection;
 using GameShell.Windows.Displays;
-using GameShell.Windows.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -28,13 +32,13 @@ public partial class App : System.Windows.Application
     private SingleInstanceCommandHost? _commandHost;
     private MainWindow? _mainWindow;
     private SdlControllerShortcutService? _controllerShortcutService;
-    private WebView.WebViewBridge? _webViewBridge;
+    private WebViewBridge? _webViewBridge;
     private ISettingsService? _settingsService;
     private IModeCommandService? _modeCommandService;
     private IDisplayTransitionService? _displayTransitionService;
     private IDisplayCapabilityDiagnostic? _displayCapabilityDiagnostic;
     private RemoteControlHost? _remoteControlHost;
-    private GamingProfileRuntimeSettingsResolver? _gamingProfileSettingsResolver;
+    private ProfileSettingsResolver? _profileSettingsResolver;
     private DisplayDiscoveryCoordinator? _displayDiscoveryCoordinator;
     private GlobalHotkeyHost? _hotkeyHost;
     private TrayHost? _trayHost;
@@ -59,7 +63,7 @@ public partial class App : System.Windows.Application
         }
 
         var services = new ServiceCollection();
-        ConfigureServices(services);
+        ServiceRegistration.ConfigureServices(services);
 
         _serviceProvider = services.BuildServiceProvider();
         _logger = _serviceProvider.GetRequiredService<ILogger<App>>();
@@ -73,7 +77,7 @@ public partial class App : System.Windows.Application
         _remoteControlHost = _serviceProvider.GetRequiredService<RemoteControlHost>();
         _displayTransitionService = _serviceProvider.GetRequiredService<IDisplayTransitionService>();
         _displayCapabilityDiagnostic = _serviceProvider.GetRequiredService<IDisplayCapabilityDiagnostic>();
-        _gamingProfileSettingsResolver = _serviceProvider.GetRequiredService<GamingProfileRuntimeSettingsResolver>();
+        _profileSettingsResolver = _serviceProvider.GetRequiredService<ProfileSettingsResolver>();
         var startupSettings = await _settingsService.LoadAsync();
         var safeMode = HasArgument(e.Args, "--safe-mode");
 
@@ -125,7 +129,7 @@ public partial class App : System.Windows.Application
         await _remoteControlHost.StartAsync(startupSettings);
         RegisterCommandEvents();
         _controllerShortcutService = _serviceProvider.GetRequiredService<SdlControllerShortcutService>();
-        _webViewBridge = _serviceProvider.GetRequiredService<WebView.WebViewBridge>();
+        _webViewBridge = _serviceProvider.GetRequiredService<WebViewBridge>();
         _webViewBridge.AttachControllerShortcutService(_controllerShortcutService);
         _webViewBridge.ApplyWindowsIntegrationForCurrentSettings(startupSettings);
         _webViewBridge.HotkeyCaptureStateChanged += OnHotkeyCaptureStateChanged;
@@ -448,7 +452,7 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private async Task RunTrayCommandAsync(Func<Task<GameShell.Core.Models.ModeResult>> command)
+    private async Task RunTrayCommandAsync(Func<Task<GameShell.Core.Runtime.ModeResult>> command)
     {
         if (_isExiting)
         {
@@ -475,7 +479,7 @@ public partial class App : System.Windows.Application
         _hotkeyHost = new GlobalHotkeyHost(
             _settingsService!,
             _modeCommandService!,
-            _gamingProfileSettingsResolver!,
+            _profileSettingsResolver!,
             _logger!,
             RunTrayCommandAsync,
             () => _webViewBridge?.NotifyStatusChanged());
@@ -512,7 +516,7 @@ public partial class App : System.Windows.Application
         });
     }
 
-    private async Task RunCommandAsync(Func<IModeCommandService, Task<GameShell.Core.Models.ModeResult>> action)
+    private async Task RunCommandAsync(Func<IModeCommandService, Task<GameShell.Core.Runtime.ModeResult>> action)
     {
         if (_isExiting || _serviceProvider is null)
         {
@@ -604,51 +608,5 @@ public partial class App : System.Windows.Application
     private static bool HasArgument(IEnumerable<string> args, string expected) =>
         args.Any(arg => string.Equals(arg, expected, StringComparison.OrdinalIgnoreCase));
 
-    private static void ConfigureServices(IServiceCollection services)
-    {
-        services.AddLogging(builder =>
-        {
-            builder.ClearProviders();
-            builder.AddProvider(new FileLoggerProvider());
-        });
 
-        services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<IExternalProcessLauncher, WindowsExternalProcessLauncher>();
-        services.AddSingleton<ILauncherProcessService, LauncherProcessService>();
-        services.AddSingleton<IWindowsCursorService, WindowsCursorService>();
-        services.AddSingleton<IWindowsWindowManagementService, WindowsWindowManagementService>();
-        services.AddSingleton<LegacySettingsPropertyMigrator>();
-        services.AddSingleton<IModeWorkflowService, NativeModeWorkflowService>();
-        services.AddSingleton<IRuntimeStateService, RuntimeStateService>();
-        services.AddSingleton<StartupTargetResolver>();
-        services.AddSingleton<ConsoleDisplayLayoutBuilder>();
-        services.AddSingleton<GamingProfileRuntimeSettingsResolver>();
-        services.AddSingleton<GamingProfileTopologyReadinessEvaluator>();
-        services.AddSingleton<IGamingProfileTopologyReadinessEvaluator>(provider => provider.GetRequiredService<GamingProfileTopologyReadinessEvaluator>());
-        services.AddSingleton<WindowsDisplayConfigurationService>();
-        services.AddSingleton<WindowsDisplayTopologyReader>();
-        services.AddSingleton<IDisplayQueryService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
-        services.AddSingleton<DisplayDiscoveryCoordinator>();
-        services.AddSingleton<IDisplayDiscoveryStabilizationService>(provider => provider.GetRequiredService<DisplayDiscoveryCoordinator>());
-        services.AddSingleton<ITransientOperationStateService, TransientOperationStateService>();
-        services.AddSingleton<IDisplayConfigurationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
-        services.AddSingleton<IDisplayLayoutApplicationService>(provider => provider.GetRequiredService<WindowsDisplayConfigurationService>());
-        services.AddSingleton<IDisplayCapabilityDiagnostic, DisplayCapabilityDiagnostic>();
-        services.AddSingleton<DisplayTransitionService>();
-        services.AddSingleton<IDisplayTransitionService>(provider => provider.GetRequiredService<DisplayTransitionService>());
-        services.AddSingleton<IDisplayTransitionStabilityGuard>(provider => provider.GetRequiredService<DisplayTransitionService>());
-        services.AddSingleton<IModeOrchestrator, ModeOrchestrator>();
-        services.AddSingleton<IGameSessionMonitor, WindowsGameSessionMonitor>();
-        services.AddSingleton<ILauncherRecoveryStrategy, WindowsLauncherRecoveryStrategy>();
-        services.AddSingleton<IConsoleSessionManager, ConsoleSessionManager>();
-        services.AddSingleton<IModeCommandService, ModeCommandService>();
-        services.AddSingleton<StartupReconciliationService>();
-        services.AddSingleton<RemoteControlHost>();
-        services.AddSingleton<IDependencyDetectionService, DependencyDetectionService>();
-        services.AddSingleton<IWindowsIntegrationService, WindowsIntegrationService>();
-        services.AddSingleton<SdlControllerShortcutService>();
-        services.AddSingleton<WebView.WebViewBridge>();
-        services.AddSingleton<IWindowPlacementService, WindowsWindowPlacementService>();
-        services.AddTransient<MainWindow>();
-    }
 }

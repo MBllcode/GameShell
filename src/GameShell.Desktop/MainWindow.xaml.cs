@@ -1,12 +1,12 @@
+using GameShell.Core.Settings;
+using GameShell.Desktop.Bridge;
+using GameShell.Desktop.Windowing;
+using GameShell.Windows.Desktop;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
-using GameShell.Core.Interfaces;
-using GameShell.Desktop.Services;
-using GameShell.Desktop.WebView;
-using GameShell.Windows.Services;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Extensions.Logging;
 using Application = System.Windows.Application;

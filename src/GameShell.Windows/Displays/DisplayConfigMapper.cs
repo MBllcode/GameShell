@@ -1,4 +1,4 @@
-using GameShell.Core.Models;
+using GameShell.Core.Displays;
 using Microsoft.Extensions.Logging;
 
 namespace GameShell.Windows.Displays;

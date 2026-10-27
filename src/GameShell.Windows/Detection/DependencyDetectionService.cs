@@ -1,6 +1,6 @@
+using GameShell.Core.Applications;
+using GameShell.Core.Settings;
 using System.Diagnostics;
-using GameShell.Core.Interfaces;
-using GameShell.Core.Models;
 using Microsoft.Win32;
 
 namespace GameShell.Windows.Detection;
