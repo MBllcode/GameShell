@@ -20,6 +20,8 @@
 
 ### Repository and delivery
 
+- Keep the README icon inline with the title and document the automatic first-launch wizard, local settings creation, and completion behaviour.
+
 - Replace compressed desktop screenshots with 2880 × 1800 lossless captures from the running WebView renderer.
 - Group build/package tooling under `scripts/` and the changelog under `docs/`, with a documentation index and updated CI commands.
 

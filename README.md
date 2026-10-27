@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="src/GameShell.Ui/public/assets/GameShell.png" width="76" alt="GameShell icon">
-  <h1>GameShell</h1>
+  <h1><img src="src/GameShell.Ui/public/assets/GameShell.png" width="64" height="64" align="middle" alt=""> GameShell</h1>
   <p><strong>One PC. Your desk setup. Your gaming setup. One click to switch.</strong></p>
   <p>A Windows desktop app that switches displays, launches your gaming frontend, and prepares the desktop using profiles you control.</p>
   <p>
@@ -8,12 +7,23 @@
     <img src="https://img.shields.io/badge/platform-Windows_x64-0078D4" alt="Windows x64">
     <img src="https://img.shields.io/badge/UI-English_%2F_Polski-7AC943" alt="English and Polish">
   </p>
-  <p><a href="#see-it-in-action">Screenshots</a> · <a href="#build-and-run">Build & run</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/architecture.md">Architecture</a></p>
+  <p><a href="#first-launch-setup">First launch</a> · <a href="#see-it-in-action">Screenshots</a> · <a href="#build-and-run">Build & run</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/architecture.md">Architecture</a></p>
 </div>
 
 [![GameShell dashboard: gaming profiles and their display, launcher, behaviour, and shortcut settings](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
 
 Keep a monitor layout for work and another for the TV, projector, or gaming desk. Select a profile and press **Run profile**. Return through **Work Mode** when you are done.
+
+## First launch setup
+
+On a fresh PC, when no `settings.json` exists yet, GameShell creates its local settings and opens a guided setup wizard. This is the app's initial configuration, not a separate installer — you do not need to create or edit the JSON file yourself.
+
+1. **Choose your language** — English or Polish.
+2. **Create your first gaming profile** — displays, launcher, desktop behaviour, and keyboard/controller shortcuts.
+3. **Set up Work Mode** — the display layout, desktop behaviour, and shortcuts used when returning to work.
+4. **Choose startup options, review, and save** — including automatic startup and desktop/Start-menu shortcuts.
+
+Completing the wizard opens the dashboard. Later launches go straight to it; unfinished setup appears again until completed. Your configuration is stored in `%LOCALAPPDATA%\GameShell\settings.json`. [Step-by-step guide →](docs/user-guide.md#first-launch-setup)
 
 ## See it in action
 
@@ -39,7 +49,7 @@ Assign a keyboard shortcut or controller combination to a profile. Set a separat
 
 **Launchers:** Playnite Fullscreen, Steam Big Picture, and Xbox App. Xbox opens in its normal windowed mode.
 
-**First run:** save your desk layout under **Global settings → Displays**, add a gaming profile, then save it. [Full setup guide →](docs/user-guide.md)
+After setup, use **Profile settings** to edit a gaming profile and **Global settings** to change Work Mode or startup options. [Full setup guide →](docs/user-guide.md)
 
 ## Build and run
 

@@ -2,6 +2,22 @@
 
 [← Back to README](../README.md)
 
+## First launch setup
+
+On a fresh installation, GameShell has no saved settings. Launch `GameShell.exe` to create `%LOCALAPPDATA%\GameShell\settings.json` and start the first-run wizard automatically. No separate installation wizard or manual JSON editing is needed.
+
+Follow the sidebar steps in order:
+
+1. **Welcome:** choose English or Polish.
+2. **Gaming profile:** name the profile, arrange its displays, choose a launcher, select desktop actions, and assign optional keyboard/controller shortcuts.
+3. **Work Mode:** save the display layout to restore, choose desktop restoration actions, and assign return-to-work shortcuts.
+4. **General:** choose Windows startup behaviour and optional desktop/Start-menu shortcuts.
+5. **Summary:** review the configuration and finish setup to open the dashboard.
+
+GameShell creates the settings file before setup finishes. The completion flag, rather than the file's presence alone, determines whether the next launch shows the wizard or the dashboard. Closing the app before completing setup leaves first-run configuration incomplete.
+
+After completing setup, all these options remain editable from the dashboard. The sections below describe those later edits.
+
 ## Save your work setup first
 
 Open **Global settings → Displays**. Arrange the monitors as you want them for work, choose **Use current layout**, then **Save changes**. This is the default layout GameShell can restore when returning to Work Mode.
