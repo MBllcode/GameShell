@@ -134,7 +134,7 @@ pinned Gitleaks check in CI remains available while the repository is private.
 
 ### Dependency update review
 
-Dependabot checks on Mondays at 09:00 Europe/Warsaw, with at most three normal npm PRs, three NuGet PRs
+Dependabot checks on Mondays in Europe/Warsaw (npm 09:00, NuGet 09:15, Actions 09:30), with at most three normal npm PRs, three NuGet PRs
 and one Actions PR. Minor/patch updates are grouped by React stack, frontend
 libraries/tooling, .NET maintenance and Actions maintenance. SDL3-CS and its
 Windows native runtime always share a group, including major updates, so they
