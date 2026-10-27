@@ -2,6 +2,8 @@ import type { SupportedLanguage } from './language';
 
 export const translations: Record<SupportedLanguage, Record<string, string>> = {
   en: {
+    'licenses.title': 'Licenses and third-party notices',
+    'licenses.close': 'Close',
     'setup.defaultRequired': 'Choose at least one active display for the default setup before continuing.',
     'setup.skipProfile': 'Create a profile later',
     'launcher.none': 'Don’t launch anything',
@@ -313,6 +315,8 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'language.saved': 'Language saved.'
   },
   pl: {
+    'licenses.title': 'Licencje i informacje o komponentach',
+    'licenses.close': 'Zamknij',
     'setup.defaultRequired': 'Wybierz przynajmniej jeden aktywny ekran dla konfiguracji domyślnej, aby kontynuować.',
     'setup.skipProfile': 'Utwórz profil później',
     'launcher.none': 'Nie uruchamiaj aplikacji',

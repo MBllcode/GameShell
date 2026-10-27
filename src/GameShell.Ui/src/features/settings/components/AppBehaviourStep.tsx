@@ -5,6 +5,7 @@ import { SettingRow } from '../../../shared/ui/SettingRow';
 import { SettingsSection } from '../../../shared/ui/SettingsSection';
 import type { DisplayLayoutProfile } from '../../../bridge/contracts';
 import { IconBadge, PageHeader } from '../../../shared/ui/UiPrimitives';
+import { LicenseNotices } from './LicenseNotices';
 
 type FinishOptions = {
   startWithWindows: boolean;
@@ -133,6 +134,7 @@ export function AppBehaviourStep({
           />
         </SettingsSection>
       </div>
+      <LicenseNotices />
     </div>
   );
 }

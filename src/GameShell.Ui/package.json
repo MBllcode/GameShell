@@ -14,7 +14,10 @@
     "test:display-topology": "node --experimental-strip-types --test tests/displayTopology.test.ts",
     "test:i18n": "node --experimental-strip-types --test tests/i18n.test.ts",
     "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prebuild": "node ../../scripts/generate-notices.mjs",
+    "predev": "node ../../scripts/generate-notices.mjs",
+    "pretest": "node ../../scripts/generate-notices.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
@@ -30,5 +33,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
-  }
+  },
+  "license": "MIT"
 }

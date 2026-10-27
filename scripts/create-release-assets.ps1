@@ -19,5 +19,13 @@ New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
 $releaseExe = Join-Path $releaseDirectory 'GameShell.exe'
 $archive = Join-Path $releaseDirectory 'GameShell-win-x64.zip'
 Copy-Item -LiteralPath $executable -Destination $releaseExe -Force
-Compress-Archive -LiteralPath $releaseExe -DestinationPath $archive -CompressionLevel Optimal -Force
+$license = Join-Path $releaseDirectory 'LICENSE.txt'
+$notices = Join-Path $releaseDirectory 'THIRD_PARTY_NOTICES.txt'
+$generatedNotices = Join-Path $root 'artifacts\licenses\THIRD_PARTY_NOTICES.txt'
+if (-not (Test-Path -LiteralPath $generatedNotices)) {
+    throw 'Build the package first to generate third-party notices.'
+}
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $license -Force
+Copy-Item -LiteralPath $generatedNotices -Destination $notices -Force
+Compress-Archive -LiteralPath @($releaseExe, $license, $notices) -DestinationPath $archive -CompressionLevel Optimal -Force
 Write-Host "Release assets: $releaseDirectory"

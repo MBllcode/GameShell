@@ -39,3 +39,6 @@ Desktop.ini
 
 # Personal local code walkthrough
 /docs/code-tour.md
+
+# Generated offline notices (rebuilt from docs/licenses)
+/src/GameShell.Ui/public/licenses.html

@@ -1156,3 +1156,23 @@ select option {
 .profile-list-shell.has-profile-overflow .profile-quick-list {
   padding-inline-end: var(--profile-scrollbar-gap);
 }
+
+.license-notices-link { justify-self: start; }
+.license-notices-link > button { border-radius: var(--gs-radius-control); }
+
+.license-dialog {
+  width: min(860px, calc(100vw - 48px));
+  height: min(720px, calc(100vh - 48px));
+  margin: auto;
+  padding: 20px;
+  border: 1px solid var(--gs-border-strong);
+  border-radius: var(--gs-radius-panel);
+  background: var(--gs-surface);
+  color: var(--gs-text);
+}
+
+.license-dialog[open] { display: flex; flex-direction: column; gap: 16px; }
+.license-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+.license-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.license-dialog h2 { margin: 0; font-size: 1rem; }
+.license-dialog iframe { flex: 1; width: 100%; min-height: 0; border: 1px solid var(--gs-border); }

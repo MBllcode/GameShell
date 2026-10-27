@@ -1,0 +1,168 @@
+[
+  {
+    "name": "@babel/runtime",
+    "version": "7.29.7",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/@babel/runtime",
+    "files": [
+      "babel-runtime-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "@fontsource/ibm-plex-mono",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "source": "https://www.npmjs.com/package/@fontsource/ibm-plex-mono",
+    "files": [
+      "fontsource-ibm-plex-mono-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "@fontsource/ibm-plex-sans",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "source": "https://www.npmjs.com/package/@fontsource/ibm-plex-sans",
+    "files": [
+      "fontsource-ibm-plex-sans-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "html-parse-stringify",
+    "version": "4.0.1",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/html-parse-stringify",
+    "files": [
+      "html-parse-stringify-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "i18next",
+    "version": "26.3.6",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/i18next",
+    "files": [
+      "i18next-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "react",
+    "version": "19.2.8",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/react",
+    "files": [
+      "react-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "react-dom",
+    "version": "19.2.8",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/react-dom",
+    "files": [
+      "react-dom-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "react-i18next",
+    "version": "17.0.11",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/react-i18next",
+    "files": [
+      "react-i18next-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "scheduler",
+    "version": "0.27.0",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/scheduler",
+    "files": [
+      "scheduler-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "typescript",
+    "version": "5.9.3",
+    "license": "Apache-2.0",
+    "source": "https://www.npmjs.com/package/typescript",
+    "files": [
+      "typescript-LICENSE.txt.txt",
+      "typescript-ThirdPartyNoticeText.txt.txt"
+    ]
+  },
+  {
+    "name": "use-sync-external-store",
+    "version": "1.6.0",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/use-sync-external-store",
+    "files": [
+      "use-sync-external-store-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "sdl3-cs",
+    "version": "3.4.14",
+    "license": "Zlib",
+    "source": "https://github.com/edwardgushchin/SDL3-CS",
+    "files": [
+      "sdl3-cs-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "sdl3-cs.windows",
+    "version": "3.4.14",
+    "license": "Zlib",
+    "source": "https://github.com/edwardgushchin/SDL3-CS",
+    "files": [
+      "sdl3-cs.windows-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "microsoft.web.webview2",
+    "version": "1.0.3351.48",
+    "license": "Microsoft WebView2 license",
+    "source": "https://www.nuget.org/packages/Microsoft.Web.WebView2",
+    "files": [
+      "microsoft.web.webview2-LICENSE.txt.txt",
+      "microsoft.web.webview2-NOTICE.txt.txt"
+    ]
+  },
+  {
+    "name": "microsoft.netcore.app.runtime.win-x64",
+    "version": "10.0.14",
+    "license": "MIT and third-party notices",
+    "source": "https://github.com/dotnet/runtime",
+    "files": [
+      "microsoft.netcore.app.runtime.win-x64-LICENSE.TXT.txt",
+      "microsoft.netcore.app.runtime.win-x64-THIRD-PARTY-NOTICES.TXT.txt"
+    ]
+  },
+  {
+    "name": "microsoft.windowsdesktop.app.runtime.win-x64",
+    "version": "10.0.14",
+    "license": "MIT",
+    "source": "https://github.com/dotnet/windowsdesktop",
+    "files": [
+      "microsoft.windowsdesktop.app.runtime.win-x64-LICENSE.txt"
+    ]
+  },
+  {
+    "name": "microsoft.aspnetcore.app.runtime.win-x64",
+    "version": "10.0.14",
+    "license": "MIT and third-party notices",
+    "source": "https://github.com/dotnet/aspnetcore",
+    "files": [
+      "microsoft.aspnetcore.app.runtime.win-x64-LICENSE.txt.txt",
+      "microsoft.aspnetcore.app.runtime.win-x64-THIRD-PARTY-NOTICES.TXT.txt"
+    ]
+  },
+  {
+    "name": "SDL native runtime",
+    "version": "3.4.14",
+    "license": "Zlib",
+    "source": "https://github.com/libsdl-org/SDL/tree/release-3.4.14",
+    "files": [
+      "sdl-native-LICENSE.txt"
+    ]
+  }
+]
