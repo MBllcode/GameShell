@@ -123,3 +123,11 @@ Do not add settings, diagnostics, private walkthroughs, or generated packages to
 Git. Keep local Git author and committer identities on your GitHub noreply email.
 After a history rewrite, old clones must be replaced or explicitly rebased;
 merging old branches can reintroduce removed files and private metadata.
+
+### Repository protection
+
+Enable required CI checks for `main` and disable force pushes/deletion once the
+repository is public or its plan supports private-branch protection. GitHub Free
+blocks branch protection for private repositories. Native GitHub secret scanning
+and private vulnerability reporting also depend on repository eligibility; the
+pinned Gitleaks check in CI remains available while the repository is private.
