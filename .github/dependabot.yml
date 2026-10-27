@@ -4,14 +4,45 @@ updates:
     directory: /src/GameShell.Ui
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    groups:
+      react-stack:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+        update-types: [minor, patch]
+      frontend-libraries:
+        dependency-type: production
+        patterns: ["*"]
+        update-types: [minor, patch]
+      frontend-tooling:
+        dependency-type: development
+        patterns: ["*"]
+        update-types: [minor, patch]
+      frontend-security:
+        applies-to: security-updates
+        patterns: ["*"]
   - package-ecosystem: nuget
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    groups:
+      sdl-runtime:
+        patterns: ["SDL3-CS", "SDL3-CS.Windows"]
+      dotnet-maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      dotnet-security:
+        applies-to: security-updates
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
+    groups:
+      actions-maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]

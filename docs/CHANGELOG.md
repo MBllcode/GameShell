@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Group routine Dependabot updates, keep the SDL wrapper/native runtime together, and limit normal update PRs to 3 npm, 3 NuGet and 1 Actions.
+- Keep other major upgrades individual and security updates in separate groups.
+- Document the solo-maintainer branch-protection and dependency review policy.
+
 ## [0.1.3] - 2026-10-27
 
 - Move the desktop app, tests and CI to .NET 10 LTS with transitive NuGet auditing.

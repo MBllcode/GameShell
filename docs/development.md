@@ -131,3 +131,24 @@ repository is public or its plan supports private-branch protection. GitHub Free
 blocks branch protection for private repositories. Native GitHub secret scanning
 and private vulnerability reporting also depend on repository eligibility; the
 pinned Gitleaks check in CI remains available while the repository is private.
+
+### Dependency update review
+
+Dependabot checks weekly, with at most three normal npm PRs, three NuGet PRs
+and one Actions PR. Minor/patch updates are grouped by React stack, frontend
+libraries/tooling, .NET maintenance and Actions maintenance. SDL3-CS and its
+Windows native runtime always share a group, including major updates, so they
+can be tested together. Other major updates remain individual PRs.
+Security updates have separate groups and are not blocked by the normal PR limit.
+
+Review release notes, test behaviour and refresh affected license notices before
+merging. Passing CI is required evidence, not permission to enable blind auto-merge.
+Merged branches are deleted automatically. Close redundant PRs only after their
+updates are represented in a replacement group.
+
+For a solo-maintained protected `main`, require a pull request and passing
+`windows` CI, require the branch to be up to date and conversations to be resolved,
+and block force pushes/deletion. Set required approving reviews to zero: the owner
+cannot approve their own PR. This retains PR/CI review without waiting for an
+unavailable second maintainer. Enable these rules when the GitHub plan or public
+visibility permits them.
