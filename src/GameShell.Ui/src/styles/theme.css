@@ -555,8 +555,7 @@ input {
 }
 
 .profile-quick-list {
-  /* Match the space on the scrollbar's other side, owned by the shell. */
-  padding-inline-end: var(--profile-scrollbar-gap);
+  padding-inline-end: 0;
   gap: 6px;
   max-height: clamp(160px, 28vh, 290px);
 }
@@ -1141,4 +1140,9 @@ input {
   .display-reset-button {
     width: 100%;
   }
+}
+
+/* Keep the cards aligned on the left; reserve the scrollbar gap on the right. */
+.profile-list-shell.has-profile-overflow .profile-quick-list {
+  padding-inline-end: var(--profile-scrollbar-gap);
 }

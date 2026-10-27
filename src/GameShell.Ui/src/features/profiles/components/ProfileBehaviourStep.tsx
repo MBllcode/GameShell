@@ -22,8 +22,7 @@ const gamingBehaviourOptions: Array<{ key: GamingBehaviourKey; labelKey: string;
   { key: 'closeVisibleWindows', labelKey: 'behaviour.closeVisibleWindows', icon: 'windowClose' },
   { key: 'minimizeRemainingWindows', labelKey: 'behaviour.minimizeRemainingWindows', icon: 'windowMinimize' },
   { key: 'moveCursorToCorner', labelKey: 'behaviour.moveCursorToCorner', icon: 'cursor' },
-  { key: 'hideCursor', labelKey: 'behaviour.hideCursor', icon: 'cursorOff' },
-  { key: 'bringLauncherToForeground', labelKey: 'behaviour.bringLauncherToForeground', icon: 'foreground' }
+  { key: 'hideCursor', labelKey: 'behaviour.hideCursor', icon: 'cursorOff' }
 ];
 
 export function ProfileBehaviourStep({
@@ -92,20 +91,7 @@ export function ProfileBehaviourStep({
             />
           ))}
         </SettingsSection>
-        {gamingBehaviour.startLauncher ? <SettingsSection title={t('behaviour.launcher')}>
-          {gamingBehaviourOptions.slice(6).map((option) => (
-            <SettingRow
-              key={option.key}
-              title={t(option.labelKey)}
-              description={option.description}
-              showInfo
-              icon={option.icon}
-              checked={gamingBehaviour[option.key]}
-              onChange={(value) => onChangeBehaviourFlag(option.key, value)}
-              disabled={!hasWorkingProfile}
-            />
-          ))}
-        </SettingsSection> : null}
+
       </div>
     </div>
   );

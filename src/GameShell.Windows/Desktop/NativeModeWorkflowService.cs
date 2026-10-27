@@ -184,7 +184,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
 
         await TryStepAsync("bring launcher to foreground", warnings, async () =>
         {
-            if (ProfileApplicationPolicy.ShouldLaunch(settings.Launcher, behaviour) && behaviour.BringLauncherToForeground)
+            if (ProfileApplicationPolicy.ShouldLaunch(settings.Launcher, behaviour))
             {
                 await BringLauncherToForegroundAsync(settings, launcherProcessId, cancellationToken);
             }

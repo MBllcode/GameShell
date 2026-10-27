@@ -32,7 +32,7 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
     {
         var behaviour = new ProfileSettingsResolver()
             .ResolveBehaviour(settings.Display, settings.Gaming, profileName);
-        if (!ProfileApplicationPolicy.ShouldMonitor(ResolveLauncher(settings, profileName), behaviour) || !behaviour.BringLauncherToForeground)
+        if (!ProfileApplicationPolicy.ShouldMonitor(ResolveLauncher(settings, profileName), behaviour))
         {
             return LauncherRecoveryResult.Recovered("Launcher recovery disabled by profile behaviour");
         }

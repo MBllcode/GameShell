@@ -142,14 +142,14 @@ public sealed class ProfileBehaviourTests
     }
 
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task Recovery_RespectsLauncherAndForegroundFlags(bool start, bool foreground)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Recovery_RequiresAnEnabledApplicationRegardlessOfLegacyForegroundFlag(bool foreground)
     {
         var effects = new Effects();
         var recovery = new WindowsLauncherRecoveryStrategy(NullLogger<WindowsLauncherRecoveryStrategy>.Instance, effects);
         var settings = new AppSettings { Gaming = Behaviour(0) };
-        settings.Gaming.StartLauncher = start;
+        settings.Gaming.StartLauncher = false;
         settings.Gaming.BringLauncherToForeground = foreground;
         Assert.True((await recovery.RecoverAsync(settings, null)).Success);
         Assert.Empty(effects.Calls);

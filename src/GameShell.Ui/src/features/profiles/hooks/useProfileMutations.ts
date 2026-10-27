@@ -76,7 +76,7 @@ export function useProfileMutations({
   const setProfileLauncher = useCallback((profileName: string, nextLauncher: LauncherType) => {
     setLauncher(nextLauncher);
     const behaviour = profileBehaviours[profileName] ?? gamingBehaviour;
-    const nextBehaviour = { ...behaviour, startLauncher: nextLauncher !== 'None', bringLauncherToForeground: nextLauncher !== 'None' && (behaviour.startLauncher ? behaviour.bringLauncherToForeground : true) };
+    const nextBehaviour = { ...behaviour, startLauncher: nextLauncher !== 'None', bringLauncherToForeground: nextLauncher !== 'None' };
     setProfiles(current => updateProfile(current, profileName, { application: nextLauncher, behaviour: nextBehaviour }));
     setGamingBehaviour(nextBehaviour);
     markUnsavedChanges();

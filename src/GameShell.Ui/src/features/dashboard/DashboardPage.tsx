@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../../bridge/contracts';
 import { summarizeLayout } from '../displays/displayTopology';
@@ -58,6 +58,23 @@ export function DashboardPage({
     'app-behaviour': 'settings'
   };
   const [showDeleteProfileDialog, setShowDeleteProfileDialog] = useState(false);
+  const profileListRef = useRef<HTMLDivElement>(null);
+  const profileShellRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const list = profileListRef.current;
+    const shell = profileShellRef.current;
+    if (!list || !shell) return;
+    const update = () => {
+      const overflowing = list.scrollHeight > list.clientHeight + 1;
+      shell.classList.toggle('has-profile-overflow', overflowing);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(list);
+    for (const row of list.children) observer.observe(row);
+    update();
+    return () => observer.disconnect();
+  }, [gamingProfiles]);
+
   const dashboardSelectedProfileName = selectedProfileName || activeProfileName || gamingProfiles[0]?.name || '';
   const runtimeActiveProfileName = status.activeProfileName;
   const isWorkModeActive = status.currentMode === 'Work';
@@ -148,8 +165,8 @@ export function DashboardPage({
                       <button className="secondary-button add-profile-head-button" type="button" onClick={createProfile} disabled={isRemovingProfile}><UiIcon name="plus" size={16} /><span>{t('dashboard.addProfile')}</span></button>
                     </div>
                   </div>
-                  <div className="profile-list-shell">
-                    <div className="profile-quick-list" role="listbox" aria-label={t('dashboard.profiles')}>
+                  <div className="profile-list-shell" ref={profileShellRef}>
+                    <div className="profile-quick-list" ref={profileListRef} role="listbox" aria-label={t('dashboard.profiles')}>
                       {gamingProfiles.map((profile) => {
                         const profileLauncher = gamingProfileLaunchers[profile.name] ?? launcher;
                         const isProfileConfiguredAsActive = runtimeActiveProfileName === profile.name;

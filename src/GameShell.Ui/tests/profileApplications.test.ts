@@ -25,7 +25,7 @@ test('legacy disabled launching hydrates as None without changing another profil
 });
 
 test('saved mixed profiles have independent applications and coherent launch flags', () => {
-  const behaviour = { hideDesktopIcons: false, hideTaskbar: false, closeVisibleWindows: false, minimizeRemainingWindows: false, moveCursorToCorner: false, hideCursor: false, startLauncher: true, bringLauncherToForeground: true };
+  const behaviour = { hideDesktopIcons: false, hideTaskbar: false, closeVisibleWindows: false, minimizeRemainingWindows: false, moveCursorToCorner: false, hideCursor: false, startLauncher: true, bringLauncherToForeground: false };
   const state = {
     settings: null, selectedConsoleDisplay: null, selectedConsoleDisplays: [], gamingLayout: null,
     gamingProfiles: ['Football', 'Console', 'PC'].map((name, index) => createProfile({ name, layout: { displays: [] } }, { behaviour, application: ['None', 'Playnite Fullscreen', 'Steam Big Picture'][index] as any })),
