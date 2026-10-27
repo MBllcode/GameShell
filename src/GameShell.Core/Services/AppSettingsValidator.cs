@@ -34,7 +34,6 @@ public static class AppSettingsValidator
         settings.GameShell.CompletionDelaySeconds = Math.Clamp(settings.GameShell.CompletionDelaySeconds, 0, 600);
         settings.GameShell.ProtectedProcessNames ??= [];
         settings.GameShell.CloseOnlyProcessNames ??= [];
-        MigrateLegacyGamingDefaults(settings.Gaming);
         settings.Gaming.CompletionDelaySeconds = Math.Clamp(settings.Gaming.CompletionDelaySeconds, 0, 600);
         settings.Gaming.ProtectedProcessNames ??= [];
         settings.Gaming.CloseOnlyProcessNames ??= [];
@@ -134,29 +133,6 @@ public static class AppSettingsValidator
         }
 
         shortcut.Buttons = shortcut.Buttons.Distinct().ToList();
-    }
-
-    private static void MigrateLegacyGamingDefaults(GamingSettings settings)
-    {
-        if (settings.HideDesktopIcons
-            || settings.HideTaskbar
-            || !settings.CloseVisibleWindows
-            || settings.MinimizeRemainingWindows
-            || settings.MoveCursorToCorner
-            || !settings.HideCursor
-            || settings.StartLauncher
-            || settings.BringLauncherToForeground)
-        {
-            return;
-        }
-
-        settings.HideDesktopIcons = true;
-        settings.HideTaskbar = true;
-        settings.CloseVisibleWindows = false;
-        settings.MoveCursorToCorner = true;
-        settings.HideCursor = false;
-        settings.StartLauncher = true;
-        settings.BringLauncherToForeground = true;
     }
 
     private static void NormalizeGamingProfiles(DisplaySettings display)
@@ -303,7 +279,6 @@ public static class AppSettingsValidator
             };
             var controllerShortcut = existingConfiguration?.ControllerShortcut;
 
-            MigrateLegacyGamingDefaults(behaviour);
             behaviour.CompletionDelaySeconds = Math.Clamp(behaviour.CompletionDelaySeconds, 0, 600);
             behaviour.ProtectedProcessNames ??= [];
             behaviour.CloseOnlyProcessNames ??= [];

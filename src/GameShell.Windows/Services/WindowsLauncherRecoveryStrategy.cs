@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using GameShell.Core.Interfaces;
 using GameShell.Core.Models;
+using GameShell.Core.Services;
 using Microsoft.Extensions.Logging;
 
 namespace GameShell.Windows.Services;
@@ -29,6 +30,13 @@ public sealed class WindowsLauncherRecoveryStrategy : ILauncherRecoveryStrategy
         int? gameProcessId = null,
         CancellationToken cancellationToken = default)
     {
+        var behaviour = new GamingProfileRuntimeSettingsResolver()
+            .ResolveBehaviour(settings.Display, settings.Gaming, profileName);
+        if (!behaviour.StartLauncher || !behaviour.BringLauncherToForeground)
+        {
+            return LauncherRecoveryResult.Recovered("Launcher recovery disabled by profile behaviour");
+        }
+
         _logger.LogInformation("[PLAYNITE RETURN START] GamePid={GamePid} PlaynitePid={PlaynitePid} Reason={Reason}.", gameProcessId, "unknown", "GameExited");
         _logger.LogInformation("PLAYNITE POST-GAME RECOVERY START");
         await Task.Delay(TimeSpan.FromMilliseconds(1500), cancellationToken);

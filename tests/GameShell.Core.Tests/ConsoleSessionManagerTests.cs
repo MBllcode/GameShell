@@ -10,6 +10,47 @@ namespace GameShell.Core.Tests;
 public sealed class ConsoleSessionManagerTests
 {
     [Fact]
+    public async Task ProfileSwitch_RejectsOnlyConcurrentTransition()
+    {
+        var orchestrator = new FakeModeOrchestrator { BlockProfile = true };
+        using var manager = CreateManager(orchestrator, new FakeGameSessionMonitor());
+        var first = manager.EnterProfileAsync("LivingRoom");
+        await orchestrator.ProfileStarted.Task;
+        try
+        {
+            var concurrent = await manager.EnterProfileAsync("Office");
+            Assert.Equal(ModeResultStatus.AlreadyRunning, concurrent.Status);
+        }
+        finally
+        {
+            orchestrator.ReleaseProfile.TrySetResult();
+        }
+        Assert.True((await first).Success);
+        Assert.True((await manager.EnterProfileAsync("Office")).Success);
+        Assert.Equal(2, orchestrator.ProfileActivations);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task DisabledLauncherActions_DoNotRecoverLauncherAfterGameExit(bool startLauncher, bool foreground)
+    {
+        var monitor = new FakeGameSessionMonitor();
+        var recovery = new FakeLauncherRecoveryStrategy();
+        var settings = new FakeSettingsService { StartLauncher = startLauncher, BringLauncherToForeground = foreground };
+        using var manager = CreateManager(new FakeModeOrchestrator(), monitor, recovery, settings);
+
+        Assert.True((await manager.EnterProfileAsync("LivingRoom")).Success);
+        Assert.Equal(startLauncher ? 1 : 0, monitor.StartCalls);
+        monitor.RaiseGameDetected();
+        monitor.RaiseGameExited();
+        await WaitUntilAsync(() => manager.GetSnapshot().State == ConsoleSessionState.LauncherActive);
+        Assert.Equal(0, recovery.Calls);
+        Assert.Equal(ConsoleSessionState.LauncherActive, manager.GetSnapshot().State);
+    }
+
+    [Fact]
     public async Task EnterProfile_ActivatesLauncherAndTracksGameLifecycle()
     {
         var orchestrator = new FakeModeOrchestrator();
@@ -29,7 +70,7 @@ public sealed class ConsoleSessionManagerTests
     }
 
     [Fact]
-    public async Task DuplicateActivation_IsRejectedWithoutSecondOrchestratorCall()
+    public async Task DifferentProfile_SwitchesWithoutReturningToWork()
     {
         var orchestrator = new FakeModeOrchestrator();
         using var manager = CreateManager(orchestrator, new FakeGameSessionMonitor());
@@ -37,8 +78,10 @@ public sealed class ConsoleSessionManagerTests
         await manager.EnterProfileAsync("LivingRoom");
         var result = await manager.EnterProfileAsync("Office");
 
-        Assert.Equal(ModeResultStatus.AlreadyRunning, result.Status);
-        Assert.Equal(1, orchestrator.ProfileActivations);
+        Assert.True(result.Success);
+        Assert.Equal(2, orchestrator.ProfileActivations);
+        Assert.Equal(0, orchestrator.WorkActivations);
+        Assert.Equal("Office", manager.GetSnapshot().ProfileName);
     }
 
     [Fact]
@@ -242,9 +285,11 @@ public sealed class ConsoleSessionManagerTests
         public event EventHandler<GameSessionEventArgs>? GameDetected;
         public event EventHandler<GameSessionEventArgs>? GameExited;
         public int StopCalls { get; private set; }
+        public int StartCalls { get; private set; }
 
         public Task StartAsync(IReadOnlyCollection<string> processNames, CancellationToken cancellationToken = default)
         {
+            StartCalls++;
             return Task.CompletedTask;
         }
 
@@ -261,6 +306,7 @@ public sealed class ConsoleSessionManagerTests
     private sealed class FakeLauncherRecoveryStrategy : ILauncherRecoveryStrategy
     {
         public bool ShouldFail { get; init; }
+        public int Calls { get; private set; }
 
         public Task<LauncherRecoveryResult> RecoverAsync(
             AppSettings settings,
@@ -268,6 +314,7 @@ public sealed class ConsoleSessionManagerTests
             int? gameProcessId = null,
             CancellationToken cancellationToken = default)
         {
+            Calls++;
             return Task.FromResult(ShouldFail
                 ? LauncherRecoveryResult.Failed("recovery failed")
                 : LauncherRecoveryResult.Recovered("Launcher recovered normally"));
@@ -278,11 +325,13 @@ public sealed class ConsoleSessionManagerTests
     {
         public string SettingsPath => "test";
         public int ProfileWidth { get; set; } = 1920;
+        public bool StartLauncher { get; init; } = true;
+        public bool BringLauncherToForeground { get; init; } = true;
         public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new AppSettings
             {
-                Gaming = { GameProcessNames = ["game.exe"] },
+                Gaming = { GameProcessNames = ["game.exe"], StartLauncher = StartLauncher, BringLauncherToForeground = BringLauncherToForeground },
                 Display =
                 {
                     GamingProfiles =
@@ -321,6 +370,9 @@ public sealed class ConsoleSessionManagerTests
         public int WorkActivations { get; private set; }
         public ModeResult WorkModeResult { get; init; } = SuccessResult(ModeState.WorkMode);
         public bool BlockWorkMode { get; init; }
+        public bool BlockProfile { get; init; }
+        public TaskCompletionSource ProfileStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseProfile { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<AppStatus> GetStatusAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppStatus());
 
@@ -330,10 +382,12 @@ public sealed class ConsoleSessionManagerTests
             return Task.FromResult(SuccessResult());
         }
 
-        public Task<ModeResult> EnterGameShellWithDisplayProfileAsync(string profileName, CancellationToken cancellationToken = default)
+        public async Task<ModeResult> EnterGameShellWithDisplayProfileAsync(string profileName, CancellationToken cancellationToken = default)
         {
             ProfileActivations++;
-            return Task.FromResult(SuccessResult());
+            ProfileStarted.TrySetResult();
+            if (BlockProfile) await ReleaseProfile.Task.WaitAsync(cancellationToken);
+            return SuccessResult();
         }
 
         public Task<ModeResult> EnterWorkModeAsync(CancellationToken cancellationToken = default)

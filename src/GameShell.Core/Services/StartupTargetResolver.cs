@@ -52,7 +52,10 @@ public sealed class StartupTargetResolver
 
         if (string.Equals(runtimeState.LastActiveMode, "Profile", StringComparison.OrdinalIgnoreCase))
         {
-            var profile = FindProfile(settings, runtimeState.LastActiveProfileId);
+            var profile = FindProfile(settings, runtimeState.LastActiveProfileId)
+                ?? (string.IsNullOrWhiteSpace(runtimeState.LastActiveProfileId)
+                    ? FindProfile(settings, settings.Display.ActiveGamingProfileName)
+                    : null);
             if (profile is not null)
             {
                 return StartupTarget.Profile(GetStableProfileId(profile), "RestoreLastActiveMode");
@@ -73,6 +76,8 @@ public sealed class StartupTargetResolver
         {
             return null;
         }
+
+        profileReference = profileReference.Trim();
 
         return settings.Display.GamingProfiles.FirstOrDefault(profile =>
             string.Equals(profile.Id, profileReference, StringComparison.OrdinalIgnoreCase))

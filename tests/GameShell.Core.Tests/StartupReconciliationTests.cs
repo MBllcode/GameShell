@@ -9,6 +9,82 @@ namespace GameShell.Core.Tests;
 public sealed class StartupReconciliationTests
 {
     [Fact]
+    public async Task ExplicitWorkStartup_RestoresEnvironmentEvenWhenDisplaysAlreadyMatch()
+    {
+        var work = Snapshot(Path("PC", "PC", 0, 0, 1920, 1080, true));
+        var session = new FakeSessionManager();
+        var service = CreateService(work, new RuntimeState { CurrentMode = GameShellMode.GamingProfile }, session);
+        var result = await service.ActivateTargetAsync(Settings(work), StartupTarget.Work());
+        Assert.True(result?.Success);
+        Assert.Equal(1, session.WorkCalls);
+    }
+
+    [Fact]
+    public async Task ExplicitWorkStartup_WithoutSavedTopologyStillRestoresEnvironment()
+    {
+        var session = new FakeSessionManager();
+        var service = CreateService(new DisplayLayoutSnapshot(), new RuntimeState(), session);
+        var result = await service.ActivateTargetAsync(new AppSettings(), StartupTarget.Work());
+        Assert.True(result?.Success);
+        Assert.Equal(1, session.WorkCalls);
+    }
+
+    [Fact]
+    public async Task ConfiguredWorkLayout_TakesPriorityOverMatchingOldReturnLayout()
+    {
+        var work = Snapshot(Path("PC", "PC", 0, 0, 1920, 1080, true));
+        var old = Snapshot(Path("TV", "TV", 0, 0, 3840, 2160, true));
+        var query = new SequenceDisplayQueryService(old, work, work);
+        var session = new FakeSessionManager();
+        var service = CreateService(query, new RuntimeState { WorkReturnLayout = old }, session);
+        var result = await service.ReconcileAsync(Settings(work), false);
+        Assert.Null(result);
+        Assert.Equal(1, session.WorkCalls);
+        Assert.Equal(3, query.CaptureCount);
+    }
+
+    [Fact]
+    public async Task MissingProfileAtActivation_FallsBackToActualWorkPipeline()
+    {
+        var work = Snapshot(Path("PC", "PC", 0, 0, 1920, 1080, true));
+        var session = new FakeSessionManager();
+        var service = CreateService(work, new RuntimeState(), session);
+        var result = await service.ActivateTargetAsync(Settings(work), StartupTarget.Profile("deleted"));
+        Assert.True(result?.Success);
+        Assert.Equal(1, session.WorkCalls);
+        Assert.Empty(session.ProfileCalls);
+    }
+
+    [Fact]
+    public async Task ProfileStartup_InitiatesDiscoveryBeforeActivation()
+    {
+        var session = new FakeSessionManager();
+        var discovery = new InitialDiscovery();
+        var work = Snapshot(Path("PC", "PC", 0, 0, 1920, 1080, true));
+        var service = new StartupReconciliationService(new FakeRuntimeStateService(new RuntimeState()),
+            session, new FakeDisplayQueryService(work), discovery, NullLogger<StartupReconciliationService>.Instance);
+        var settings = Settings(work);
+        settings.Display.GamingProfiles = [new DisplayLayoutProfile { Id = "tv", Name = "TV" }];
+        var result = await service.ActivateTargetAsync(settings, StartupTarget.Profile("tv"));
+        Assert.True(result?.Success);
+        Assert.True(discovery.Initialized);
+        Assert.Equal(["TV"], session.ProfileCalls);
+    }
+
+    private sealed class InitialDiscovery : IDisplayDiscoveryStabilizationService
+    {
+        public bool Initialized { get; private set; }
+        public DisplayDiscoveryState State => Initialized ? DisplayDiscoveryState.Ready : DisplayDiscoveryState.Loading;
+        public Task WaitForSettledAsync(CancellationToken cancellationToken = default) => throw new InvalidOperationException("Discovery was not initiated");
+        public Task EnsureStableAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            Assert.True(timeout >= TimeSpan.FromSeconds(15));
+            Initialized = true;
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
     public async Task IdleStartupWithWorkTopologyDoesNotRestoreAgain()
     {
         var work = Snapshot(

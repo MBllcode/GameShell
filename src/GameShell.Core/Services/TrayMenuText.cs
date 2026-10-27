@@ -25,7 +25,6 @@ public static class TrayMenuText
 
     public static string ReturnToWorkMode(string? language) => Translate(language, "Wróć do Work Mode", "Return to Work Mode");
 
-    public static string OpenWindowsDesktop(string? language) => Translate(language, "Otwórz pulpit Windows", "Open Windows Desktop");
 
     public static string CloseGameShell(string? language) => Translate(language, "Zamknij GameShell", "Close GameShell");
 

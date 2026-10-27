@@ -197,12 +197,8 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
                 : profileName;
             var activationFingerprint = CreateActivationFingerprint(settings, resolvedProfileName);
             var sameProfile = string.Equals(current.ProfileName, resolvedProfileName, StringComparison.OrdinalIgnoreCase);
-            if (current.State is not ConsoleSessionState.Idle and not ConsoleSessionState.Faulted && !sameProfile)
-            {
-                return AlreadyRunning("Sesja konsolowa jest już aktywna.");
-            }
-
             if (current.State is not ConsoleSessionState.Idle and not ConsoleSessionState.Faulted
+                && sameProfile
                 && string.Equals(current.ActivationFingerprint, activationFingerprint, StringComparison.Ordinal))
             {
                 _logger.LogInformation("Profile activation skipped because the active profile has no saved changes. Profile={ProfileName}.", resolvedProfileName ?? "Console");
@@ -238,7 +234,10 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            await _gameSessionMonitor.StartAsync(processNames, cancellationToken);
+            if (behaviour.StartLauncher)
+            {
+                await _gameSessionMonitor.StartAsync(processNames, cancellationToken);
+            }
             AdvanceSessionGeneration();
             SetState(ConsoleSessionState.LauncherActive, profileName, null);
             SetActivationFingerprint(activationFingerprint);
@@ -296,6 +295,12 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager, IDisposable
             _logger.LogInformation("[PLAYNITE RETURN START] GamePid={GamePid} PlaynitePid={PlaynitePid} Reason={Reason}.", args.ProcessId, "unknown", "GameExited");
             _logger.LogInformation("Game exited; waiting for launcher return.");
             var settings = await _settingsService.LoadAsync();
+            var behaviour = _profileSettingsResolver.ResolveBehaviour(settings.Display, settings.Gaming, profileName);
+            if (!behaviour.StartLauncher || !behaviour.BringLauncherToForeground)
+            {
+                SetState(ConsoleSessionState.LauncherActive, profileName, null, null, null);
+                return;
+            }
             var result = await _launcherRecoveryStrategy.RecoverAsync(settings, profileName, args.ProcessId);
             if (GetSnapshot().SessionGeneration != callbackSessionGeneration || GetSnapshot().State != ConsoleSessionState.ReturningToLauncher)
             {

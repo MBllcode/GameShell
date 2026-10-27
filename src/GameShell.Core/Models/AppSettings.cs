@@ -201,18 +201,13 @@ public sealed class StartupSettings
     public bool StartMinimizedToTray { get; set; }
     public bool CreateStartMenuShortcut { get; set; } = true;
     public bool CreateDesktopShortcut { get; set; }
-    public bool ConsoleShellModeEnabled { get; set; }
     public StartupBehavior StartupBehavior { get; set; } = StartupBehavior.AlwaysWorkMode;
     public string? StartupProfileId { get; set; }
-    // Retained for settings compatibility; this legacy option is no longer
-    // exposed in the UI.
-    public bool CloseExplorerWhenEnteringGamingProfileInShellMode { get; set; } = true;
 }
 
 /// <summary>
 /// Selects the target GameShell converges to after sign-in. AlwaysWorkMode is
-/// intentionally zero/default so settings created before Console Shell Mode
-/// retain the historical Work Mode startup behavior.
+/// intentionally zero/default to preserve the historical Work Mode startup behavior.
 /// </summary>
 public enum StartupBehavior
 {

@@ -277,6 +277,7 @@ public partial class MainWindow : Window
     private async void OnClosed(object? sender, EventArgs e)
     {
         _hwndSource?.RemoveHook(WindowMessageHook);
+        _webViewBridge.Detach();
         if (_isExitRequested)
         {
             return;

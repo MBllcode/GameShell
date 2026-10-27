@@ -62,7 +62,7 @@ public sealed class StartupReconciliationService
         try
         {
             await _displayDiscoveryStabilizationService
-                .WaitForStableAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                .EnsureStableAsync(StartupConvergenceWindow, cancellationToken);
         }
         catch (TimeoutException)
         {
@@ -85,12 +85,7 @@ public sealed class StartupReconciliationService
             _logger.LogWarning(
                 "[STARTUP TARGET] Behavior=AlwaysProfile ConfiguredProfileId={ConfiguredProfileId} Result=FallbackToWork Reason=ProfileUnavailable",
                 target.ProfileId ?? "null");
-            return new ModeResult
-            {
-                Status = ModeResultStatus.InvalidConfiguration,
-                CurrentState = ModeState.Error,
-                Message = "StartupProfileUnavailable"
-            };
+            return await ActivateTargetAsync(settings, StartupTarget.Work("ProfileUnavailable"), cancellationToken);
         }
 
         return await _consoleSessionManager.EnterProfileAsync(profileName, cancellationToken);
@@ -122,6 +117,11 @@ public sealed class StartupReconciliationService
                 "[STARTUP CONVERGENCE] RuntimeMode=Work SessionState={SessionState} ActiveProfile={ActiveProfile} Result=NoExpectedLayout",
                 session.State,
                 session.ProfileName ?? "null");
+            if (forceWorkTarget)
+            {
+                await _displayDiscoveryStabilizationService.EnsureStableAsync(StartupConvergenceWindow, cancellationToken);
+                return await _consoleSessionManager.EnterWorkModeAsync(cancellationToken);
+            }
             return null;
         }
 
@@ -188,6 +188,12 @@ public sealed class StartupReconciliationService
                     _logger.LogInformation(
                         "[STARTUP CONVERGENCE] Result=Stable DurationMs={DurationMs}",
                         stopwatch.ElapsedMilliseconds);
+                    // A matching display topology does not restore taskbars,
+                    // cursor, launcher state, or the committed runtime mode.
+                    if (forceWorkTarget && restoreAttempts == 0)
+                    {
+                        return await _consoleSessionManager.EnterWorkModeAsync(cancellationToken);
+                    }
                     return null;
                 }
 
@@ -261,16 +267,14 @@ public sealed class StartupReconciliationService
 
     private static IReadOnlyList<DisplayLayoutSnapshot> GetExpectedWorkLayouts(AppSettings settings, RuntimeState runtime)
     {
-        return new[]
+        var preferred = new[]
             {
                 settings.WorkMode.DefaultDisplayLayout,
                 runtime.WorkReturnLayout,
                 runtime.PreviousDisplayLayout
             }
-            .Where(layout => layout is not null)
-            .Cast<DisplayLayoutSnapshot>()
-            .DistinctBy(layout => layout.Id)
-            .ToList();
+            .FirstOrDefault(layout => layout is not null);
+        return preferred is null ? [] : [preferred];
     }
 
     private static string FormatDisplays(DisplayLayoutSnapshot layout)

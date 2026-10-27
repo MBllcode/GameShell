@@ -11,17 +11,13 @@ internal sealed class GlobalHotkeyHost : IDisposable
     private const int HotkeyConsoleModeId = 0x4701;
     private const int HotkeyGamingProfileModeId = 0x4702;
     private const int HotkeyWorkModeId = 0x4703;
-    private const int HotkeyGameBarId = 0x4704;
     private const int HotkeyProfileEnterBaseId = 0x4800;
-    private const uint ModifierWin = 0x0008;
-    private const uint VirtualKeyG = 0x47;
 
     private readonly ISettingsService _settingsService;
     private readonly IModeCommandService _modeCommandService;
     private readonly GamingProfileRuntimeSettingsResolver _profileSettingsResolver;
     private readonly ILogger _logger;
     private readonly Func<Func<Task<ModeResult>>, Task> _runModeCommandAsync;
-    private readonly Func<Task> _openGameBarAsync;
     private readonly Action _notifyStatusChanged;
     private readonly Dictionary<int, string> _profileEnterHotkeys = new();
 
@@ -35,7 +31,6 @@ internal sealed class GlobalHotkeyHost : IDisposable
         GamingProfileRuntimeSettingsResolver profileSettingsResolver,
         ILogger logger,
         Func<Func<Task<ModeResult>>, Task> runModeCommandAsync,
-        Func<Task> openGameBarAsync,
         Action notifyStatusChanged)
     {
         _settingsService = settingsService;
@@ -43,7 +38,6 @@ internal sealed class GlobalHotkeyHost : IDisposable
         _profileSettingsResolver = profileSettingsResolver;
         _logger = logger;
         _runModeCommandAsync = runModeCommandAsync;
-        _openGameBarAsync = openGameBarAsync;
         _notifyStatusChanged = notifyStatusChanged;
     }
 
@@ -132,9 +126,6 @@ internal sealed class GlobalHotkeyHost : IDisposable
             case HotkeyWorkModeId:
                 await _runModeCommandAsync(() => _modeCommandService.EnterWorkModeAsync());
                 break;
-            case HotkeyGameBarId:
-                await _openGameBarAsync();
-                break;
         }
     }
 
@@ -146,10 +137,6 @@ internal sealed class GlobalHotkeyHost : IDisposable
         {
             var settings = await _settingsService.LoadAsync();
             RegisterHotkey(HotkeyConsoleModeId, settings.Hotkeys?.ConsoleMode ?? string.Empty);
-            if (settings.Startup.ConsoleShellModeEnabled)
-            {
-                RegisterGameBarHotkey();
-            }
 
             var hasProfileEnterHotkeys = false;
             for (var index = 0; index < settings.Display.GamingProfileConfigurations.Count; index++)
@@ -204,7 +191,6 @@ internal sealed class GlobalHotkeyHost : IDisposable
             UnregisterHotkey(HotkeyConsoleModeId);
             UnregisterHotkey(HotkeyGamingProfileModeId);
             UnregisterHotkey(HotkeyWorkModeId);
-            UnregisterHotkey(HotkeyGameBarId);
             foreach (var hotkeyId in _profileEnterHotkeys.Keys.ToList())
             {
                 UnregisterHotkey(hotkeyId);
@@ -220,17 +206,6 @@ internal sealed class GlobalHotkeyHost : IDisposable
         {
             UnregisterHotKey(_source.Handle, id);
         }
-    }
-
-    private void RegisterGameBarHotkey()
-    {
-        if (_source is null || !RegisterHotKey(_source.Handle, HotkeyGameBarId, ModifierWin, VirtualKeyG))
-        {
-            _logger.LogDebug("[CONSOLE SHELL COMPAT] Component=GameBar Hotkey=Win+G Result=Unavailable");
-            return;
-        }
-
-        _logger.LogInformation("[CONSOLE SHELL COMPAT] Component=GameBar Hotkey=Win+G Protocol=ms-gamebar Result=Ready");
     }
 
     private async Task RunGamingHotkeyAsync(string? forcedProfileName)

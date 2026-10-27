@@ -28,12 +28,12 @@ public sealed class WindowsIntegrationService : IWindowsIntegrationService
         var startupRegistration = ResolveStartupRegistration();
 
         ApplyStartup(
-            settings.Startup.StartWithWindows && !settings.Startup.ConsoleShellModeEnabled,
+            settings.Startup.StartWithWindows,
             startupRegistration.ShortcutTargetPath,
             startupRegistration.ShortcutArguments);
         _logger.LogInformation(
             "Windows integration applied. StartWithWindows={StartWithWindows}, RunCommand={RunCommand}, BaseDirectory={BaseDirectory}.",
-            settings.Startup.StartWithWindows && !settings.Startup.ConsoleShellModeEnabled,
+            settings.Startup.StartWithWindows,
             startupRegistration.RunCommand,
             AppContext.BaseDirectory);
 

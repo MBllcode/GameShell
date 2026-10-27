@@ -44,17 +44,18 @@ public sealed class SettingsService : ISettingsService
 
     public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await _settingsGate.WaitAsync(cancellationToken);
 
         try
         {
-            if (File.Exists(SettingsPath))
+            if (SettingsFileExists(SettingsPath))
             {
                 var lastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
                 if (_cachedSettings is not null && _cachedLastWriteTimeUtc == lastWriteTimeUtc)
                 {
-                    return _cachedSettings;
+                    return Clone(_cachedSettings);
                 }
 
                 var primary = await TryLoadValidSettingsAsync(SettingsPath, cancellationToken);
@@ -71,7 +72,7 @@ public sealed class SettingsService : ISettingsService
                     _logger.LogDebug(
                         "[SETTINGS LOAD] Path={Path} Result=Success",
                         SettingsPath);
-                    return primary.Settings;
+                    return Clone(primary.Settings);
                 }
 
                 var corruptPath = $"{SettingsPath}.corrupt-{DateTimeOffset.Now:yyyyMMddHHmmss}";
@@ -82,7 +83,7 @@ public sealed class SettingsService : ISettingsService
                         "[SETTINGS RECOVERY] Primary=Invalid Backup={BackupExists} Action=PreservedCorruptPrimary",
                         File.Exists(_backupPath));
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     _logger.LogWarning(
                         ex,
@@ -90,7 +91,7 @@ public sealed class SettingsService : ISettingsService
                         File.Exists(_backupPath));
                 }
 
-                if (File.Exists(_backupPath))
+                if (SettingsFileExists(_backupPath))
                 {
                     var backup = await TryLoadValidSettingsAsync(_backupPath, cancellationToken);
                     if (backup.IsValid)
@@ -101,7 +102,7 @@ public sealed class SettingsService : ISettingsService
                         _cachedLastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
                         _logger.LogWarning(
                             "[SETTINGS RECOVERY] Primary=Invalid Backup=Valid Action=RestoredBackup");
-                        return restored;
+                        return Clone(restored);
                     }
                 }
 
@@ -109,10 +110,10 @@ public sealed class SettingsService : ISettingsService
                 await WriteSettingsAsync(invalidDefaults, cancellationToken);
                 _logger.LogWarning(
                     "[SETTINGS RECOVERY] Primary=Invalid Backup=Invalid Action=Defaults");
-                return invalidDefaults;
+                return Clone(invalidDefaults);
             }
 
-            if (File.Exists(_backupPath))
+            if (SettingsFileExists(_backupPath))
             {
                 var backup = await TryLoadValidSettingsAsync(_backupPath, cancellationToken);
                 if (backup.IsValid)
@@ -123,7 +124,7 @@ public sealed class SettingsService : ISettingsService
                     _cachedLastWriteTimeUtc = File.GetLastWriteTimeUtc(SettingsPath);
                     _logger.LogWarning(
                         "[SETTINGS RECOVERY] Primary=Missing Backup=Valid Action=RestoredBackup");
-                    return restored;
+                    return Clone(restored);
                 }
             }
 
@@ -132,7 +133,7 @@ public sealed class SettingsService : ISettingsService
             _logger.LogDebug(
                 "[SETTINGS LOAD] Primary=Missing Backup=Missing Action=Defaults Path={Path}",
                 SettingsPath);
-            return missingDefaults;
+            return Clone(missingDefaults);
         }
         finally
         {
@@ -142,12 +143,13 @@ public sealed class SettingsService : ISettingsService
 
     public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await _settingsGate.WaitAsync(cancellationToken);
 
         try
         {
-            await WriteSettingsAsync(settings, cancellationToken);
+            await WriteSettingsAsync(Clone(settings), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -238,9 +240,24 @@ public sealed class SettingsService : ISettingsService
         return json;
     }
 
+    private static AppSettings Clone(AppSettings settings) =>
+        JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings, JsonOptions), JsonOptions)
+        ?? throw new InvalidOperationException("Settings snapshot could not be created.");
+
+    private static bool SettingsFileExists(string path)
+    {
+        try
+        {
+            _ = File.GetAttributes(path);
+            return true;
+        }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+    }
+
     private async Task<(bool IsValid, AppSettings Settings, bool WasMigrated)> TryLoadValidSettingsAsync(string path, CancellationToken cancellationToken)
     {
-        if (!File.Exists(path))
+        if (!SettingsFileExists(path))
         {
             return (false, new AppSettings(), false);
         }
@@ -259,7 +276,7 @@ public sealed class SettingsService : ISettingsService
                 || AppSettingsValidator.HasLegacyCapabilityData(settings)
                 || AppSettingsValidator.HasLegacyProfileIds(settings)
                 || AppSettingsValidator.HasLegacyStartupProfileReference(settings);
-            var knownDisplaysBeforeValidation = settings.Display.KnownPhysicalDisplays
+            var knownDisplaysBeforeValidation = (settings.Display?.KnownPhysicalDisplays ?? [])
                 .Select(known => (known.Id, known.CanonicalFriendlyName, known.PhysicalIdentity))
                 .ToList();
             var validated = AppSettingsValidator.Validate(settings);
@@ -291,8 +308,9 @@ public sealed class SettingsService : ISettingsService
             }
             return (true, validated, wasMigrated);
         }
-        catch (Exception)
+        catch (JsonException ex)
         {
+            _logger.LogWarning(ex, "[SETTINGS LOAD] Path={SettingsPath} Result=InvalidJson", path);
             return (false, new AppSettings(), false);
         }
     }

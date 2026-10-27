@@ -6,12 +6,45 @@ namespace GameShell.Core.Tests;
 
 public sealed class StartupTargetResolverTests
 {
+    [Fact]
+    public void RestoreLegacyProfileState_UsesActiveProfileWhenStableIdWasNotPersisted()
+    {
+        var settings = CreateSettings(StartupBehavior.RestoreLastActiveMode);
+        settings.Display.ActiveGamingProfileName = "CONSOLE";
+        settings.Display.GamingProfiles[0].Id = "profile-console";
+        var target = new StartupTargetResolver().Resolve(settings, new RuntimeState { LastActiveMode = "Profile" }, false);
+        Assert.Equal(StartupTargetKind.Profile, target.Kind);
+        Assert.Equal("profile-console", target.ProfileId);
+    }
+
+    [Fact]
+    public void RestoreDeletedProfile_DoesNotSilentlyActivateAnotherProfile()
+    {
+        var settings = CreateSettings(StartupBehavior.RestoreLastActiveMode);
+        settings.Display.ActiveGamingProfileName = "CONSOLE";
+        var target = new StartupTargetResolver().Resolve(settings,
+            new RuntimeState { LastActiveMode = "Profile", LastActiveProfileId = "deleted" }, false);
+        Assert.Equal(StartupTargetKind.Work, target.Kind);
+    }
+
+    [Fact]
+    public void RenamedProfile_IsRestoredByStableId()
+    {
+        var settings = CreateSettings(StartupBehavior.RestoreLastActiveMode);
+        settings.Display.GamingProfiles[0].Id = "stable-id";
+        settings.Display.GamingProfiles[0].Name = "NEW NAME";
+        var target = new StartupTargetResolver().Resolve(settings,
+            new RuntimeState { LastActiveMode = "Profile", LastActiveProfileId = " stable-id " }, false);
+        Assert.Equal(StartupTargetKind.Profile, target.Kind);
+        Assert.Equal("NEW NAME", new StartupTargetResolver().ResolveProfileName(settings, target.ProfileId));
+    }
+
     private readonly StartupTargetResolver _resolver = new();
 
     [Fact]
     public void NormalMode_ResolvesConfiguredStartupProfile()
     {
-        var settings = CreateSettings(enabled: false, StartupBehavior.AlwaysProfile);
+        var settings = CreateSettings(StartupBehavior.AlwaysProfile);
         settings.Startup.StartupProfileId = "profile-console";
         settings.Display.GamingProfiles[0].Id = "profile-console";
 
@@ -24,20 +57,7 @@ public sealed class StartupTargetResolverTests
     [Fact]
     public void AlwaysProfile_ResolvesConfiguredProfile()
     {
-        var settings = CreateSettings(enabled: true, StartupBehavior.AlwaysProfile);
-        settings.Display.GamingProfiles[0].Id = "profile-console";
-        settings.Startup.StartupProfileId = "profile-console";
-
-        var target = _resolver.Resolve(settings, new RuntimeState(), safeMode: false);
-
-        Assert.Equal(StartupTargetKind.Profile, target.Kind);
-        Assert.Equal("profile-console", target.ProfileId);
-    }
-
-    [Fact]
-    public void StartupBehavior_IsIndependentFromConsoleShellAvailability()
-    {
-        var settings = CreateSettings(enabled: false, StartupBehavior.AlwaysProfile);
+        var settings = CreateSettings(StartupBehavior.AlwaysProfile);
         settings.Display.GamingProfiles[0].Id = "profile-console";
         settings.Startup.StartupProfileId = "profile-console";
 
@@ -50,7 +70,7 @@ public sealed class StartupTargetResolverTests
     [Fact]
     public void MissingAlwaysProfile_FallsBackToWork()
     {
-        var settings = CreateSettings(enabled: true, StartupBehavior.AlwaysProfile);
+        var settings = CreateSettings(StartupBehavior.AlwaysProfile);
         settings.Startup.StartupProfileId = "MISSING";
 
         var target = _resolver.Resolve(settings, new RuntimeState(), safeMode: false);
@@ -68,7 +88,7 @@ public sealed class StartupTargetResolverTests
         string? profileId,
         StartupTargetKind expected)
     {
-        var settings = CreateSettings(enabled: true, StartupBehavior.RestoreLastActiveMode);
+        var settings = CreateSettings(StartupBehavior.RestoreLastActiveMode);
         settings.Display.GamingProfiles[0].Id = "profile-console";
         var runtime = new RuntimeState { LastActiveMode = lastMode, LastActiveProfileId = profileId == "CONSOLE" ? "profile-console" : profileId };
 
@@ -81,7 +101,7 @@ public sealed class StartupTargetResolverTests
     [Fact]
     public void LegacyProfileNameReference_ResolvesToStableId()
     {
-        var settings = CreateSettings(enabled: false, StartupBehavior.AlwaysProfile);
+        var settings = CreateSettings(StartupBehavior.AlwaysProfile);
         settings.Display.GamingProfiles[0].Id = "profile-console";
         settings.Startup.StartupProfileId = "CONSOLE";
 
@@ -95,7 +115,7 @@ public sealed class StartupTargetResolverTests
     [Fact]
     public void SafeMode_AlwaysBypassesGamingStartup()
     {
-        var settings = CreateSettings(enabled: true, StartupBehavior.AlwaysProfile);
+        var settings = CreateSettings(StartupBehavior.AlwaysProfile);
         settings.Startup.StartupProfileId = "CONSOLE";
 
         var target = _resolver.Resolve(settings, new RuntimeState(), safeMode: true);
@@ -105,19 +125,17 @@ public sealed class StartupTargetResolverTests
     }
 
     [Fact]
-    public void ExistingSettings_DefaultConsoleShellModeToDisabledAndWork()
+    public void ExistingSettings_DefaultStartupTargetToWork()
     {
         var settings = AppSettingsValidator.Validate(new AppSettings());
 
-        Assert.False(settings.Startup.ConsoleShellModeEnabled);
         Assert.Equal(StartupBehavior.AlwaysWorkMode, settings.Startup.StartupBehavior);
     }
 
-    private static AppSettings CreateSettings(bool enabled, StartupBehavior behavior) => new()
+    private static AppSettings CreateSettings(StartupBehavior behavior) => new()
     {
         Startup = new StartupSettings
         {
-            ConsoleShellModeEnabled = enabled,
             StartupBehavior = behavior
         },
         Display = new DisplaySettings

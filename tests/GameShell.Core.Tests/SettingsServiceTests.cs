@@ -122,7 +122,7 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
-    public void Validate_MigratesLegacyGamingDefaults()
+    public void Validate_PreservesExplicitGamingBehaviour()
     {
         var settings = new AppSettings
         {
@@ -141,14 +141,14 @@ public sealed class SettingsServiceTests
 
         var validated = AppSettingsValidator.Validate(settings);
 
-        Assert.True(validated.Gaming.HideDesktopIcons);
-        Assert.True(validated.Gaming.HideTaskbar);
-        Assert.False(validated.Gaming.CloseVisibleWindows);
+        Assert.False(validated.Gaming.HideDesktopIcons);
+        Assert.False(validated.Gaming.HideTaskbar);
+        Assert.True(validated.Gaming.CloseVisibleWindows);
         Assert.False(validated.Gaming.MinimizeRemainingWindows);
-        Assert.True(validated.Gaming.MoveCursorToCorner);
-        Assert.False(validated.Gaming.HideCursor);
-        Assert.True(validated.Gaming.StartLauncher);
-        Assert.True(validated.Gaming.BringLauncherToForeground);
+        Assert.False(validated.Gaming.MoveCursorToCorner);
+        Assert.True(validated.Gaming.HideCursor);
+        Assert.False(validated.Gaming.StartLauncher);
+        Assert.False(validated.Gaming.BringLauncherToForeground);
     }
 
     [Fact]
@@ -642,7 +642,7 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
-    public async Task LoadAsync_ReusesSnapshotUntilSettingsFileChanges()
+    public async Task LoadAsync_ReturnsIndependentSnapshotsAndReloadsExternalChanges()
     {
         var settingsPath = CreateTempSettingsPath();
         var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
@@ -650,7 +650,8 @@ public sealed class SettingsServiceTests
 
         var first = await service.LoadAsync();
         var second = await service.LoadAsync();
-        Assert.Same(first, second);
+        Assert.NotSame(first, second);
+        Assert.Equal(first.Startup.StartWithWindows, second.Startup.StartWithWindows);
 
         await File.WriteAllTextAsync(settingsPath, "{\"ui\":{\"isFirstRunCompleted\":true}}");
         File.SetLastWriteTimeUtc(settingsPath, DateTime.UtcNow.AddSeconds(2));
@@ -752,7 +753,7 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
-    public async Task LoadAsync_PreservesLegacyConsoleShellCompatibilitySetting()
+    public async Task LoadAsync_DiscardsRemovedShellSettings()
     {
         var settingsPath = CreateTempSettingsPath();
         await File.WriteAllTextAsync(settingsPath, """
@@ -767,13 +768,15 @@ public sealed class SettingsServiceTests
         var service = new SettingsService(NullLogger<SettingsService>.Instance, settingsPath);
         var loaded = await service.LoadAsync();
 
-        Assert.True(loaded.Startup.ConsoleShellModeEnabled);
-        Assert.False(loaded.Startup.CloseExplorerWhenEnteringGamingProfileInShellMode);
+        Assert.Equal(StartupBehavior.AlwaysWorkMode, loaded.Startup.StartupBehavior);
 
         await service.SaveAsync(loaded);
         var reloaded = await new SettingsService(NullLogger<SettingsService>.Instance, settingsPath).LoadAsync();
 
-        Assert.False(reloaded.Startup.CloseExplorerWhenEnteringGamingProfileInShellMode);
+        Assert.Equal(StartupBehavior.AlwaysWorkMode, reloaded.Startup.StartupBehavior);
+        var saved = await File.ReadAllTextAsync(settingsPath);
+        Assert.DoesNotContain("consoleShellModeEnabled", saved);
+        Assert.DoesNotContain("closeExplorerWhenEnteringGamingProfileInShellMode", saved);
     }
 
     [Fact]
