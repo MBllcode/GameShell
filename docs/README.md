@@ -10,6 +10,8 @@
 | [Development](development.md) | Prerequisites, build/test/package commands and manual verification |
 | [Remote Control](remote-control.md) | Optional local HTTP API, authentication and endpoints |
 | [Home Assistant](home-assistant.md) | REST commands, scripts and LAN verification |
+| [Licenses](licenses/README.md) | Project license and bundled third-party notices |
+| [Security](../.github/SECURITY.md) | Private vulnerability reporting and security boundaries |
 | [Changelog](CHANGELOG.md) | Summary of product and engineering changes |
 
 ## Repository map

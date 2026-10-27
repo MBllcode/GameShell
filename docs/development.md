@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Windows x64, .NET 9 SDK, and Node.js 22.6+ with npm.
+- Windows x64, .NET 10 SDK, and Node.js 22.6+ with npm.
 - Microsoft Edge WebView2 Runtime for the desktop UI.
 - Installed launchers and real connected displays for end-to-end testing.
 
@@ -17,7 +17,7 @@
 The script restores the .NET solution, installs frontend dependencies with `npm ci` when the lockfile exists, builds the React UI, copies it to the desktop host's `wwwroot`, and builds the solution. Use `-SkipNpmInstall` for subsequent builds with dependencies already installed.
 
 ```powershell
-.\src\GameShell.Desktop\bin\Debug\net9.0-windows\GameShell.exe
+.\src\GameShell.Desktop\bin\Debug\net10.0-windows\GameShell.exe
 ```
 
 `wwwroot`, `dist`, `bin`, `obj`, and TypeScript build metadata are generated and ignored. Source assets belong in `GameShell.Ui/public` or the desktop `Assets` directory. Keep `package-lock.json` committed.
@@ -93,7 +93,7 @@ git push origin main
 git push origin v0.1.0
 ```
 
-Use a new version for each published release. The Windows release workflow runs frontend/backend tests, builds the tagged source, and uploads `GameShell.exe` and `GameShell-win-x64.zip`. It publishes the release after all uploads succeed. Tags with a prerelease suffix are marked as prereleases; ordinary versions update the README's latest-download links. The workflow can also be rerun manually against an existing tag.
+Use a new version for each published release. The Windows release workflow scans Git history for secrets, audits dependencies, runs frontend/backend tests, builds the tagged source, and uploads `GameShell.exe` and `GameShell-win-x64.zip`. It publishes the release after all uploads succeed. Tags with a prerelease suffix are marked as prereleases; ordinary versions update the README's latest-download links. The workflow can also be rerun manually against an existing tag.
 
 To reproduce assets locally:
 
@@ -104,3 +104,22 @@ To reproduce assets locally:
 ```
 
 The packaging version override is optional; normal developer builds use the version in the desktop project. Release-asset creation checks that the EXE product version matches the requested version. ZIPs contain only the EXE, without local settings, logs, credentials or WebView cache.
+
+## Security and license checks
+
+CI scans full Git history with a pinned, checksum-verified Gitleaks release and
+rejects high/critical npm and NuGet advisories. Dependabot checks npm, NuGet and
+GitHub Actions weekly. `Directory.Build.props` enables transitive NuGet auditing;
+`global.json` selects the latest installed stable .NET 10 feature band.
+
+Before updating dependencies, refresh [license notices](licenses/README.md).
+UI builds generate the offline notices page. Tests verify that every resolved
+production npm package has matching notices and that the complete texts reach
+the generated output. A release ZIP contains the EXE, LICENSE.txt and
+THIRD_PARTY_NOTICES.txt; the EXE also contains the offline license page.
+
+Run the history scanner on Windows with `./scripts/check-secrets.ps1`.
+Do not add settings, diagnostics, private walkthroughs, or generated packages to
+Git. Keep local Git author and committer identities on your GitHub noreply email.
+After a history rewrite, old clones must be replaced or explicitly rebased;
+merging old branches can reintroduce removed files and private metadata.

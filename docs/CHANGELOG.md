@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [0.1.3] - 2026-10-27
+
+- Move the desktop app, tests and CI to .NET 10 LTS with transitive NuGet auditing.
+- License GameShell under MIT and include upstream notices for bundled libraries, fonts and runtimes.
+- Add an offline license viewer in General and license texts to the release ZIP.
+- Check notice coverage, scan full Git history for secrets, and audit dependencies before publishing.
+- Add a security policy and weekly Dependabot checks.
+- Remove historical generated packages and the personal code tour from published Git history; replace personal commit emails with the GitHub noreply identity.
+
 ## [0.1.2] - 2026-10-27
 
 ### First-run setup

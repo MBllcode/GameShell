@@ -82,3 +82,9 @@ See [Architecture](docs/architecture.md) for the profile activation pipeline and
 [User guide](docs/user-guide.md) · [Architecture](docs/architecture.md) · [Remote Control](docs/remote-control.md) · [Changelog](docs/CHANGELOG.md)
 
 GameShell is under active development. Display modes depend on Windows and connected hardware. Screenshots show real configured profiles; their names are user-defined.
+
+## License and security
+
+GameShell is licensed under [MIT](LICENSE). [Third-party notices](docs/licenses/README.md)
+are included in the app and ZIP. For vulnerability reports and Remote Control
+boundaries, see the [security policy](.github/SECURITY.md).
