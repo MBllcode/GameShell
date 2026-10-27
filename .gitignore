@@ -1,15 +1,38 @@
-bin/
-obj/
-node_modules/
-dist/
+# Build outputs and dependencies
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+/artifacts/
+/src/GameShell.Desktop/wwwroot/
+*.tsbuildinfo
+
+# Local IDE and agent state
 .vs/
+.idea/
+.vscode/
+.agents/
+.codex/
 *.user
 *.suo
+
+# Local diagnostics and runtime data
 *.log
-docs/
-!docs/
-docs/*
-!docs/console-shell-mode.md
-scripts/
-artifacts/
-src/GameShell.Ui/tsconfig.tsbuildinfo
+*.tmp
+*.bak
+/settings.json
+/state.json
+TestResults/
+coverage/
+*.trx
+
+# Local secrets
+.env
+.env.*
+!.env.example
+secrets.yaml
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

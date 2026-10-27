@@ -24,18 +24,19 @@ test('Dashboard profile edit enters EditProfile with exactly four profile steps'
 
 test('profile setup modes do not expose global settings', () => {
   const profileStepIds = getSetupSteps('CreateProfile').concat(getSetupSteps('EditProfile')).map((step) => step.id);
+  assert.equal(profileStepIds.includes('work-display'), false);
   assert.equal(profileStepIds.includes('work-behaviour'), false);
   assert.equal(profileStepIds.includes('work-shortcuts'), false);
   assert.equal(profileStepIds.includes('app-behaviour'), false);
 });
 
 test('FirstRun exposes all global sections', () => {
-  assert.deepEqual(getSetupSteps('FirstRun').map((step) => step.id), ['welcome', 'gaming-display', 'launcher', 'profile-behaviour', 'controller', 'work-behaviour', 'work-shortcuts', 'app-behaviour', 'finish']);
+  assert.deepEqual(getSetupSteps('FirstRun').map((step) => step.id), ['welcome', 'gaming-display', 'launcher', 'profile-behaviour', 'controller', 'work-display', 'work-behaviour', 'work-shortcuts', 'app-behaviour', 'finish']);
 });
 
 test('Dashboard global settings remain separate from profile setup', () => {
   assert.equal(resolveDashboardSetupMode('edit-global'), 'EditGlobal');
-  assert.deepEqual(getSetupSteps('EditGlobal').map((step) => step.id), ['work-behaviour', 'work-shortcuts', 'app-behaviour']);
+  assert.deepEqual(getSetupSteps('EditGlobal').map((step) => step.id), ['work-display', 'work-behaviour', 'work-shortcuts', 'app-behaviour']);
 });
 
 test('only FirstRun marks setup complete while profile saves preserve completion', () => {

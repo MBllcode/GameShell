@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "build": "tsc -b && vite build",
     "test:display-identity": "node --experimental-strip-types --test tests/displayIdentity.test.ts",
     "test:mapper": "node --experimental-strip-types --test tests/controllerDisplayMapper.test.ts",

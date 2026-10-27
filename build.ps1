@@ -44,7 +44,12 @@ finally {
 
 Write-Host 'Copying React build to WPF wwwroot...'
 if (Test-Path $wwwrootPath) {
-    Remove-Item $wwwrootPath -Recurse -Force
+    $resolvedWebRoot = (Resolve-Path -LiteralPath $wwwrootPath).Path
+    $expectedWebRoot = [System.IO.Path]::GetFullPath((Join-Path $root 'src\GameShell.Desktop\wwwroot'))
+    if (-not [string]::Equals($resolvedWebRoot, $expectedWebRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected web root: $resolvedWebRoot"
+    }
+    Remove-Item -LiteralPath $resolvedWebRoot -Recurse -Force
 }
 
 New-Item -ItemType Directory -Force -Path $wwwrootPath | Out-Null

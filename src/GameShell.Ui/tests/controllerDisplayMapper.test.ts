@@ -11,7 +11,7 @@ import {
 test('maps PlayStation neutral buttons to PlayStation labels', () => {
   assert.equal(getControllerButtonDisplayName('South', ControllerFamily.PlayStation), 'Cross');
   assert.equal(getControllerButtonDisplayName('West', ControllerFamily.PlayStation), 'Square');
-  assert.equal(getControllerButtonDisplayName('Back', ControllerFamily.PlayStation), 'Create');
+  assert.equal(getControllerButtonDisplayName('Back', ControllerFamily.PlayStation), 'Share');
 });
 
 test('maps Xbox neutral buttons to Xbox labels', () => {

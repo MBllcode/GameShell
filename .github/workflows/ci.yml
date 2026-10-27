@@ -1,0 +1,36 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/GameShell.Ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: src/GameShell.Ui
+      - name: Test frontend
+        run: npm test
+        working-directory: src/GameShell.Ui
+      - name: Build frontend and desktop from source
+        shell: pwsh
+        run: ./build.ps1 -SkipNpmInstall
+      - name: Test .NET
+        run: dotnet test tests/GameShell.Core.Tests/GameShell.Core.Tests.csproj --no-build --no-restore
