@@ -6,7 +6,7 @@
 
 Download [GameShell.exe](https://github.com/MBllcode/GameShell/releases/latest/download/GameShell.exe) or the [ZIP](https://github.com/MBllcode/GameShell/releases/latest/download/GameShell-win-x64.zip) from GitHub Releases. Extract the ZIP if needed, keep the EXE in a permanent folder, and launch it. The package includes .NET; the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) is required separately.
 
-To update, exit GameShell from the tray and replace the EXE in the same folder with the newer download. Keep `%LOCALAPPDATA%\GameShell` to retain your settings. Each release also provides `SHA256SUMS.txt` for its EXE and ZIP.
+To update, exit GameShell from the tray and replace the EXE in the same folder with the newer download. Keep `%LOCALAPPDATA%\GameShell` to retain your settings.
 
 ## First launch setup
 
@@ -35,7 +35,7 @@ Open **Global settings → Displays**. Arrange the monitors as you want them for
 1. On the dashboard, choose **Add profile** and give it a name, such as `Living room`.
 2. In **Displays**, click detected display tiles to add them. Drag the preview tiles to arrange them. Select a tile to edit its primary status, position, resolution, and refresh policy.
 3. In **Launch application**, keep **Don’t launch anything** for a display-only profile, or choose Playnite Fullscreen, Steam Big Picture, or Xbox App. A selected application must be installed separately.
-4. In **Profile behaviour**, enable the desktop changes you want. **Bring application to the foreground** is available when an application is selected. New profiles start with desktop actions disabled.
+4. In **Profile behaviour**, enable the desktop changes you want. A selected application is brought to the foreground automatically. New profiles start with desktop actions disabled.
 5. In **Profile shortcuts**, assign a keyboard or controller combination if desired. Choose **Save changes**.
 
 **Refresh displays** reloads Windows inventory. **Use current layout** replaces the draft with the current Windows arrangement. **Reset canvas** restores the profile's saved draft layout (or an empty layout for a new profile); it is not a Windows display reset. Changes take effect when you run the profile, not merely when you edit its preview.

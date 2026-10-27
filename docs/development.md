@@ -73,7 +73,7 @@ The remaining `--console` / `--gaming` and `--profile` / `--pcgaming` command-li
 
 ## Working on the interface
 
-Start with the [code tour](code-tour.md). Keep profile layout, application, behaviour and shortcuts in the canonical `Profile` record. Derive view maps instead of creating another synchronized state collection. Persist through the settings adapter to preserve older JSON configurations.
+Start with [Architecture](architecture.md). Keep profile layout, application, behaviour and shortcuts in the canonical `Profile` record. Derive view maps instead of creating another synchronized state collection. Persist through the settings adapter to preserve older JSON configurations.
 
 CSS modules are imported by `src/GameShell.Ui/src/styles.css`; the import order preserves the cascade. Check dashboard, profile displays, behaviour, application, shortcuts, default-setup settings and general settings in EN/PL at both short and narrow sizes. Include long profile names, overflowed profile lists, and no-application profiles. Read-only browser fixtures verify rendering; real monitor switching and launcher focus require Windows testing.
 
@@ -91,7 +91,7 @@ git push origin main
 git push origin v0.1.0
 ```
 
-Use a new version for each published release. The Windows release workflow runs frontend/backend tests, builds the tagged source, and uploads `GameShell.exe`, `GameShell-win-x64.zip`, and `SHA256SUMS.txt`. It publishes the release after all uploads succeed. Tags with a prerelease suffix are marked as prereleases; ordinary versions update the README's latest-download links. The workflow can also be rerun manually against an existing tag.
+Use a new version for each published release. The Windows release workflow runs frontend/backend tests, builds the tagged source, and uploads `GameShell.exe` and `GameShell-win-x64.zip`. It publishes the release after all uploads succeed. Tags with a prerelease suffix are marked as prereleases; ordinary versions update the README's latest-download links. The workflow can also be rerun manually against an existing tag.
 
 To reproduce assets locally:
 

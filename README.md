@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/platform-Windows_x64-0078D4" alt="Windows x64">
     <img src="https://img.shields.io/badge/UI-English_%2F_Polski-7AC943" alt="English and Polish">
   </p>
-  <p><a href="#download-and-run">Get started</a> · <a href="#first-launch-setup">First launch</a> · <a href="#see-it-in-action">Screenshots</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/code-tour.md">Code tour</a></p>
+  <p><a href="#download-and-run">Get started</a> · <a href="#first-launch-setup">First launch</a> · <a href="#see-it-in-action">Screenshots</a> · <a href="docs/user-guide.md">User guide</a></p>
 </div>
 
 [![Current GameShell dashboard with user-defined profiles and profile settings](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
@@ -56,7 +56,7 @@ The **Application** page offers **Don't launch anything**, Playnite Fullscreen, 
 
 ### 3. Decide what happens to the desktop
 
-Choose whether to hide desktop icons or the taskbar, move the cursor, close or minimize windows, and bring a selected application to the foreground.
+Choose whether to hide desktop icons or the taskbar, move the cursor, or close and minimize windows. Selected applications are brought to the foreground automatically.
 
 [![Profile behaviour page with desktop, window and application actions](docs/screenshots/behaviour.png)](docs/screenshots/behaviour.png)
 
@@ -75,7 +75,7 @@ Assign keyboard shortcuts or controller combinations to profiles and a separate 
 | `GameShell.Core` | Profiles, transitions, validation, settings and runtime state |
 | `GameShell.Windows` | Native displays, application processes, windows and cursor control |
 
-Start with the [code tour](docs/code-tour.md) to follow a profile activation through the source. [Development](docs/development.md) covers building, tests, packaging and releases.
+See [Architecture](docs/architecture.md) for the profile activation pipeline and project boundaries. [Development](docs/development.md) covers building, tests, packaging and releases.
 
 [User guide](docs/user-guide.md) · [Architecture](docs/architecture.md) · [Remote Control](docs/remote-control.md) · [Changelog](docs/CHANGELOG.md)
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.1.1] - 2026-10-27
+
+- Bring selected applications to the foreground automatically; remove the redundant behaviour checkbox.
+- Keep the profile list aligned on the left when its scrollbar appears, with consistent space around the track.
+- Refresh dashboard and behaviour screenshots and their descriptions.
+- Keep the personal code tour local and remove it from repository navigation.
+- Simplify release downloads to the portable EXE and ZIP, without a separate checksum file.
+
 ## [0.1.0] - 2026-10-27
 
 ### Distribution and documentation
@@ -21,7 +29,7 @@
 - Load only EN/PL WOFF2 font subsets; classify frontend build tools as development dependencies.
 - Use framework-provided Desktop DI/logging references, extract host service registration, and separate monitor catalogue policies.
 - Preserve application and shortcut edits across pending layout commits; keep profile identity when renaming.
-- Add an ordered code tour and update all architecture paths.
+- Add updated architecture navigation and source paths.
 
 ### Transition timing and feedback
 

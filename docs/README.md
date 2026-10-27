@@ -4,9 +4,8 @@
 
 | Start here | What you will find |
 | --- | --- |
-| [Downloads](https://github.com/MBllcode/GameShell/releases/latest) | Ready-to-run Windows EXE, ZIP and checksums |
+| [Downloads](https://github.com/MBllcode/GameShell/releases/latest) | Ready-to-run Windows EXE and ZIP |
 | [User guide](user-guide.md) | Save a work layout, create profiles, configure launchers and shortcuts |
-| [Code tour](code-tour.md) | Where to start reading and where each feature lives |
 | [Architecture](architecture.md) | Project boundaries, transition pipeline, persistence and native integrations |
 | [Development](development.md) | Prerequisites, build/test/package commands and manual verification |
 | [Remote Control](remote-control.md) | Optional local HTTP API, authentication and endpoints |

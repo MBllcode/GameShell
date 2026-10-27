@@ -36,3 +36,6 @@ secrets.yaml
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Personal local code walkthrough
+/docs/code-tour.md

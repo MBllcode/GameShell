@@ -78,8 +78,6 @@ The two active states are **Default setup** and **a selected profile**. Console/
 | Form state → settings payload | `src/GameShell.Ui/src/features/settings/buildSettingsPayload.ts` |
 | First-run/profile/edit navigation | `src/GameShell.Ui/src/features/setup/setupFlow.ts` and its hooks |
 
-[Read the code tour](code-tour.md) for an ordered walkthrough and a map of the feature folders.
-
 Follow a command from the bridge through the session manager and orchestrator before looking into native Windows adapters. Tests next to these responsibilities cover the policy independently of hardware.
 
 ### Compatibility boundary
