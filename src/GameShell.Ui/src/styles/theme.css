@@ -48,6 +48,16 @@ input {
   border-radius: var(--gs-radius-control);
 }
 
+/* Native option popups need opaque colors independent of the closed control's hover. */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--gs-surface-elevated);
+  color: var(--gs-text);
+}
+
 .app-shell {
   min-height: 100vh;
   background:

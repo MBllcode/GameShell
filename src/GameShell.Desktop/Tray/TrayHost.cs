@@ -18,6 +18,7 @@ internal sealed class TrayHost : IDisposable
     private readonly Func<string, Task> _enterProfileAsync;
     private readonly Func<Task> _enterWorkModeAsync;
     private readonly Action _requestExit;
+    private readonly Font _menuFont = new("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
     private NotifyIcon? _notifyIcon;
     private ContextMenuStrip? _menu;
@@ -50,7 +51,7 @@ internal sealed class TrayHost : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _settings = startupSettings;
-        _menu = new ContextMenuStrip();
+        _menu = new ContextMenuStrip { Font = _menuFont };
         _menu.Opening += (_, _) => RebuildMenu();
         RebuildMenu();
 
@@ -116,6 +117,7 @@ internal sealed class TrayHost : IDisposable
 
         _menu?.Dispose();
         _menu = null;
+        _menuFont.Dispose();
     }
 
     private void RebuildMenu()
@@ -126,11 +128,13 @@ internal sealed class TrayHost : IDisposable
         }
 
         var language = _settings.Ui.Language ?? "en";
-        _menu.Items.Clear();
+        while (_menu.Items.Count > 0)
+        {
+            _menu.Items[0].Dispose();
+        }
         var openItem = new ToolStripMenuItem(TrayMenuText.OpenGameShell(language))
         {
-            Enabled = true,
-            Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold)
+            Enabled = true
         };
         openItem.Click += (_, _) =>
         {
