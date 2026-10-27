@@ -1,5 +1,5 @@
 <div align="center">
-  <h1><sub><img src="src/GameShell.Ui/public/assets/GameShell.png" width="48" height="48" align="top" alt=""></sub> GameShell</h1>
+  <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg"><img src="docs/assets/wordmark-light.svg" width="324" height="88" alt="GameShell"></picture></h1>
   <p><strong>One PC. Your desk setup. Your gaming setup. One click to switch.</strong></p>
   <p>A Windows desktop app that switches displays, launches your gaming frontend, and prepares the desktop using profiles you control.</p>
   <p>
