@@ -79,6 +79,8 @@ CSS modules are imported by `src/GameShell.Ui/src/styles.css`; the import order 
 
 After profile-editing changes, verify create, edit, rename and delete. Renaming must retain the existing ID, application and shortcuts and keep the profile count unchanged. A pending display-layout commit must not overwrite changes made in later wizard steps.
 
+For first-run changes, verify repeated Back/Next navigation, returning from Application and later profile steps to Displays, and skipping after creating a provisional profile. Returning to Displays must clear the provisional profile and its application, actions and shortcuts without changing the default setup. Back from General after skipping must return to Displays. Finishing must persist either the one final profile or no profiles, never abandoned drafts. Keep this rollback scoped to FirstRun so dashboard profiles are unaffected.
+
 ## Publishing a release
 
 End users download the EXE or ZIP from [GitHub Releases](https://github.com/MBllcode/GameShell/releases). Build scripts stay in `scripts/` for development and CI; generated binaries stay under ignored `artifacts/`.

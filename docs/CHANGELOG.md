@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### First-run setup
+
+- Discard the provisional profile when Back returns to its Displays step, including its application, desktop actions and shortcuts.
+- Restore **Create a profile later** and clear the draft so repeated Back/Next navigation cannot accumulate unintended profiles.
+- After skipping profile creation, Back from General returns directly to the optional profile step.
+- Preserve the default setup when cancelling or skipping a provisional profile.
+
+### Interface
+
+- Give native dropdown options opaque dark backgrounds independent of the closed control's hover state.
+- Use consistent Segoe UI 9 pt text throughout the tray menu, including Open GameShell.
+- Dispose rebuilt tray menu items and the owned font when they are no longer needed.
+
 ## [0.1.1] - 2026-10-27
 
 - Bring selected applications to the foreground automatically; remove the redundant behaviour checkbox.

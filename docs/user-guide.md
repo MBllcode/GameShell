@@ -20,6 +20,8 @@ Follow the sidebar steps in order:
 4. **General:** choose Windows startup behaviour and optional desktop/Start-menu shortcuts.
 5. **Summary:** review the configuration and finish setup to open the dashboard.
 
+The first-run wizard configures one optional profile. Choosing **Next** from its Displays step prepares a provisional profile. If **Back** returns you to that step, GameShell discards that profile and clears its name, displays, application, desktop actions and shortcuts. **Create a profile later** is available again. Your default setup stays intact. After skipping the profile, **Back** from General returns directly to the optional profile step. Add further profiles from the dashboard after finishing setup.
+
 GameShell creates the settings file before setup finishes. The completion flag, rather than the file's presence alone, determines whether the next launch shows the wizard or the dashboard. Closing the app before completing setup leaves first-run configuration incomplete.
 
 After completing setup, all these options remain editable from the dashboard. The sections below describe those later edits.

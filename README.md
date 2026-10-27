@@ -36,6 +36,8 @@ When no `settings.json` exists, GameShell creates its local settings and opens a
 3. Optionally create your first **profile**. Choose **Create a profile later** to skip it.
 4. Review startup options and finish setup.
 
+Going **Back** to the profile’s Displays step discards the provisional profile and restores **Create a profile later**. Your default setup is retained.
+
 Later launches open the dashboard; unfinished setup resumes until completed. Settings live in `%LOCALAPPDATA%\GameShell\settings.json`. [Full walkthrough →](docs/user-guide.md#first-launch-setup)
 
 ## See it in action
