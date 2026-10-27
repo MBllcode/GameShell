@@ -31,6 +31,6 @@ jobs:
         working-directory: src/GameShell.Ui
       - name: Build frontend and desktop from source
         shell: pwsh
-        run: ./build.ps1 -SkipNpmInstall
+        run: ./scripts/build.ps1 -SkipNpmInstall
       - name: Test .NET
         run: dotnet test tests/GameShell.Core.Tests/GameShell.Core.Tests.csproj --no-build --no-restore

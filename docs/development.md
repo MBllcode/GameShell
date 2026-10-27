@@ -11,7 +11,7 @@
 ## Build from a clean checkout
 
 ```powershell
-.\build.ps1
+.\scripts\build.ps1
 ```
 
 The script restores the .NET solution, installs frontend dependencies with `npm ci` when the lockfile exists, builds the React UI, copies it to the desktop host's `wwwroot`, and builds the solution. Use `-SkipNpmInstall` for subsequent builds with dependencies already installed.
@@ -36,8 +36,8 @@ For layout work, `npm --prefix src/GameShell.Ui run dev` starts Vite. A plain br
 ## Package
 
 ```powershell
-.\package.ps1
-.\package.ps1 -SkipNpmInstall -NoLaunch
+.\scripts\package.ps1
+.\scripts\package.ps1 -SkipNpmInstall -NoLaunch
 ```
 
 Packaging stops running GameShell processes, builds and stages the UI, and publishes a Release `win-x64` self-contained single-file EXE. It replaces `artifacts\installer\GameShell.exe` after publishing succeeds, then launches it unless `-NoLaunch` is set. A locked destination falls back to a timestamped EXE.

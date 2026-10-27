@@ -11,29 +11,31 @@
   <p><a href="#see-it-in-action">Screenshots</a> · <a href="#build-and-run">Build & run</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/architecture.md">Architecture</a></p>
 </div>
 
-![GameShell dashboard: gaming profiles and their display, launcher, behaviour, and shortcut settings](docs/screenshots/dashboard.jpg)
+[![GameShell dashboard: gaming profiles and their display, launcher, behaviour, and shortcut settings](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
 
 Keep a monitor layout for work and another for the TV, projector, or gaming desk. Select a profile and press **Run profile**. Return through **Work Mode** when you are done.
 
 ## See it in action
 
+Click a screenshot to view its full-resolution, lossless PNG.
+
 ### 1. Choose your displays
 
 Name a profile, add detected displays, and drag them into position. Select a screen to set its resolution, primary status, and refresh rate.
 
-![Display profile editor with a TV selected and two desk monitors available to add](docs/screenshots/displays.jpg)
+[![Display profile editor with a TV selected and two desk monitors available to add](docs/screenshots/displays.png)](docs/screenshots/displays.png)
 
 ### 2. Decide what changes
 
 Choose whether to hide desktop icons or the taskbar, move the cursor, minimize windows, or start a launcher. Each profile keeps its own choices. A profile can also change displays only.
 
-![Profile behaviour: desktop, window, cursor, and launcher options](docs/screenshots/behaviour.jpg)
+[![Profile behaviour: desktop, window, cursor, and launcher options](docs/screenshots/behaviour.png)](docs/screenshots/behaviour.png)
 
 ### 3. Switch without opening the app
 
 Assign a keyboard shortcut or controller combination to a profile. Set a separate **Work Mode** shortcut to return to your desk. The tray menu also provides profile activation and Work Mode.
 
-![Keyboard and controller shortcuts for a gaming profile](docs/screenshots/shortcuts.jpg)
+[![Keyboard and controller shortcuts for a gaming profile](docs/screenshots/shortcuts.png)](docs/screenshots/shortcuts.png)
 
 **Launchers:** Playnite Fullscreen, Steam Big Picture, and Xbox App. Xbox opens in its normal windowed mode.
 
@@ -46,14 +48,14 @@ You need **Windows x64**, the **.NET 9 SDK**, **Node.js 22.6+ with npm**, and th
 ```powershell
 git clone https://github.com/MBllcode/GameShell.git
 cd GameShell
-.\build.ps1
+.\scripts\build.ps1
 .\src\GameShell.Desktop\bin\Debug\net9.0-windows\GameShell.exe
 ```
 
 Create a portable, self-contained EXE:
 
 ```powershell
-.\package.ps1
+.\scripts\package.ps1
 # Output: artifacts\installer\GameShell.exe
 ```
 
@@ -75,6 +77,6 @@ dotnet test tests\GameShell.Core.Tests\GameShell.Core.Tests.csproj
 npm --prefix src/GameShell.Ui test
 ```
 
-[Architecture](docs/architecture.md) · [Development & verification](docs/development.md) · [Remote API](docs/remote-control.md) · [Home Assistant](docs/home-assistant.md)
+[Documentation](docs/README.md) · [Architecture](docs/architecture.md) · [Development & verification](docs/development.md) · [Changelog](docs/CHANGELOG.md)
 
 GameShell is a personal project under active development. Display switching depends on the modes Windows and the connected hardware expose; cold boot, hotplug, and launcher behaviour need testing on the target PC. Screenshots show the running application with an example local configuration.

@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $PSScriptRoot
 $uiPath = Join-Path $root 'src\GameShell.Ui'
 $desktopPath = Join-Path $root 'src\GameShell.Desktop'
 $wwwrootPath = Join-Path $desktopPath 'wwwroot'

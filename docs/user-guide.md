@@ -18,7 +18,7 @@ Open **Global settings → Displays**. Arrange the monitors as you want them for
 
 **Refresh displays** reloads Windows inventory. **Use current layout** replaces the draft with the current Windows arrangement. **Reset canvas** restores the profile's saved draft layout (or an empty layout for a new profile); it is not a Windows display reset. Changes take effect when you run the profile, not merely when you edit its preview.
 
-![Launcher selection for an existing profile](screenshots/launcher.jpg)
+![Launcher selection for an existing profile](screenshots/launcher.png)
 
 ## Run a profile and return to work
 
@@ -37,7 +37,7 @@ When a supported game session ends, GameShell can return focus to its launcher. 
 - **Startup behaviour:** always Work Mode, restore the last active mode, or start a selected profile.
 - Start-menu and desktop shortcuts.
 
-![General settings: interface language, startup target, and Windows shortcuts](screenshots/general.jpg)
+![General settings: interface language, startup target, and Windows shortcuts](screenshots/general.png)
 
 GameShell runs as a normal Windows application with Explorer. The former Explorer replacement / Console Shell feature has been removed. A profile named `CONSOLE` in the screenshots is just a user-created gaming profile.
 

@@ -20,6 +20,9 @@
 
 ### Repository and delivery
 
+- Replace compressed desktop screenshots with 2880 × 1800 lossless captures from the running WebView renderer.
+- Group build/package tooling under `scripts/` and the changelog under `docs/`, with a documentation index and updated CI commands.
+
 - Stage frontend assets before publishing and replace the packaged EXE only after a successful publish.
 - Build dependencies from the npm lockfile and support packaging without launching the app.
 - Stop tracking generated frontend bundles and TypeScript cache files; retain source assets and local build outputs separately.
