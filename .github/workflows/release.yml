@@ -58,7 +58,7 @@ jobs:
       - name: Build portable Windows package
         shell: pwsh
         run: ./scripts/package.ps1 -SkipNpmInstall -NoLaunch -Version $env:RELEASE_VERSION
-      - name: Create EXE, ZIP and checksums
+      - name: Create EXE and ZIP
         shell: pwsh
         run: ./scripts/create-release-assets.ps1 -Version $env:RELEASE_VERSION
       - name: Publish release after successful verification
@@ -87,7 +87,7 @@ jobs:
             const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
               owner, repo, release_id: release.id
             });
-            for (const name of ['GameShell.exe', 'GameShell-win-x64.zip', 'SHA256SUMS.txt']) {
+            for (const name of ['GameShell.exe', 'GameShell-win-x64.zip']) {
               const existing = assets.find(asset => asset.name === name);
               if (existing) await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: existing.id });
               const data = await fs.readFile(path.join('artifacts', 'releases', version, name));

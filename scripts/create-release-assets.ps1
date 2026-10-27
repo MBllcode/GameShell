@@ -20,9 +20,4 @@ $releaseExe = Join-Path $releaseDirectory 'GameShell.exe'
 $archive = Join-Path $releaseDirectory 'GameShell-win-x64.zip'
 Copy-Item -LiteralPath $executable -Destination $releaseExe -Force
 Compress-Archive -LiteralPath $releaseExe -DestinationPath $archive -CompressionLevel Optimal -Force
-$checksums = foreach ($file in @($releaseExe, $archive)) {
-    $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-    "$hash  $([System.IO.Path]::GetFileName($file))"
-}
-$checksums | Set-Content -LiteralPath (Join-Path $releaseDirectory 'SHA256SUMS.txt') -Encoding ascii
 Write-Host "Release assets: $releaseDirectory"
