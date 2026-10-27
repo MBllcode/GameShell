@@ -33,6 +33,8 @@ type UseSetupNavigationOptions = {
   resolveStepIndex: (stepId: SetupStepId) => number;
   applySettingsToState: (settings: AppSettings) => void;
   resetDisplayProfileDraft: () => void;
+  resetFirstRunProfile: () => void;
+  hasFirstRunProfile: boolean;
   setPendingNavigationAction: Dispatch<SetStateAction<PendingNavigationAction | null>>;
   setPendingOverwriteProfileAction: Dispatch<SetStateAction<OverwriteProfileAction | null>>;
   setShowOverwriteProfileDialog: (value: boolean) => void;
@@ -117,6 +119,7 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
   async function executeNavigation(action: PendingNavigationAction) {
     if (action === 'skipProfile') {
       if (setupMode === 'FirstRun' && currentStepId === 'gaming-display') {
+        options.resetFirstRunProfile();
         resetDisplayProfileDraft();
         setError(null);
         setStepIndex(resolveStepIndex('app-behaviour'));
@@ -125,7 +128,18 @@ export function useSetupNavigation(options: UseSetupNavigationOptions) {
     }
     if (action === 'goBack') {
       setError(null);
-      const previousIndex = activeStepIndexes[resolvedFlowPosition - 1];
+      const profileStepIndex = resolveStepIndex('gaming-display');
+      const previousIndex = setupMode === 'FirstRun' && currentStepId === 'app-behaviour' && !options.hasFirstRunProfile
+        ? profileStepIndex
+        : activeStepIndexes[resolvedFlowPosition - 1];
+      if (setupMode === 'FirstRun' && typeof previousIndex === 'number'
+        && stepIndex >= profileStepIndex && previousIndex <= profileStepIndex) {
+        options.resetFirstRunProfile();
+        resetDisplayProfileDraft();
+        setShowOverwriteProfileDialog(false);
+        setPendingOverwriteProfileAction(null);
+        setMessage('');
+      }
       if (typeof previousIndex === 'number') setStepIndex(previousIndex);
       return;
     }

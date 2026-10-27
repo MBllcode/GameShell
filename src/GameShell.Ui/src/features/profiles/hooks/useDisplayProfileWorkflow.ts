@@ -1,7 +1,7 @@
 import { createProfile, type Profile } from '../profileModel';
 import type { LauncherType } from '../profileCommands';
 import { useTranslation } from 'react-i18next';
-import type { Dispatch, SetStateAction } from 'react';
+import { useRef, type Dispatch, type SetStateAction } from 'react';
 import { sendBridgeCommand } from '../../../bridge/webViewBridge';
 import { normalizeGamingProfileName } from '../utils';
 import { areTopologiesEqual, getProfileTopology, topologyToLegacy, validateTopology } from '../../displays/displayTopology';
@@ -49,6 +49,8 @@ type Options = {
 };
 
 export function useDisplayProfileWorkflow(options: Options) {
+  // The optional first-run profile is provisional until the wizard is finished.
+  const firstRunProfileId = useRef<string | null>(null);
   const { t } = useTranslation();
   const messages = options.messages ?? {
     invalid: t('profile.validationMinDisplays'),
@@ -89,6 +91,7 @@ export function useDisplayProfileWorkflow(options: Options) {
     const nextProfiles = profileBeingUpdated
       ? profiles.map(profile => profile === profileBeingUpdated ? updated : profile)
       : [...profiles, updated];
+    if (isFirstRun && !profileBeingUpdated) firstRunProfileId.current = updated.id ?? null;
     setProfiles(nextProfiles);
     setActiveProfileName(resolvedProfileName);
     setLayout(layout);
@@ -114,5 +117,17 @@ export function useDisplayProfileWorkflow(options: Options) {
     setDisplayValidationState({ showNameError: false, showSelectionError: false }); return true;
   }
 
-  return { refreshDisplays, saveSelectedGamingLayout, commitGamingDisplayDraft };
+  function discardFirstRunProfile() {
+    if (!isFirstRun) return;
+    const id = firstRunProfileId.current;
+    if (id) setProfiles(current => current.filter(profile => profile.id !== id));
+    firstRunProfileId.current = null;
+    setActiveProfileName(null);
+    setSelectedProfileName('');
+    setLayout(null);
+    pendingSettingsOverrideRef.current = null;
+    setDisplayValidationState({ showNameError: false, showSelectionError: false });
+  }
+
+  return { refreshDisplays, saveSelectedGamingLayout, commitGamingDisplayDraft, discardFirstRunProfile };
 }

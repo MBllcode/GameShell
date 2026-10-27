@@ -10,7 +10,7 @@ import { useSetupPageActions } from '../features/setup/hooks/useSetupPageActions
 import { useSetupFeature } from '../features/setup/hooks/useSetupFeature';
 import { useDisplayConfigurationState } from '../features/profiles/hooks/useDisplayConfigurationState';
 import { steps } from '../features/setup/setupFlow';
-import { useSettingsFormState } from '../features/settings/hooks/useSettingsFormState';
+import { defaultGamingBehaviour, useSettingsFormState } from '../features/settings/hooks/useSettingsFormState';
 import { useAppRuntimeState } from './hooks/useAppRuntimeState';
 import { useSetupFlowController } from '../features/setup/hooks/useSetupFlowController';
 import { AppView } from './AppView';
@@ -312,6 +312,17 @@ export function App() {
     resolveStepIndex: (stepId) => steps.findIndex((step) => step.id === stepId),
     applySettingsToState,
     resetDisplayProfileDraft: () => syncDisplayProfileDraft({ profileName: '', topology: { displays: [] } }),
+    hasFirstRunProfile: gamingProfiles.length > 0,
+    resetFirstRunProfile: () => {
+      displayWorkflow.discardFirstRunProfile();
+      setLauncher('None');
+      setGamingBehaviour({ ...defaultGamingBehaviour });
+      setHotkeys(current => ({ ...current, gamingMode: '' }));
+      setProfileHotkeyValidationError(null);
+      setProfileControllerValidationError(null);
+      setFinishOptions(current => ({ ...current, startupProfileId: null,
+        startupBehavior: current.startupBehavior === 'AlwaysProfile' ? 'AlwaysWorkMode' : current.startupBehavior }));
+    },
     setPendingNavigationAction,
     setPendingOverwriteProfileAction,
     setShowOverwriteProfileDialog,
