@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import type { AppStatus, DisplayLayoutProfile, DisplayLayoutSnapshot } from '../types/bridge';
 import { summarizeLayout } from '../utils/displays';
 import { formatCurrentMode, formatSessionState } from '../utils/status';
+import { IconBadge, UiIcon, type UiIconName } from '../components/UiPrimitives';
+import { ViewportContent } from '../components/ViewportContent';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 type ModeCommand = 'enterGameShell' | 'enterGameShellWithProfile' | 'enterWorkMode';
@@ -53,6 +55,12 @@ export function DashboardPage({
   editSettings
 }: DashboardPageProps) {
   const { t } = useTranslation();
+  const globalSettingIcons: Record<'work-display' | 'work-behaviour' | 'work-shortcuts' | 'app-behaviour', UiIconName> = {
+    'work-display': 'display',
+    'work-behaviour': 'settings',
+    'work-shortcuts': 'keyboard',
+    'app-behaviour': 'settings'
+  };
   const [showDeleteProfileDialog, setShowDeleteProfileDialog] = useState(false);
   const dashboardSelectedProfileName = selectedProfileName || activeProfileName || gamingProfiles[0]?.name || '';
   const runtimeActiveProfileName = status.activeProfileName;
@@ -123,24 +131,25 @@ export function DashboardPage({
           <section className="sidebar-global-settings" aria-label={t('app.globalSettings')}>
             <div className="sidebar-section-label">{t('app.globalSettings')}</div>
             <div className="sidebar-global-links">
-              <button type="button" onClick={() => editSettings('work-display')}><span>{t('setup.workModeDisplays')}</span></button>
-              <button type="button" onClick={() => editSettings('work-behaviour')}><span>{t('globalSection.workBehaviour')}</span></button>
-              <button type="button" onClick={() => editSettings('work-shortcuts')}><span>{t('setup.workModeShortcuts')}</span></button>
-              <button type="button" onClick={() => editSettings('app-behaviour')}><span>{t('setup.appBehaviour')}</span></button>
+              <button type="button" onClick={() => editSettings('work-display')}><IconBadge name={globalSettingIcons['work-display']} size={15} /><span>{t('globalSection.workDisplays')}</span></button>
+              <button type="button" onClick={() => editSettings('work-behaviour')}><IconBadge name={globalSettingIcons['work-behaviour']} size={15} /><span>{t('globalSection.workBehaviour')}</span></button>
+              <button type="button" onClick={() => editSettings('work-shortcuts')}><IconBadge name={globalSettingIcons['work-shortcuts']} size={15} /><span>{t('globalSection.workShortcuts')}</span></button>
+              <button type="button" onClick={() => editSettings('app-behaviour')}><IconBadge name={globalSettingIcons['app-behaviour']} size={15} /><span>{t('setup.appBehaviour')}</span></button>
             </div>
           </section>
         </aside>
 
         <div className="setup-main dashboard-main">
           <section className="setup-page dashboard-page">
+            <ViewportContent>
             <div className="dashboard-layout">
               <section className="dashboard-band dashboard-mode-band" aria-labelledby="dashboard-modes-title">
                 <section className="quick-switch-panel profile-module" aria-label={t('dashboard.profiles')}>
                   <div className="profile-module-header">
-                    <div className="profile-module-title-wrap"><h1 id="app-title" className="profile-module-title">{t('dashboard.profiles')}</h1></div>
+                    <div className="profile-module-title-wrap"><IconBadge name="profile" size={16} /><h1 id="app-title" className="profile-module-title">{t('dashboard.profiles')}</h1></div>
                     <div className="profile-module-header-actions">
                       <small className="profile-module-count">{gamingProfiles.length} {profileCountLabel}</small>
-                      <button className="secondary-button compact add-profile-head-button" type="button" onClick={createProfile} disabled={isRemovingProfile}>+ {t('dashboard.addProfile')}</button>
+                      <button className="secondary-button compact add-profile-head-button" type="button" onClick={createProfile} disabled={isRemovingProfile}><UiIcon name="plus" size={15} />{t('dashboard.addProfile')}</button>
                     </div>
                   </div>
                   <div className="profile-list-shell">
@@ -161,8 +170,8 @@ export function DashboardPage({
                     </div>
                   </div>
                   <div className="profile-actions profile-module-footer">
-                    <button className="danger-button secondary-button compact delete-action" type="button" disabled={!canDeleteSelectedProfile} onClick={() => setShowDeleteProfileDialog(true)}>{t('dashboard.deleteProfile')}</button>
-                    <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: dashboardSelectedProfileName })}><span>{t('dashboard.runProfile')}{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
+                    <button className="danger-button secondary-button compact delete-action" type="button" disabled={!canDeleteSelectedProfile} onClick={() => setShowDeleteProfileDialog(true)}><UiIcon name="trash" size={15} />{t('dashboard.deleteProfile')}</button>
+                    <button className="primary-button launch-profile-button launch-action" type="button" disabled={!canRunSelectedProfile} onClick={() => runModeCommand('enterGameShellWithProfile', false, { profileName: dashboardSelectedProfileName })}><UiIcon name="play" size={15} /><span>{t('dashboard.runProfile')}{selectedProfile ? `: ${selectedProfile.name}` : ''}</span></button>
                   </div>
                 </section>
                 {gamingProfiles.length === 0 ? <p className="hint-line">{t('dashboard.noProfile')}</p> : null}
@@ -170,17 +179,18 @@ export function DashboardPage({
               <section className="dashboard-band dashboard-config-section" aria-label={t('dashboard.profileSettings')}>
                 <div className="dashboard-shortcut-groups" aria-label={t('dashboard.profileSettings')}>
                   <section className="dashboard-shortcut-group" aria-labelledby="profile-settings-title">
-                    <div className="profile-settings-heading"><h3 id="profile-settings-title">{t('dashboard.profileSettings')}</h3><span className="profile-context">{dashboardSelectedProfileName || t('dashboard.profileContext')}</span></div>
+                    <div className="profile-settings-heading"><IconBadge name="settings" size={16} /><h3 id="profile-settings-title">{t('dashboard.profileSettings')}</h3><span className="profile-context">{dashboardSelectedProfileName || t('dashboard.profileContext')}</span></div>
                     <div className="section-shortcuts">
-                      <button type="button" onClick={() => editSettings('gaming-display')}><span>{t('dashboard.summaryScreen')}</span><small>{t('dashboard.summaryScreenHint')}</small></button>
-                      <button type="button" onClick={() => editSettings('launcher')}><span>{t('dashboard.summaryLauncher')}</span><small>{t('dashboard.summaryLauncherHint')}</small></button>
-                      <button type="button" onClick={() => editSettings('profile-behaviour')}><span>{t('dashboard.summaryBehaviour')}</span><small>{t('dashboard.summaryBehaviourHint')}</small></button>
-                      <button type="button" onClick={() => editSettings('controller')}><span>{t('dashboard.summaryShortcuts')}</span><small>{t('dashboard.summaryShortcutsHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('gaming-display')}><IconBadge name="display" size={16} /><span>{t('dashboard.summaryScreen')}</span><small>{t('dashboard.summaryScreenHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('launcher')}><IconBadge name="launcher" size={16} /><span>{t('dashboard.summaryLauncher')}</span><small>{t('dashboard.summaryLauncherHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('profile-behaviour')}><IconBadge name="settings" size={16} /><span>{t('dashboard.summaryBehaviour')}</span><small>{t('dashboard.summaryBehaviourHint')}</small></button>
+                      <button type="button" onClick={() => editSettings('controller')}><IconBadge name="controller" size={16} /><span>{t('dashboard.summaryShortcuts')}</span><small>{t('dashboard.summaryShortcutsHint')}</small></button>
                     </div>
                   </section>
                 </div>
               </section>
             </div>
+            </ViewportContent>
           </section>
           <footer className="setup-footer"><p className={hasError ? 'error-line' : 'operation-line'}>{message}</p></footer>
           {showDeleteProfileDialog ? (
@@ -189,7 +199,7 @@ export function DashboardPage({
               <p>{t('dashboard.deleteDialogConfirm', { name: selectedProfile ? selectedProfile.name : '' })}</p>
               <div className="dialog-actions">
                 <button className="secondary-button" type="button" disabled={isRemovingProfile} onClick={() => setShowDeleteProfileDialog(false)}>{t('dashboard.deleteDialogCancel')}</button>
-                <button className="danger-button secondary-button" type="button" disabled={isRemovingProfile} onClick={() => { void (async () => { await deleteSelectedProfile(); setShowDeleteProfileDialog(false); })(); }}>{isRemovingProfile ? t('dashboard.deleteDialogDeleting') : t('dashboard.deleteDialogDelete')}</button>
+                <button className="danger-button secondary-button" type="button" disabled={isRemovingProfile} onClick={() => { void (async () => { await deleteSelectedProfile(); setShowDeleteProfileDialog(false); })(); }}><UiIcon name="trash" size={15} />{isRemovingProfile ? t('dashboard.deleteDialogDeleting') : t('dashboard.deleteDialogDelete')}</button>
               </div>
             </div></div>
           ) : null}

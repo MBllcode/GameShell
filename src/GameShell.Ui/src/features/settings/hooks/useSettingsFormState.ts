@@ -29,7 +29,6 @@ export type FinishOptions = {
   startMinimized: boolean;
   startMenuShortcut: boolean;
   desktopShortcut: boolean;
-  consoleShellModeEnabled: boolean;
   startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile';
   startupProfileId: string | null;
 };
@@ -63,7 +62,6 @@ export const defaultFinishOptions: FinishOptions = {
   startMinimized: false,
   startMenuShortcut: true,
   desktopShortcut: true,
-  consoleShellModeEnabled: false,
   startupBehavior: 'AlwaysWorkMode',
   startupProfileId: null
 };

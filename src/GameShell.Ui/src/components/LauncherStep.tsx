@@ -4,6 +4,7 @@ import { LauncherIcon, type LauncherBrand } from './LauncherIcon';
 import { sendBridgeCommand } from '../services/webViewBridge';
 import type { DependencyStatus } from '../types/bridge';
 import type { DisplayLayoutProfile } from '../types/bridge';
+import { IconBadge, PageHeader, UiIcon } from './UiPrimitives';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 
@@ -95,11 +96,10 @@ export function LauncherStep({
 
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('launcher.title')}</h2>
-      <p>{t('launcher.description')}</p>
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('launcher.title')} description={t('launcher.description')} />
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
+          <IconBadge name="profile" size={16} />
           <span>{t('launcher.activeProfile')}</span>
           <strong>{selectedProfileLabel}</strong>
         </div>
@@ -134,6 +134,7 @@ export function LauncherStep({
             <p>{selectedDependency.message} {t('launcher.installPrompt', { name: selectedDependency.name })}</p>
           </div>
           <button className="secondary-button" type="button" onClick={openDownloadPage} disabled={!hasWorkingProfile}>
+            <UiIcon name="launcher" size={15} />
             {t('launcher.download', { name: selectedDependency.name })}
           </button>
         </div>

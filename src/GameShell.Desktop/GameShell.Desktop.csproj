@@ -8,10 +8,14 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- WPF owns the entry point, so DPI awareness must be set in the manifest.
+         The WinForms analyzer assumes ApplicationConfiguration.Initialize is used. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <AssemblyName>GameShell</AssemblyName>
     <RootNamespace>GameShell.Desktop</RootNamespace>
     <ApplicationIcon>Assets\GameShell.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GameShellWebRoot Condition="'$(GameShellWebRoot)' == ''">wwwroot</GameShellWebRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,7 +37,8 @@
     <Content Include="Assets\GameShellShortcut.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="wwwroot\**\*">
+    <Content Include="$(GameShellWebRoot)\**\*">
+      <Link>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

@@ -9,7 +9,7 @@ type GamingBehaviourState = Pick<AppSettings['gaming'], 'hideDesktopIcons' | 'hi
 type ConsoleBehaviourState = Pick<AppSettings['gameShell'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>;
 type WorkBehaviourState = Pick<AppSettings['workMode'], 'closeLauncher' | 'showTaskbars' | 'showDesktopIcons' | 'doNotMinimizeWindows'>;
 type HotkeySettingsState = { consoleMode: string; gamingMode: string; workMode: string };
-type FinishOptions = { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean; consoleShellModeEnabled: boolean; startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile'; startupProfileId: string | null };
+type FinishOptions = { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean; startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile'; startupProfileId: string | null };
 
 export type SettingsPayloadOverrides = {
   gamingProfiles?: DisplayLayoutProfile[];
@@ -88,7 +88,7 @@ export function buildSettingsPayload(
     workMode: { ...state.workBehaviour, defaultDisplayLayout: state.workModeLayout, taskbarRestoreDelaySeconds: state.settings?.workMode.taskbarRestoreDelaySeconds ?? 3, desktopIconsDelaySeconds: state.settings?.workMode.desktopIconsDelaySeconds ?? 15, completionDelaySeconds: state.settings?.workMode.completionDelaySeconds ?? 20 },
     controller: { enabled: Object.values(effectiveGamingProfileControllerShortcuts).some((shortcut) => (shortcut?.buttons.length ?? 0) > 0) || (state.workModeControllerShortcut?.buttons.length ?? 0) > 0 || state.settings?.controller?.enabled || false, consoleMode: state.settings?.controller?.consoleMode ?? null, gamingMode: activeProfileName ? normalizeControllerShortcut(activeProfileControllerShortcut) : normalizeControllerShortcut(state.settings?.controller?.gamingMode ?? null), workMode: normalizeControllerShortcut(state.workModeControllerShortcut) },
     hotkeys: { consoleMode: normalizeHotkeyForDisplay(state.hotkeys.consoleMode), gamingMode: normalizeHotkeyForDisplay(savedHotkeys.enterProfile || state.hotkeys.gamingMode), workMode: normalizeHotkeyForDisplay(state.hotkeys.workMode) },
-    startup: { startWithWindows: state.finishOptions.startWithWindows, startMinimizedToTray: state.finishOptions.startMinimized, createStartMenuShortcut: state.finishOptions.startMenuShortcut, createDesktopShortcut: state.finishOptions.desktopShortcut, consoleShellModeEnabled: state.finishOptions.consoleShellModeEnabled, startupBehavior: state.finishOptions.startupBehavior, startupProfileId: state.finishOptions.startupBehavior === 'AlwaysProfile' ? state.finishOptions.startupProfileId : null, closeExplorerWhenEnteringGamingProfileInShellMode: state.settings?.startup?.closeExplorerWhenEnteringGamingProfileInShellMode ?? true },
+    startup: { startWithWindows: state.finishOptions.startWithWindows, startMinimizedToTray: state.finishOptions.startMinimized, createStartMenuShortcut: state.finishOptions.startMenuShortcut, createDesktopShortcut: state.finishOptions.desktopShortcut, startupBehavior: state.finishOptions.startupBehavior, startupProfileId: state.finishOptions.startupBehavior === 'AlwaysProfile' ? state.finishOptions.startupProfileId : null },
     ui: { closeToTray: true, isFirstRunCompleted, language: normalizeLanguageCode(state.language) }
   };
 }

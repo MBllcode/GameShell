@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { DisplayLayoutProfile } from '../types/bridge';
 import { SettingRow } from './SettingRow';
 import { SettingsSection } from './SettingsSection';
+import { IconBadge, PageHeader, type UiIconName } from './UiPrimitives';
 
 type GamingBehaviour = {
   hideDesktopIcons: boolean;
@@ -16,15 +17,15 @@ type GamingBehaviour = {
 
 type GamingBehaviourKey = keyof GamingBehaviour;
 
-const gamingBehaviourOptions: Array<{ key: GamingBehaviourKey; labelKey: string; description?: string }> = [
-  { key: 'hideDesktopIcons', labelKey: 'behaviour.hideDesktopIcons' },
-  { key: 'hideTaskbar', labelKey: 'behaviour.hideTaskbar' },
-  { key: 'closeVisibleWindows', labelKey: 'behaviour.closeVisibleWindows' },
-  { key: 'minimizeRemainingWindows', labelKey: 'behaviour.minimizeRemainingWindows' },
-  { key: 'moveCursorToCorner', labelKey: 'behaviour.moveCursorToCorner' },
-  { key: 'hideCursor', labelKey: 'behaviour.hideCursor' },
-  { key: 'startLauncher', labelKey: 'behaviour.startLauncher' },
-  { key: 'bringLauncherToForeground', labelKey: 'behaviour.bringLauncherToForeground' }
+const gamingBehaviourOptions: Array<{ key: GamingBehaviourKey; labelKey: string; description?: string; icon: UiIconName }> = [
+  { key: 'hideDesktopIcons', labelKey: 'behaviour.hideDesktopIcons', icon: 'desktopOff' },
+  { key: 'hideTaskbar', labelKey: 'behaviour.hideTaskbar', icon: 'taskbar' },
+  { key: 'closeVisibleWindows', labelKey: 'behaviour.closeVisibleWindows', icon: 'windowClose' },
+  { key: 'minimizeRemainingWindows', labelKey: 'behaviour.minimizeRemainingWindows', icon: 'windowMinimize' },
+  { key: 'moveCursorToCorner', labelKey: 'behaviour.moveCursorToCorner', icon: 'cursor' },
+  { key: 'hideCursor', labelKey: 'behaviour.hideCursor', icon: 'cursorOff' },
+  { key: 'startLauncher', labelKey: 'behaviour.startLauncher', icon: 'play' },
+  { key: 'bringLauncherToForeground', labelKey: 'behaviour.bringLauncherToForeground', icon: 'foreground' }
 ];
 
 export function ProfileBehaviourStep({
@@ -45,12 +46,11 @@ export function ProfileBehaviourStep({
   const selectedProfileLabel = selectedProfileName || t('profile.noProfileSelected');
 
   return (
-    <div className="wizard-copy">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('behaviour.profileTitle')}</h2>
-      <p>{t('behaviour.profileDescription')}</p>
+    <div className="wizard-copy profile-behaviour-step">
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('behaviour.profileTitle')} description={t('behaviour.profileDescription')} />
       <div className="field-grid">
         <div className="profile-target-line" aria-live="polite">
+          <IconBadge name="profile" size={16} />
           <span>{t('profile.activeProfile')}</span>
           <strong>{selectedProfileLabel}</strong>
         </div>
@@ -62,6 +62,8 @@ export function ProfileBehaviourStep({
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
+              showInfo
+              icon={option.icon}
               checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
@@ -72,6 +74,8 @@ export function ProfileBehaviourStep({
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
+              showInfo
+              icon={option.icon}
               checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
@@ -84,6 +88,8 @@ export function ProfileBehaviourStep({
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
+              showInfo
+              icon={option.icon}
               checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}
@@ -96,6 +102,8 @@ export function ProfileBehaviourStep({
               key={option.key}
               title={t(option.labelKey)}
               description={option.description}
+              showInfo
+              icon={option.icon}
               checked={gamingBehaviour[option.key]}
               onChange={(value) => onChangeBehaviourFlag(option.key, value)}
               disabled={!hasWorkingProfile}

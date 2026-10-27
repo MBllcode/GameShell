@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { setI18nLanguage } from '../i18n/i18n';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n/language.ts';
+import { IconBadge, PageHeader } from './UiPrimitives';
 
 export function WelcomeStep({
   stepNumber,
@@ -15,11 +16,10 @@ export function WelcomeStep({
 
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('setup.welcomeTitle')}</h2>
-      <p>{t('setup.welcomeMessage')}</p>
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('setup.welcomeTitle')} description={t('setup.welcomeMessage')} />
 
       <div className="language-panel">
+        <IconBadge name="globe" size={18} className="panel-leading-icon" />
         <label className="field-label" htmlFor="welcome-language-select">{t('language.selectorLabel')}</label>
         <select
           id="welcome-language-select"

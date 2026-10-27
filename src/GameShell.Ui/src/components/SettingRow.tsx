@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { IconBadge, UiIcon, type UiIconName } from './UiPrimitives';
 
 export function SettingRow({
   title,
@@ -8,6 +9,8 @@ export function SettingRow({
   disabled = false,
   trailing,
   helper,
+  icon,
+  showInfo = false,
   className
 }: {
   title: string;
@@ -17,12 +20,16 @@ export function SettingRow({
   disabled?: boolean;
   trailing?: ReactNode;
   helper?: ReactNode;
+  icon?: UiIconName;
+  showInfo?: boolean;
   className?: string;
 }) {
   const rowClasses = [
     'setting-row',
     disabled ? 'is-disabled' : '',
-    trailing ? 'has-trailing' : '',
+    trailing || showInfo ? 'has-trailing' : '',
+    icon ? 'has-icon' : '',
+    showInfo ? 'has-info' : '',
     helper ? 'has-helper' : '',
     className ?? ''
   ].filter(Boolean).join(' ');
@@ -30,11 +37,17 @@ export function SettingRow({
   return (
     <label className={rowClasses}>
       <GameShellCheckbox checked={checked} disabled={disabled} onChange={onChange} />
+      {icon ? <IconBadge name={icon} size={16} className="setting-row-icon" /> : null}
       <span className="setting-row-content">
         <span className="setting-row-title">{title}</span>
         {description ? <span className="setting-row-description">{description}</span> : null}
       </span>
-      {trailing ? <span className="setting-row-trailing">{trailing}</span> : null}
+      {trailing || showInfo ? (
+        <span className="setting-row-trailing">
+          {trailing}
+          {showInfo ? <span className="setting-row-info" aria-hidden="true"><UiIcon name="info" size={15} /></span> : null}
+        </span>
+      ) : null}
       {helper ? <span className="setting-row-helper" role="status">{helper}</span> : null}
     </label>
   );

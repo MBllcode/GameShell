@@ -5,6 +5,7 @@ import { normalizeGamingProfileName } from '../features/profiles/utils';
 import { computeTopologyBounds, createCanvasTransform, getDockingGuides, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../utils/displayTopologyGeometry';
 import { areTopologiesEqual, deduplicatePhysicalDisplays, formatDisplayResolution, getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, hasValidFixedRefresh, isSamePhysicalDisplay, isSameProfileDisplay, normalizeCanvasTopology, normalizeTopologyPrimary, profileTargetForAddition, topologyFromLegacy } from '../utils/displays';
 import { sendBridgeCommand } from '../services/webViewBridge';
+import { IconBadge, PageHeader, UiIcon } from './UiPrimitives';
 
 type DisplayValidationState = { showNameError: boolean; showSelectionError: boolean };
 type DragState = { identityKey: string; startX: number; startY: number; startRect: GeometryRect; currentRect: GeometryRect; transform: CanvasTransform; topologyRects: GeometryRect[]; hasMoved: boolean };
@@ -177,21 +178,19 @@ export function DisplaysStep({
 
   return (
     <div className="wizard-copy displays-step">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{displayMode === 'work' ? t('setup.workModeDisplays') : t('setup.displays')}</h2>
-      <p>{displayMode === 'work' ? t('setup.defaultDisplayLayoutDescription') : t('setup.profileSetup')}</p>
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={displayMode === 'work' ? t('setup.workModeDisplays') : t('setup.displays')} description={displayMode === 'work' ? t('setup.defaultDisplayLayoutDescription') : t('setup.profileSetup')} />
       <section className="settings-section display-topology-editor">
         <div className="display-topology-toolbar display-profile-row">
           <div className="display-profile-field">
             <label className="profile-name-label" htmlFor="profile-name-input">{displayMode === 'work' ? t('setup.workModeDisplays') : t('profile.nameLabel')}</label>
             <div className="display-profile-input-row">
               <input id="profile-name-input" className="text-input profile-name-input" type="text" value={displayMode === 'work' ? t('setup.workMode') : profileName} readOnly={displayMode === 'work'} onChange={(event) => updateProfileName(event.target.value)} onBlur={() => onValidationStateChange({ ...validationState, showNameError: !profileName.trim() })} aria-invalid={displayMode !== 'work' && validationState.showNameError && !profileName.trim()} placeholder={t('profile.namePlaceholder')} />
-              <button className="secondary-button compact display-reset-button" type="button" onClick={resetCanvas} disabled={!canResetCanvas} title={t('profile.resetDisplayCanvas')}>{t('profile.resetDisplayCanvas')}</button>
+              <button className="secondary-button compact display-reset-button" type="button" onClick={resetCanvas} disabled={!canResetCanvas} title={t('profile.resetDisplayCanvas')}><UiIcon name="refresh" size={15} />{t('profile.resetDisplayCanvas')}</button>
             </div>
           </div>
           <div className="display-diagnostics-actions">
-            <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}>{t('profile.displayCurrentLayout')}</button>
-            <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}>{isRefreshingDisplays ? t('profile.displayRefreshListBusy') : t('profile.displayRefreshList')}</button>
+            <button className="secondary-button compact" type="button" onClick={() => void useCurrentLayout()}><UiIcon name="layout" size={15} />{t('profile.displayCurrentLayout')}</button>
+            <button className="secondary-button compact" type="button" disabled={isRefreshingDisplays} onClick={refreshDisplays}><UiIcon name="refresh" size={15} />{isRefreshingDisplays ? t('profile.displayRefreshListBusy') : t('profile.displayRefreshList')}</button>
           </div>
         </div>
         {displayMode !== 'work' && validationState.showNameError && !profileName.trim() ? <div className="field-validation-error" role="alert">{t('profile.nameRequired')}</div> : null}
@@ -206,6 +205,7 @@ export function DisplaysStep({
         <section className="display-inventory" aria-label={t('profile.displayHeading')}>
           <div className="display-module-header">
             <div className="display-inventory-header">
+              <IconBadge name="display" size={16} />
               <strong>{t('profile.displayHeading')}</strong>
               <span className="display-inventory-count">{availableDisplays.length}</span>
             </div>
@@ -230,13 +230,12 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, resolveDisplayNa
   const rects = topology.displays.map(display => rectFromPosition(display.positionX, display.positionY, display.width, display.height));
   const bounds = getBounds(topology.displays);
   const largestDisplayDimension = rects.reduce((largest, rect) => Math.max(largest, rect.width, rect.height), 0);
-  const fixedCanvasHeight = 360;
   const transform = createCanvasTransform(bounds, viewport.width, viewport.height, 24, largestDisplayDimension);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const updateViewport = () => setViewport({ width: canvas.clientWidth, height: fixedCanvasHeight });
+    const updateViewport = () => setViewport({ width: canvas.clientWidth, height: canvas.clientHeight });
     updateViewport();
     const observer = new ResizeObserver(updateViewport);
     observer.observe(canvas);
@@ -249,8 +248,10 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, resolveDisplayNa
       if (!drag) return;
       const target = topology.displays.find((display) => identityKey(display.identity) === drag.identityKey);
       if (!target) return;
-      const deltaX = event.clientX - drag.startX;
-      const deltaY = event.clientY - drag.startY;
+      const canvas = canvasRef.current;
+      const pageScale = canvas && canvas.offsetWidth > 0 ? canvas.getBoundingClientRect().width / canvas.offsetWidth : 1;
+      const deltaX = (event.clientX - drag.startX) / pageScale;
+      const deltaY = (event.clientY - drag.startY) / pageScale;
       if (!drag.hasMoved && Math.hypot(deltaX, deltaY) < 5) return;
       drag.hasMoved = true;
       const desired = rectFromPosition(drag.startRect.left + deltaX / drag.transform.scale, drag.startRect.top + deltaY / drag.transform.scale, drag.startRect.width, drag.startRect.height);
@@ -297,7 +298,7 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, resolveDisplayNa
 
   const previewRect = dragPreview ? rectToCanvas(dragPreview.rect, transform) : null;
   const dockingGuides = dragPreview ? getDockingGuides(dragPreview.rect, rects.filter((_, index) => topology.displays[index] && identityKey(topology.displays[index].identity) !== dragPreview.identityKey)) : [];
-  return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''}`} style={{ height: `${fixedCanvasHeight}px` }} aria-label={t('profile.topologyPreview')}>
+  return <div ref={canvasRef} className={`display-topology-canvas ${topology.displays.length === 0 ? 'is-empty' : ''}`} aria-label={t('profile.topologyPreview')}>
     {topology.displays.map((display, index) => {
       const key = identityKey(display.identity);
       const topologyRect = dragPreview?.identityKey === key ? dragPreview.rect : rects[index];
@@ -329,11 +330,11 @@ function DisplayPropertiesPanel({ target, observed, modes, onChange, onRemove }:
         ? t('profile.refreshPick')
         : undefined;
   return <aside className="display-properties-panel" aria-label={t('profile.displayProperties')}>
-    <div className="display-properties-title"><div><strong>{observed?.name || target.identity.friendlyName || t('profile.displayUnknown')}</strong><span>{observed?.connectionTechnology || t('profile.displayConnectionUnknown')}</span></div><button className="text-action" type="button" onClick={onRemove}>{t('profile.removeDisplay')}</button></div>
+    <div className="display-properties-title"><div><strong>{observed?.name || target.identity.friendlyName || t('profile.displayUnknown')}</strong><span>{observed?.connectionTechnology || t('profile.displayConnectionUnknown')}</span></div><button className="danger-button compact display-remove-button" type="button" onClick={onRemove} title={t('profile.removeDisplay')}><UiIcon name="trash" size={14} />{t('profile.removeDisplay')}</button></div>
     {observed?.catalogState === 'Unavailable' ? <p className="hint-line">{t('profile.displayStateUnavailable')}</p> : null}
-    <div className="display-property-section"><span className="display-property-heading">{t('profile.displayStatus')}</span><label className="toggle-row"><span>{t('profile.displayUsed')}</span><input type="checkbox" checked={target.enabled} onChange={(event) => onChange({ enabled: event.target.checked, isPrimary: event.target.checked ? target.isPrimary : false })} /></label></div>
-    <div className="display-property-section"><span className="display-property-heading">{t('profile.displaySettings')}</span><label className="toggle-row"><span>{t('profile.displayPrimary')}</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label><div className="display-properties-grid"><label>{t('profile.positionX')}<input className="text-input" type="number" value={target.positionX} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionX: Number(event.target.value) })} /></label><label>{t('profile.positionY')}<input className="text-input" type="number" value={target.positionY} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionY: Number(event.target.value) })} /></label><label>{t('profile.width')}<input className="text-input" type="number" min="1" value={target.width} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ width: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>{t('profile.height')}<input className="text-input" type="number" min="1" value={target.height} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ height: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label></div></div>
-    <div className="display-property-section"><span className="display-property-heading">{t('profile.refresh')}</span><div className="display-refresh-field"><div className="display-refresh-select"><select className="text-input" value={resolveRefreshSelectionKey(target, refreshOptions)} disabled={!isAutoHighest && refreshState.disabled} onChange={(event) => { if (event.target.value === 'auto') { onChange({ refreshPolicy: 'AutoHighest', fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 }); return; } const mode = refreshOptions.find((candidate) => modeKey(candidate) === event.target.value); if (mode) onChange({ refreshPolicy: 'Fixed', fixedRefreshRateNumerator: mode.refreshRateNumerator, fixedRefreshRateDenominator: mode.refreshRateDenominator, refreshRateNumerator: 0, refreshRateDenominator: 0 }); }}><option value="auto">{t('profile.refreshAuto')}</option>{refreshOptions.map((mode) => <option key={modeKey(mode)} value={modeKey(mode)}>{formatRefresh(mode.refreshRateHz)}</option>)}{!isAutoHighest && refreshOptions.length === 0 && hasValidFixedRefresh(target) ? <option value={fixedModeKey(target)}>{formatRefresh((target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator ?? 1))}</option> : null}{refreshOptions.length === 0 && !hasValidFixedRefresh(target) && !isAutoHighest ? <option value="" disabled>{refreshPlaceholder}</option> : null}</select><span className="display-refresh-chevron" aria-hidden="true" /></div></div>{observed && !observed.isEnabled && getRefreshPolicy(target) === 'Fixed' && hasValidFixedRefresh(target) ? <p className="hint-line">{t('profile.refreshSavedHint')}</p> : null}{!observed ? <p className="hint-line">{t('profile.refreshMissingHint')}</p> : null}</div>
+    <div className="display-property-section"><span className="display-property-heading"><IconBadge name="display" size={14} /><span>{t('profile.displayStatus')}</span></span><label className="toggle-row"><span>{t('profile.displayUsed')}</span><input type="checkbox" checked={target.enabled} onChange={(event) => onChange({ enabled: event.target.checked, isPrimary: event.target.checked ? target.isPrimary : false })} /></label></div>
+    <div className="display-property-section"><span className="display-property-heading"><IconBadge name="settings" size={14} /><span>{t('profile.displaySettings')}</span></span><label className="toggle-row"><span>{t('profile.displayPrimary')}</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label><div className="display-properties-grid"><label>{t('profile.positionX')}<input className="text-input" type="number" value={target.positionX} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionX: Number(event.target.value) })} /></label><label>{t('profile.positionY')}<input className="text-input" type="number" value={target.positionY} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionY: Number(event.target.value) })} /></label><label>{t('profile.width')}<input className="text-input" type="number" min="1" value={target.width} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ width: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>{t('profile.height')}<input className="text-input" type="number" min="1" value={target.height} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ height: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label></div></div>
+    <div className="display-property-section"><span className="display-property-heading"><IconBadge name="refresh" size={14} /><span>{t('profile.refresh')}</span></span><div className="display-refresh-field"><div className="display-refresh-select"><select className="text-input" value={resolveRefreshSelectionKey(target, refreshOptions)} disabled={!isAutoHighest && refreshState.disabled} onChange={(event) => { if (event.target.value === 'auto') { onChange({ refreshPolicy: 'AutoHighest', fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 }); return; } const mode = refreshOptions.find((candidate) => modeKey(candidate) === event.target.value); if (mode) onChange({ refreshPolicy: 'Fixed', fixedRefreshRateNumerator: mode.refreshRateNumerator, fixedRefreshRateDenominator: mode.refreshRateDenominator, refreshRateNumerator: 0, refreshRateDenominator: 0 }); }}><option value="auto">{t('profile.refreshAuto')}</option>{refreshOptions.map((mode) => <option key={modeKey(mode)} value={modeKey(mode)}>{formatRefresh(mode.refreshRateHz)}</option>)}{!isAutoHighest && refreshOptions.length === 0 && hasValidFixedRefresh(target) ? <option value={fixedModeKey(target)}>{formatRefresh((target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator ?? 1))}</option> : null}{refreshOptions.length === 0 && !hasValidFixedRefresh(target) && !isAutoHighest ? <option value="" disabled>{refreshPlaceholder}</option> : null}</select><span className="display-refresh-chevron" aria-hidden="true" /></div></div>{observed && !observed.isEnabled && getRefreshPolicy(target) === 'Fixed' && hasValidFixedRefresh(target) ? <p className="hint-line">{t('profile.refreshSavedHint')}</p> : null}{!observed ? <p className="hint-line">{t('profile.refreshMissingHint')}</p> : null}</div>
   </aside>;
 }
 

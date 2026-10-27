@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { DisplayLayoutSnapshot } from '../types/bridge';
 import { summarizeLayout } from '../utils/displays';
+import { IconBadge, PageHeader } from './UiPrimitives';
 
 type LauncherType = 'Playnite Fullscreen' | 'Steam Big Picture' | 'Xbox App';
 
@@ -34,22 +35,25 @@ export function FinishStep({
 
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('setup.finishSummary')}</h2>
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('setup.finishSummary')} />
       <dl className="summary-list">
         <div>
+          <IconBadge name="profile" size={16} />
           <dt>{t('summary.profileGaming')}</dt>
           <dd>{activeProfileName || t('summary.activeProfileNone')}</dd>
         </div>
         <div>
+          <IconBadge name="layout" size={16} />
           <dt>{t('summary.layout')}</dt>
           <dd>{gamingLayout ? summarizeLayout(gamingLayout, t) : t('summary.layoutMissing')}</dd>
         </div>
         <div>
+          <IconBadge name="launcher" size={16} />
           <dt>{t('summary.launcher')}</dt>
           <dd>{activeLauncher}</dd>
         </div>
         <div>
+          <IconBadge name="keyboard" size={16} />
           <dt>{t('summary.hotkey')}</dt>
           <dd>{activeHotkeys.enterProfile || t('summary.hotkeyMissing')}</dd>
         </div>

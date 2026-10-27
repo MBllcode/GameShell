@@ -3,16 +3,14 @@ import { setI18nLanguage } from '../i18n/i18n';
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n/language.ts';
 import { SettingRow } from './SettingRow';
 import { SettingsSection } from './SettingsSection';
-import { sendBridgeCommand } from '../services/webViewBridge';
-import { useEffect, useState } from 'react';
 import type { DisplayLayoutProfile } from '../types/bridge';
+import { IconBadge, PageHeader } from './UiPrimitives';
 
 type FinishOptions = {
   startWithWindows: boolean;
   startMinimized: boolean;
   startMenuShortcut: boolean;
   desktopShortcut: boolean;
-  consoleShellModeEnabled: boolean;
   startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile';
   startupProfileId: string | null;
 };
@@ -35,24 +33,13 @@ export function AppBehaviourStep({
   profiles: DisplayLayoutProfile[];
 }) {
   const { t } = useTranslation();
-  const [shellSupport, setShellSupport] = useState<{ isSupported: boolean; edition: string; reason: string } | null>(null);
-
-  useEffect(() => {
-    void sendBridgeCommand<{ isSupported: boolean; edition: string; reason: string }>('getConsoleShellStatus')
-      .then(setShellSupport)
-      .catch(() => setShellSupport(null));
-  }, []);
-
   return (
     <div className="wizard-copy">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{t('behaviour.appTitle')}</h2>
-      <div className="settings-intro">
-        <p>{t('behaviour.appDescription')}</p>
-      </div>
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('behaviour.appTitle')} description={t('behaviour.appDescription')} />
 
       {showLanguageSelector ? (
         <div className="language-panel">
+          <IconBadge name="globe" size={18} className="panel-leading-icon" />
           <label className="field-label" htmlFor="app-language-select">{t('language.selectorLabel')}</label>
           <select
             id="app-language-select"
@@ -77,6 +64,8 @@ export function AppBehaviourStep({
         <SettingsSection title={t('behaviour.startupSection')}>
           <SettingRow
             title={t('behaviour.startWithWindows')}
+            icon="startup"
+            showInfo
             checked={finishOptions.startWithWindows}
             onChange={(value) => setFinishOptions({
               ...finishOptions,
@@ -86,33 +75,15 @@ export function AppBehaviourStep({
           />
           <SettingRow
             title={t('behaviour.startMinimized')}
+            icon="minimize"
+            showInfo
             checked={finishOptions.startMinimized}
             disabled={!finishOptions.startWithWindows}
             onChange={(value) => setFinishOptions({ ...finishOptions, startMinimized: value })}
           />
-          <SettingRow
-            title={t('behaviour.consoleShellMode')}
-            description={t('behaviour.consoleShellModeDescription')}
-            checked={finishOptions.consoleShellModeEnabled}
-            disabled={!finishOptions.consoleShellModeEnabled && shellSupport?.isSupported === false}
-            trailing={shellSupport ? (
-              <span className={`console-shell-status ${shellSupport.isSupported ? 'is-available' : 'is-unavailable'}`}>
-                {t(shellSupport.isSupported ? 'behaviour.consoleShellAvailable' : 'behaviour.consoleShellUnavailable')}
-              </span>
-            ) : null}
-            helper={!finishOptions.consoleShellModeEnabled && shellSupport?.isSupported === false
-              ? t('behaviour.consoleShellUnavailableMessage')
-              : null}
-            onChange={(value) => setFinishOptions({ ...finishOptions, consoleShellModeEnabled: value })}
-          />
-          {finishOptions.consoleShellModeEnabled ? (
-            <div className="console-shell-help">
-              <p>{t('behaviour.consoleShellWarning')}</p>
-              <p>{t('behaviour.consoleShellRecovery')}</p>
-            </div>
-          ) : null}
           <div className="startup-target-options">
             <div className="startup-form-row">
+              <IconBadge name="startup" size={16} className="startup-form-icon" />
               <label className="field-label" htmlFor="startup-behavior-select">{t('behaviour.startupTarget')}</label>
               <select
                 id="startup-behavior-select"
@@ -127,6 +98,7 @@ export function AppBehaviourStep({
             </div>
             {finishOptions.startupBehavior === 'AlwaysProfile' ? (
               <div className="startup-form-row">
+                <IconBadge name="profile" size={16} className="startup-form-icon" />
                 <label className="field-label" htmlFor="startup-profile-select">{t('behaviour.startupProfile')}</label>
                 <select
                   id="startup-profile-select"
@@ -147,11 +119,15 @@ export function AppBehaviourStep({
         <SettingsSection title={t('behaviour.shortcutsSection')}>
           <SettingRow
             title={t('behaviour.createStartMenuShortcut')}
+            icon="shortcut"
+            showInfo
             checked={finishOptions.startMenuShortcut}
             onChange={(value) => setFinishOptions({ ...finishOptions, startMenuShortcut: value })}
           />
           <SettingRow
             title={t('behaviour.createDesktopShortcut')}
+            icon="desktop"
+            showInfo
             checked={finishOptions.desktopShortcut}
             onChange={(value) => setFinishOptions({ ...finishOptions, desktopShortcut: value })}
           />

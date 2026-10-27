@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { SectionFrame } from './UiPrimitives';
 
 export function SettingsSection({
   title,
@@ -7,10 +8,5 @@ export function SettingsSection({
   title: string;
   children: ReactNode;
 }) {
-  return (
-    <section className="settings-category" aria-labelledby={`settings-category-${title}`}>
-      <h3 id={`settings-category-${title}`}>{title}</h3>
-      <div className="settings-group">{children}</div>
-    </section>
-  );
+  return <SectionFrame title={title} className="settings-category"><div className="settings-group">{children}</div></SectionFrame>;
 }

@@ -4,6 +4,7 @@ import { ControllerFamily, detectControllerFamily } from '../controllerDisplayMa
 import type { ControllerShortcutSettings, ControllerStatusInfo, DisplayLayoutProfile } from '../types/bridge';
 import { ControllerKeycaps } from './ControllerKeycaps';
 import { HotkeyField } from './HotkeyField';
+import { IconBadge, PageHeader, UiIcon } from './UiPrimitives';
 
 type HotkeySettingsState = {
   consoleMode: string;
@@ -135,15 +136,14 @@ export function ControllerStep({
 
   return (
     <div className="wizard-copy profile-shortcuts-content">
-      <p className="eyebrow">{t('setup.step')} {stepNumber}</p>
-      <h2>{isWorkMode ? t('shortcut.workTitle') : t('shortcut.profileTitle')}</h2>
+      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={isWorkMode ? t('shortcut.workTitle') : t('shortcut.profileTitle')} description={isWorkMode ? t('shortcut.keyboardHelpWork') : t('shortcut.keyboardProfileHint', { name: selectedProfileLabel })} />
       <div className="profile-shortcuts-intro">
-        <p>{isWorkMode ? t('shortcut.keyboardHelpWork') : t('shortcut.keyboardProfileHint', { name: selectedProfileLabel })}</p>
         <span className="profile-shortcuts-profile-label">{isWorkMode ? t('shortcut.workTitle').toUpperCase() : `${t('shortcut.profileTitle').toUpperCase()}: ${selectedProfileLabel.toUpperCase()}`}</span>
       </div>
 
       <section className="shortcut-module keyboard-shortcut-module">
         <header className="shortcut-module-header">
+          <IconBadge name="keyboard" size={18} />
           <div>
             <h3>{t('shortcut.keyboardLabel')}</h3>
             <p>{isWorkMode ? t('shortcut.keyboardHelpWork') : t('shortcut.keyboardHelp')}</p>
@@ -165,6 +165,7 @@ export function ControllerStep({
               <div className="shortcut-action-slot">
                 {currentHotkey ? (
                   <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={handleHotkeyRemove}>
+                    <UiIcon name="trash" size={15} />
                     {t('shortcut.remove')}
                   </button>
                 ) : null}
@@ -176,6 +177,7 @@ export function ControllerStep({
 
       <section className={`shortcut-module controller-shortcut-module ${isCapturePhase || isCaptureSuccess ? 'is-capturing' : ''}`}>
         <header className="shortcut-module-header controller-module-header">
+          <IconBadge name="controller" size={18} />
           <div>
             <h3>{t('shortcut.controllerLabel')}</h3>
             <p>{t('shortcut.controllerHelp', { action: isWorkMode ? t('shortcut.workAction') : t('shortcut.profileAction') })}</p>
@@ -232,6 +234,7 @@ export function ControllerStep({
               ) : null}
               {canCancelCapture ? (
                 <button className="secondary-button controller-capture-cancel" type="button" onClick={onCancelControllerCapture}>
+                  <UiIcon name="warning" size={15} />
                   {t('shortcut.cancel')}
                 </button>
               ) : null}
@@ -262,10 +265,12 @@ export function ControllerStep({
               )}
               <div className="controller-shortcut-actions">
                 <button className="primary-button controller-shortcut-listen-button" type="button" disabled={!isWorkMode && !hasWorkingProfile} onClick={onStartControllerCapture}>
+                  <UiIcon name="controller" size={15} />
                   {hasControllerShortcut ? t('shortcut.listenChange') : t('shortcut.listen')}
                 </button>
                 {hasControllerShortcut ? (
                   <button className="danger-button secondary-button controller-shortcut-remove" type="button" onClick={onRemoveControllerShortcut}>
+                    <UiIcon name="trash" size={15} />
                     {t('shortcut.remove')}
                   </button>
                 ) : null}

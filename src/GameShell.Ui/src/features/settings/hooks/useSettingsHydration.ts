@@ -27,7 +27,7 @@ type Options = {
   setConsoleBehaviour: (value: Pick<AppSettings['gameShell'], 'hideDesktopIcons' | 'hideTaskbar' | 'closeVisibleWindows' | 'minimizeRemainingWindows' | 'moveCursorToCorner' | 'hideCursor' | 'startLauncher' | 'bringLauncherToForeground'>) => void;
   setGamingBehaviour: (value: ReturnType<typeof toGamingBehaviourState>) => void;
   setWorkBehaviour: (value: Pick<AppSettings['workMode'], 'closeLauncher' | 'showTaskbars' | 'showDesktopIcons' | 'doNotMinimizeWindows'>) => void;
-  setFinishOptions: (value: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean; consoleShellModeEnabled: boolean; startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile'; startupProfileId: string | null }) => void;
+  setFinishOptions: (value: { startWithWindows: boolean; startMinimized: boolean; startMenuShortcut: boolean; desktopShortcut: boolean; startupBehavior: 'AlwaysWorkMode' | 'RestoreLastActiveMode' | 'AlwaysProfile'; startupProfileId: string | null }) => void;
   setHasUnsavedChanges: (value: boolean) => void;
   pendingSettingsOverrideRef: { current: SettingsPayloadOverrides | null };
 };
@@ -57,7 +57,7 @@ export function useSettingsHydration(options: Options) {
     options.setConsoleBehaviour(isFirstRun ? defaultConsoleBehaviour : { hideDesktopIcons: loadedSettings.gameShell?.hideDesktopIcons ?? true, hideTaskbar: loadedSettings.gameShell?.hideTaskbar ?? true, closeVisibleWindows: loadedSettings.gameShell?.closeVisibleWindows ?? true, minimizeRemainingWindows: loadedSettings.gameShell?.minimizeRemainingWindows ?? true, moveCursorToCorner: loadedSettings.gameShell?.moveCursorToCorner ?? true, hideCursor: loadedSettings.gameShell?.hideCursor ?? true, startLauncher: loadedSettings.gameShell?.startLauncher ?? true, bringLauncherToForeground: loadedSettings.gameShell?.bringLauncherToForeground ?? true });
     options.setGamingBehaviour(isFirstRun ? defaultGamingBehaviour : nextProfileBehaviours[selectedProfileName] ?? defaultBehaviour);
     options.setWorkBehaviour(isFirstRun ? defaultWorkBehaviour : { closeLauncher: loadedSettings.workMode?.closeLauncher ?? true, showTaskbars: loadedSettings.workMode?.showTaskbars ?? true, showDesktopIcons: loadedSettings.workMode?.showDesktopIcons ?? true, doNotMinimizeWindows: loadedSettings.workMode?.doNotMinimizeWindows ?? true });
-    options.setFinishOptions(isFirstRun ? defaultFinishOptions : { startWithWindows: loadedSettings.startup?.startWithWindows ?? true, startMinimized: loadedSettings.startup?.startMinimizedToTray ?? false, startMenuShortcut: loadedSettings.startup?.createStartMenuShortcut ?? true, desktopShortcut: loadedSettings.startup?.createDesktopShortcut ?? true, consoleShellModeEnabled: loadedSettings.startup?.consoleShellModeEnabled ?? false, startupBehavior: loadedSettings.startup?.startupBehavior ?? 'AlwaysWorkMode', startupProfileId: loadedSettings.startup?.startupProfileId ?? null });
+    options.setFinishOptions(isFirstRun ? defaultFinishOptions : { startWithWindows: loadedSettings.startup?.startWithWindows ?? true, startMinimized: loadedSettings.startup?.startMinimizedToTray ?? false, startMenuShortcut: loadedSettings.startup?.createStartMenuShortcut ?? true, desktopShortcut: loadedSettings.startup?.createDesktopShortcut ?? true, startupBehavior: loadedSettings.startup?.startupBehavior ?? 'AlwaysWorkMode', startupProfileId: loadedSettings.startup?.startupProfileId ?? null });
     options.setHasUnsavedChanges(false); options.pendingSettingsOverrideRef.current = null;
   };
 }
