@@ -4,6 +4,9 @@ updates:
     directory: /src/GameShell.Ui
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Warsaw
     open-pull-requests-limit: 3
     groups:
       react-stack:
@@ -24,6 +27,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Warsaw
     open-pull-requests-limit: 3
     groups:
       sdl-runtime:
@@ -38,6 +44,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Warsaw
     open-pull-requests-limit: 1
     groups:
       actions-maintenance:
