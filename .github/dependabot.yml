@@ -33,9 +33,10 @@ updates:
     open-pull-requests-limit: 3
     groups:
       sdl-runtime:
-        patterns: ["SDL3-CS", "SDL3-CS.Windows"]
+        patterns: ["SDL3-CS*", "sdl3-cs*"]
       dotnet-maintenance:
         patterns: ["*"]
+        exclude-patterns: ["SDL3-CS*", "sdl3-cs*"]
         update-types: [minor, patch]
       dotnet-security:
         applies-to: security-updates
