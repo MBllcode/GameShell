@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.1.2] - 2026-10-27
+
 ### First-run setup
 
 - Discard the provisional profile when Back returns to its Displays step, including its application, desktop actions and shortcuts.
