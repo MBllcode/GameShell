@@ -1,147 +1,112 @@
+import { MoveApplicationMenu } from './MoveApplicationMenu';
+import { ProfileFilePicker } from './ProfileFilePicker';
+import { applicationDisplayId, findApplicationDisplay } from '../applicationDisplays';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LauncherIcon, type LauncherBrand } from './LauncherIcon';
-import { sendBridgeCommand } from '../../../bridge/webViewBridge';
-import type { DependencyStatus } from '../../../bridge/contracts';
-import { IconBadge, PageHeader, UiIcon } from '../../../shared/ui/UiPrimitives';
-
+import type { ProfileApplication, ProfileDisplayTarget } from '../../../bridge/contracts';
+import { PageHeader, UiIcon } from '../../../shared/ui/UiPrimitives';
 import type { LauncherType } from '../profileCommands';
 
-const launcherOptions: Array<{ value: LauncherType; title: string; descriptionKey: string; badge: string; brand: LauncherBrand }> = [
-  {
-    value: 'Playnite Fullscreen',
-    title: 'Playnite Fullscreen',
-    descriptionKey: 'launcher.playniteDescription',
-    badge: 'PLAYNITE',
-    brand: 'playnite'
-  },
-  {
-    value: 'Steam Big Picture',
-    title: 'Steam Big Picture',
-    descriptionKey: 'launcher.steamDescription',
-    badge: 'STEAM',
-    brand: 'steam'
-  },
-  {
-    value: 'Xbox App',
-    title: 'Xbox App',
-    descriptionKey: 'launcher.xboxDescription',
-    badge: 'XBOX',
-    brand: 'xbox'
-  }
-];
-
-export function LauncherStep({
-  stepNumber,
-  selectedProfileName,
-  launcher,
-  setLauncher
-}: {
+export function LauncherStep({ stepNumber, launcher, removeLauncher, applications, onChange, displays, disabled }: {
   stepNumber: number;
-  selectedProfileName: string;
   launcher: LauncherType;
-  setLauncher: (launcher: LauncherType) => void;
+  removeLauncher: () => void;
+  applications: ProfileApplication[];
+  onChange: (applications: ProfileApplication[]) => void;
+  displays: ProfileDisplayTarget[];
+  disabled: boolean;
 }) {
   const { t } = useTranslation();
-  const hasWorkingProfile = selectedProfileName.trim().length > 0;
-  const selectedProfileLabel = selectedProfileName || t('profile.noProfileSelected');
-  const [dependencies, setDependencies] = useState<DependencyStatus[]>([]);
-  const [dependencyError, setDependencyError] = useState<string | null>(null);
-
+  const [pickTarget, setPickTarget] = useState<ProfileDisplayTarget | null>(null);
+  const [draggedPath, setDraggedPath] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<{ app: ProfileApplication; index: number } | null>(null);
+  const [notice, setNoticeText] = useState('');
+  const [noticeVersion, setNoticeVersion] = useState(0);
+  const [noticePaused, setNoticePaused] = useState(false);
+  const setNotice = (text: string) => { setNoticeText(text); setNoticeVersion(value => value + 1); };
   useEffect(() => {
-    let isMounted = true;
-    const refreshDependencies = () => {
-      void sendBridgeCommand<DependencyStatus[]>('getDependencies')
-        .then((nextDependencies) => {
-          if (isMounted) {
-            setDependencies(nextDependencies);
-            setDependencyError(null);
-          }
-        })
-        .catch(() => {
-          if (isMounted) {
-            setDependencyError(t('launcher.dependencyCheckError'));
-          }
-        });
-    };
-
-    refreshDependencies();
-    const refreshTimer = window.setInterval(refreshDependencies, 2000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(refreshTimer);
-    };
-  }, [t]);
-
-  const selectedLauncherName = launcher === 'Playnite Fullscreen'
-    ? 'Playnite'
-    : launcher === 'Steam Big Picture'
-      ? 'Steam'
-      : 'Xbox App';
-  const getDependencyName = (launcherType: LauncherType) => launcherType === 'Playnite Fullscreen'
-    ? 'Playnite'
-    : launcherType === 'Steam Big Picture'
-      ? 'Steam'
-      : 'Xbox App';
-  const selectedDependency = launcher === 'None' ? undefined : dependencies.find((dependency) => dependency.name === selectedLauncherName);
-
-  const openDownloadPage = () => {
-    void sendBridgeCommand('openDependencyDownloadPage', { name: selectedLauncherName })
-      .catch(() => setDependencyError(t('launcher.downloadError')));
+    if (!notice || noticePaused) return;
+    const timer = window.setTimeout(() => { setNoticeText(''); setRemoved(null); }, removed ? 8000 : 3000);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeVersion, removed, noticePaused]);
+  const picking = pickTarget !== null;
+  const [error, setError] = useState<string | null>(null);
+  const targets = displays.filter(display => display.enabled).sort((a, b) => a.positionX - b.positionX || a.positionY - b.positionY);
+  const displayId = applicationDisplayId;
+  const update = (index: number, patch: Partial<ProfileApplication>) => onChange(applications.map((app, i) => i === index ? { ...app, ...patch } : app));
+  const add = (path: string) => {
+    if (!pickTarget) return;
+    if (applications.some(app => app.executablePath.toLowerCase() === path.toLowerCase())) {
+      setError(t('applications.duplicate'));
+    } else {
+      onChange([...applications, { executablePath: path, displayId: displayId(pickTarget), runMinimized: false }]);
+      setError(null);
+    }
+    setPickTarget(null);
   };
-
-  return (
-    <div className="wizard-copy">
-      <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('launcher.title')} description={t('launcher.description')} />
-      <div className="field-grid">
-        <div className="profile-target-line" aria-live="polite">
-          <IconBadge name="profile" size={16} />
-          <span>{t('launcher.activeProfile')}</span>
-          <strong>{selectedProfileLabel}</strong>
-        </div>
+  const renderApplication = (app: ProfileApplication, index: number) => {
+    const assigned = findApplicationDisplay(app.displayId, targets);
+    const name = app.executablePath.split(/[\\/]/).pop()?.replace(/\.exe$/i, '') ?? app.executablePath;
+    return <fieldset className="setup-app" key={app.executablePath} disabled={disabled || picking}>
+      <legend className="setup-app-accessible-name">{name}</legend><div className="setup-app-heading"><span className="setup-app-identity" draggable={!disabled && !picking} onDragStart={event => { event.dataTransfer.setData('application/x-gameshell-app', app.executablePath); event.dataTransfer.effectAllowed = 'move'; setDraggedPath(app.executablePath); }} onDragEnd={() => { setDraggedPath(null); setDropTarget(null); }} title={t('applications.drag')}><span className="setup-app-grip" aria-hidden="true">⠿</span>{name}</span></div>
+      <p className="application-path">{app.executablePath}</p>
+      <div className="setup-app-mode-label">{t('applications.visibility')}</div>
+      <div className="setup-app-modes" role="group" aria-label={t('applications.visibility')}>
+        <button type="button" aria-pressed={!app.runMinimized} onClick={() => update(index, { runMinimized: false })}><UiIcon name="check" size={14} />{t('applications.modeVisible')}</button>
+        <button type="button" aria-pressed={app.runMinimized} onClick={() => update(index, { runMinimized: true })}><UiIcon name="check" size={14} />{t('applications.modeBackground')}</button>
       </div>
-      <div className="launcher-grid" aria-label={t('launcher.title')} aria-disabled={!hasWorkingProfile}>
-        <button className={`launcher-card launcher-card--none ${launcher === 'None' ? 'selected' : ''}`} type="button" aria-pressed={launcher === 'None'} disabled={!hasWorkingProfile} onClick={() => setLauncher('None')}>
-          <span className="launcher-card-heading"><IconBadge name="display" size={20} /></span>
-          <strong>{t('launcher.none')}</strong><small>{t('launcher.noneDescription')}</small>
-        </button>
-        {launcherOptions.map((item) => {
-          const dependency = dependencies.find((candidate) => candidate.name === getDependencyName(item.value));
-
-          return (
-            <button
-              className={`launcher-card launcher-card--${item.brand} ${launcher === item.value ? 'selected' : ''}`}
-              key={item.value}
-              aria-pressed={launcher === item.value}
-              type="button"
-              onClick={() => setLauncher(item.value)}
-              disabled={!hasWorkingProfile}
-            >
-              <span className="launcher-card-heading">
-                <LauncherIcon brand={item.brand} />
-                <span className="launcher-badge">{item.badge}</span>
-              </span>
-              <strong>{item.title}</strong>
-              <small>{t(item.descriptionKey)}</small>
-              {dependency ? <span className={`launcher-status ${dependency.isDetected ? 'detected' : 'missing'}`}>{dependency.isDetected ? t('launcher.statusDetected') : t('launcher.statusMissing')}</span> : null}
-            </button>
-          );
-        })}
+      <p className="setup-app-mode-description" aria-live="polite">{t(app.runMinimized ? 'applications.modeBackgroundHint' : 'applications.modeVisibleHint')}</p>
+      <div className="setup-app-controls">
+      <MoveApplicationMenu label={t('applications.moveAction')} disabled={disabled || picking}
+        targets={targets.filter(display => display !== assigned).map(display => ({ id: displayId(display), name: display.identity.friendlyName }))}
+        onMove={id => { update(index, { displayId: id }); setRemoved(null); setNotice(t('applications.moved', { display: targets.find(display => displayId(display) === id)?.identity.friendlyName ?? '' })); }} />
+      <div className="setup-app-footer">
+        <button className="setup-app-remove" type="button" aria-label={t('applications.removeNamed', { name })} onClick={() => { setRemoved({ app, index }); onChange(applications.filter((_, i) => i !== index)); setNotice(t('applications.removed', { name })); }}>{t('applications.remove')}</button>
       </div>
-      {selectedDependency && !selectedDependency.isDetected ? (
-        <div className="launcher-install-panel" role="alert">
-          <div>
-            <h3>{t('launcher.notDetected', { name: selectedDependency.name })}</h3>
-            <p>{selectedDependency.message} {t('launcher.installPrompt', { name: selectedDependency.name })}</p>
+      </div>
+    </fieldset>;
+  };
+  const unassigned = applications.filter(app => !findApplicationDisplay(app.displayId, targets));
+  return <div className="wizard-copy application-workspace">
+    {pickTarget ? <ProfileFilePicker onPick={add} onClose={() => setPickTarget(null)} /> : null}
+    <PageHeader eyebrow={`${t('setup.step')} ${stepNumber}`} title={t('launcher.title')} description={t('applications.intro')} />
+    {launcher !== 'None' ? <div className="application-card"><p>{t('applications.legacy', { name: launcher })}</p><button type="button" className="secondary-button" disabled={disabled} onClick={removeLauncher}>{t('applications.remove')}</button></div> : null}
+    <div className="setup-workspace-toolbar"><span>{t('applications.dragHint')}</span></div>
+    <div className="setup-monitor-grid">
+      {targets.map((display, index) => {
+        const assigned = applications.filter(app => findApplicationDisplay(app.displayId, targets) === display);
+        return <section className={`setup-monitor ${dropTarget === displayId(display) ? 'setup-monitor--drop' : ''}`} key={displayId(display)} aria-label={display.identity.friendlyName}
+          onDragOver={event => { if (draggedPath && !disabled && !picking) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropTarget(displayId(display)); } }}
+          onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null); }}
+          onDrop={event => {
+            event.preventDefault();
+            const path = event.dataTransfer.getData('application/x-gameshell-app');
+            if (!disabled && !picking && draggedPath === path) {
+              const index = applications.findIndex(app => app.executablePath === path);
+              if (index >= 0) { update(index, { displayId: displayId(display) }); setRemoved(null); setNotice(t('applications.moved', { display: display.identity.friendlyName })); }
+            }
+            setDraggedPath(null); setDropTarget(null);
+          }}>
+          <header className="setup-monitor-heading">
+            <span className="setup-monitor-number" aria-hidden="true">{index + 1}</span>
+            <div><h3>{display.identity.friendlyName}</h3><p>{display.width} × {display.height}{display.isPrimary ? ` · ${t('applications.primary')}` : ''}</p></div>
+          </header>
+          <div className="setup-monitor-body">
+            {assigned.length ? assigned.map(app => renderApplication(app, applications.indexOf(app))) : <div className="setup-monitor-empty"><strong>{t('applications.emptyDisplay')}</strong><p>{t('applications.emptyDisplayHint')}</p></div>}
+            <button className="setup-monitor-add" type="button" disabled={disabled || picking} onClick={() => setPickTarget(display)}>+ {t(picking ? 'applications.picking' : 'applications.add')}</button>
           </div>
-          <button className="secondary-button" type="button" onClick={openDownloadPage} disabled={!hasWorkingProfile}>
-            <UiIcon name="launcher" size={15} />
-            {t('launcher.download', { name: selectedDependency.name })}
-          </button>
-        </div>
-      ) : null}
-      {dependencyError ? <p className="error-line" role="alert">{dependencyError}</p> : null}
+        </section>;
+      })}
     </div>
-  );
+    {unassigned.length ? <section className="setup-unassigned" aria-label={t('applications.unassigned')}><h3>{t('applications.unassigned')}</h3><p>{t('applications.unassignedHint')}</p><div className="setup-monitor-grid">{unassigned.map(app => renderApplication(app, applications.indexOf(app)))}</div></section> : null}
+    {!targets.length ? <p role="status">{t('applications.noDisplays')}</p> : null}
+    {notice ? <div className="setup-workspace-notice" onMouseEnter={() => setNoticePaused(true)} onMouseLeave={() => setNoticePaused(false)} onFocus={() => setNoticePaused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setNoticePaused(false); }}><span role="status">{notice}</span>{removed ? <button type="button" className="secondary-button" disabled={disabled || picking} onClick={() => {
+      if (!applications.some(app => app.executablePath.toLowerCase() === removed.app.executablePath.toLowerCase())) {
+        const next = [...applications]; next.splice(Math.min(removed.index, next.length), 0, removed.app); onChange(next);
+      }
+      setRemoved(null); setNotice(t('applications.restored'));
+    }}>{t('applications.undo')}</button> : null}</div> : null}
+    {error ? <p className="error-line" role="alert">{error}</p> : null}
+  </div>;
 }

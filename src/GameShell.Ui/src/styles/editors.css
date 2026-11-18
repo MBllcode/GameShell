@@ -864,3 +864,163 @@
   color: var(--text-secondary);
   font-family: var(--font-technical);
 }
+
+.profile-applications { display: grid; gap: 16px; margin-block: 16px; }
+.application-card { min-width: 0; padding: 16px; border: 1px solid var(--border-default); }
+.application-card legend { padding-inline: 8px; font-weight: 600; }
+.application-path { overflow-wrap: anywhere; color: var(--text-secondary); font-size: 0.8rem; }
+.application-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.application-fields label { display: grid; gap: 6px; flex: 1 1 220px; min-width: 0; }
+.application-fields select { width: 100%; min-width: 0; }
+
+/* Screen-first application workspace, using GameShell's existing palette and type. */
+.setup-monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 18px; align-items: start; }
+.setup-monitor { border: 1px solid var(--border-default); border-top: 3px solid var(--accent-strong); background: #111713; min-width: 0; }
+.setup-monitor-heading { display: flex; gap: 12px; align-items: center; padding: 18px; border-bottom: 1px solid var(--border-default); }
+.setup-monitor-heading h3 { font-size: 1rem; margin: 0 0 5px; }
+.setup-monitor-heading p { margin: 0; color: var(--text-secondary); font-size: .75rem; }
+.setup-monitor-number { display: grid; place-items: center; width: 44px; height: 32px; border: 2px solid var(--text-secondary); border-radius: 4px; font-family: var(--font-technical); color: var(--accent-strong); }
+.setup-monitor-count { margin-left: auto; color: var(--text-secondary); font-family: var(--font-technical); }
+.setup-monitor-body { display: grid; gap: 16px; padding: 16px; }
+.setup-app { min-width: 0; margin: 0; padding: 12px; background: #1a211c; border: 1px solid var(--border-default); border-radius: 6px; }
+.setup-app legend { padding: 0 7px; font-size: 1rem; font-weight: 600; }
+.setup-app-modes { display: flex; gap: 4px; padding: 4px; background: #0d120f; border-radius: 5px; margin: 4px 0 16px; }
+.setup-app-modes button { flex: 1; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--text-secondary); padding: 9px 6px; font: inherit; font-size: .76rem; cursor: pointer; }
+.setup-app-modes button[aria-pressed=true] { background: #283923; border-color: #6b934b; color: #dbf6c9; }
+.setup-app-target { display: grid; gap: 6px; color: var(--text-secondary); font-size: .75rem; }
+.setup-app-target select { width: 100%; min-width: 0; padding: 9px; color: var(--text-primary); background: #101612; border: 1px solid var(--border-default); border-radius: 4px; font: inherit; }
+.setup-app-footer { display: flex; align-items: start; gap: 12px; justify-content: space-between; margin-top: 14px; font-size: .72rem; color: var(--text-secondary); }
+.setup-app-footer details { min-width: 0; flex: 1; }
+.setup-app-footer summary { cursor: pointer; }
+.setup-app-remove { background: transparent; border: 0; color: #dca5a0; cursor: pointer; padding: 0; font: inherit; }
+.setup-monitor-add { width: 100%; padding: 12px; border: 1px dashed #73965a; border-radius: 5px; background: transparent; color: var(--accent-strong); cursor: pointer; font: inherit; font-size: .8rem; }
+.setup-monitor-add:hover { background: #23311e; }
+.setup-monitor-empty { padding: 24px 8px; text-align: center; }
+.setup-monitor-empty strong { font-size: .88rem; }
+.setup-monitor-empty p, .setup-app-help { color: var(--text-secondary); font-size: .78rem; line-height: 1.6; }
+.setup-app-help { margin-top: 22px; }
+.setup-unassigned { margin-top: 20px; padding: 16px; border: 1px solid #b28a45; background: #211d14; }
+.setup-unassigned h3 { margin-top: 0; color: #e8c27e; }
+.setup-unassigned > p { font-size: .8rem; }
+.application-workspace button:focus-visible, .application-workspace select:focus-visible, .application-workspace summary:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 3px; }
+.application-workspace button:disabled { opacity: .45; cursor: not-allowed; }
+
+.profile-file-picker { width: min(640px, 90vw); max-height: 85vh; overflow: auto; color: var(--text-primary); background: #111713; border: 1px solid var(--border-default); padding: 24px; border-radius: 10px; box-shadow: 0 24px 80px #0008; }
+.profile-file-picker::backdrop { background: #000a; }
+.profile-file-picker header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.profile-file-picker h2 { margin: 0; font-size: 1.15rem; }
+.file-picker-close { border: 0; background: transparent; color: var(--text-secondary); width: 32px; height: 32px; font-size: 1.5rem; cursor: pointer; }
+.file-picker-search { display: grid; gap: 9px; margin: 20px 0 12px; font-size: .8rem; color: var(--text-secondary); }
+.file-picker-search input { width: 100%; box-sizing: border-box; padding: 13px 14px; border-radius: 6px; background: #090e0b; border: 1px solid var(--border-default); color: var(--text-primary); font: inherit; font-size: .92rem; }
+.file-picker-search input:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.file-picker-results { display: grid; gap: 6px; max-height: 300px; min-height: 125px; overflow: auto; align-content: start; }
+.file-picker-results .file-picker-result { display: flex; align-items: center; text-align: left; gap: 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 12px; color: var(--text-primary); cursor: pointer; }
+.file-picker-results .file-picker-result:hover { background: #1a241c; }
+.file-picker-results .file-picker-result[aria-pressed=true] { background: #24331f; border-color: #6b934b; }
+.file-picker-result > span:last-child { min-width: 0; display: grid; gap: 5px; }
+.file-picker-result strong { font-size: .85rem; overflow-wrap: anywhere; }
+.file-picker-result small { font-size: .72rem; overflow-wrap: anywhere; color: var(--text-secondary); }
+.file-picker-check { color: var(--accent-strong); width: 20px; flex-shrink: 0; }
+.file-picker-empty { display: grid; gap: 8px; text-align: center; padding: 36px 16px; color: var(--text-secondary); font-size: .82rem; }
+.file-picker-empty strong { color: var(--text-primary); font-weight: 500; }
+.file-picker-status { font-size: .78rem; color: var(--text-secondary); padding: 8px 12px; }
+.file-picker-help { margin-block: 8px 16px; }
+.file-picker-help button, .file-picker-scope button { background: transparent; border: 0; padding: 4px 0; color: var(--text-secondary); text-decoration: underline; font: inherit; font-size: .75rem; cursor: pointer; }
+.file-picker-scope { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: .75rem; color: var(--text-secondary); }
+.file-picker-scope span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-picker-footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 18px; margin-top: 8px; border-top: 1px solid var(--border-default); }
+.file-picker-footer > div { display: flex; gap: 8px; }
+.file-picker-footer button { min-height: 38px; }
+.file-picker-footer .primary-button { min-width: 100px; }
+@media (max-width: 500px) { .profile-file-picker { padding: 16px; } .file-picker-footer { flex-wrap: wrap; } .file-picker-footer > div { margin-left: auto; } }
+
+.setup-workspace-toolbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; color: var(--text-secondary); font-size: .76rem; margin: 0 0 16px; }
+.setup-monitor--drop { outline: 2px solid var(--accent-strong); outline-offset: 3px; background: #1a2717; }
+.setup-app-identity { display: inline-flex; align-items: center; gap: 8px; cursor: grab; overflow-wrap: anywhere; }
+.setup-app-identity:active { cursor: grabbing; }
+.setup-app-grip { color: var(--text-secondary); font-weight: 400; }
+.setup-app-type { display: block; margin: 0 0 10px 24px; color: var(--text-secondary); font-size: .68rem; }
+.setup-app-details { font-size: .74rem; color: var(--text-secondary); }
+.setup-app-details summary { cursor: pointer; padding-block: 4px; }
+.setup-app-details .setup-app-target { margin-top: 12px; }
+.setup-app-details .application-path { margin-bottom: 0; font-size: .72rem; }
+.setup-app-footer { justify-content: flex-end; margin-top: 8px; }
+.setup-monitor-count { font-size: .7rem; white-space: nowrap; }
+.setup-monitor-heading > div { min-width: 0; }
+.setup-monitor-heading h3 { overflow-wrap: anywhere; }
+.setup-workspace-notice { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-top: 16px; padding: 12px 16px; background: #1d2a19; border: 1px solid var(--border-default); font-size: .8rem; }
+.setup-workspace-help { margin-top: 20px; font-size: .76rem; color: var(--text-secondary); }
+.setup-workspace-help summary { cursor: pointer; }
+
+/* Compact desktop application assignments. */
+.application-workspace .setup-workspace-toolbar { justify-content: flex-end; margin-bottom: 12px; font-size: .75rem; }
+.application-workspace .setup-monitor { border: 1px solid var(--border-default); border-top: 2px solid var(--accent-strong); border-radius: 0; background: transparent; padding: 0; box-shadow: none; }
+.application-workspace .setup-monitor-heading { border-bottom: 1px solid var(--border-default); padding: 14px 16px; gap: 12px; }
+.application-workspace .setup-monitor-number { border: 1px solid var(--text-secondary); border-radius: 0; width: 36px; height: 30px; background: transparent; color: var(--accent-strong); }
+.application-workspace .setup-monitor-heading h3 { font-size: .95rem; }
+.application-workspace .setup-monitor-heading p { font-size: .75rem; }
+.application-workspace .setup-monitor-body { padding: 0 14px 12px; gap: 0; }
+.application-workspace .setup-app { min-width: 0; border: 0; border-bottom: 1px solid var(--border-default); border-radius: 0; padding: 14px 0; background: transparent; box-shadow: none; }
+.application-workspace .setup-app-accessible-name { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.setup-app-heading { display: flex; align-items: center; }
+.application-workspace .setup-app-identity { font-size: .9rem; font-weight: 600; gap: 8px; }
+.application-workspace .setup-app-grip { color: var(--text-secondary); }
+.application-workspace .setup-app > .application-path { margin: 5px 0 12px; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: normal; text-overflow: clip; color: var(--text-secondary); font-size: .76rem; line-height: 1.45; opacity: 1; }
+.setup-app-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.application-workspace .setup-app-modes { display: inline-flex; flex: 0 1 auto; max-width: 100%; background: transparent; padding: 0; border: 1px solid var(--border-default); border-radius: 0; margin: 0; gap: 0; }
+.application-workspace .setup-app-modes button { border: 0; border-radius: 0; min-height: 32px; padding: 7px 9px; font-size: .73rem; }
+.application-workspace .setup-app-modes button[aria-pressed=true] { background: #a2d77518; color: var(--accent-strong); box-shadow: inset 0 -2px var(--accent-strong); }
+.application-workspace .setup-app-move { max-width: 100%; min-width: 0; width: auto; padding: 7px 24px 7px 8px; min-height: 32px; border: 1px solid var(--border-default); border-radius: 0; background-color: #111713; color: var(--text-secondary); font: inherit; font-size: .73rem; cursor: pointer; }
+.application-workspace .setup-app-footer { margin: 0 0 0 auto; }
+.application-workspace .setup-app-remove { font-size: .73rem; padding: 7px 0; }
+.application-workspace .setup-monitor-add {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent-strong);
+  margin-top: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: .78rem;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.application-workspace .setup-monitor-add:enabled:hover {
+  background-color: #222e1e;
+  border-color: #526746;
+}
+.application-workspace .setup-monitor-add:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .application-workspace .setup-monitor-add { transition: none; }
+}
+.application-workspace .setup-monitor--drop { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.application-workspace .setup-workspace-notice { position: sticky; bottom: 12px; width: fit-content; max-width: 100%; box-sizing: border-box; margin: 18px auto 0; border: 1px solid var(--border-default); border-radius: 0; background: #192218; }
+
+/* Matte entries and a consistent, keyboard-accessible display menu. */
+.application-workspace .setup-monitor { background: #111713; }
+.application-workspace .setup-monitor-body { padding: 12px; gap: 10px; }
+.application-workspace .setup-app { background: #1b231e; border: 1px solid var(--border-default); border-radius: 5px; padding: 13px 14px; }
+.application-workspace .setup-app-controls { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-default); }
+.application-workspace .setup-app { --app-control-height: 34px; }
+.application-workspace .setup-app-mode-label { margin-bottom: 7px; color: var(--text-secondary); font-size: .76rem; font-weight: 600; }
+.application-workspace .setup-app > .setup-app-mode-description { margin: 7px 0 0; color: #b7c2ba; font-size: .76rem; line-height: 1.45; }
+.application-workspace .setup-app-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 5px; background: #131a16; }
+.application-workspace .setup-app-modes button { position: relative; min-height: var(--app-control-height); padding: 6px 26px; border: 1px solid transparent; border-radius: 3px; color: #d0dad3; overflow-wrap: anywhere; }
+.application-workspace .setup-app-modes button .ui-icon { position: absolute; inset-inline-start: 8px; top: 50%; transform: translateY(-50%); }
+.application-workspace .setup-app-modes button:not([aria-pressed=true]) .ui-icon { visibility: hidden; }
+.application-workspace .setup-app-modes button[aria-pressed=true] { background: #304329; border-color: #566f46; color: #e2f7d3; box-shadow: none; }
+.application-workspace .setup-app-modes button:not(:disabled):hover { box-shadow: inset 0 0 0 1px #68766b; }
+.application-workspace .setup-app-controls button:focus-visible,
+.application-workspace .setup-app-modes button:focus-visible { outline: 2px solid #e0ebe3; outline-offset: 2px; }
+.application-workspace .setup-app-move { display: inline-flex; align-items: center; gap: 8px; width: max-content; min-height: var(--app-control-height); box-sizing: border-box; padding: 0 12px; border-radius: 4px; white-space: nowrap; background: #131a16; }
+.application-workspace .setup-app-move .ui-icon { display: block; flex: 0 0 14px; }
+.application-workspace .setup-app-remove { min-height: var(--app-control-height); }
+.app-move-menu { position: relative; min-width: 0; max-width: 100%; }
+.app-move-options { position: absolute; top: calc(100% + 5px); left: 0; z-index: 30; min-width: 100%; width: max-content; max-width: min(320px, 70vw); padding: 5px; box-sizing: border-box; border: 1px solid #526057; border-radius: 4px; background: #19211c; box-shadow: 0 8px 24px #0007; }
+.app-move-options button { display: block; width: 100%; border: 0; border-radius: 2px; background: #19211c; color: #edf2ee; padding: 10px 12px; text-align: left; font: inherit; font-size: .8rem; cursor: pointer; overflow-wrap: anywhere; }
+.application-workspace .app-move-options button:hover,
+.application-workspace .app-move-options button:focus-visible { background: #354139; color: #fff; outline: 1px solid #a1b0a5; outline-offset: -1px; }
+.application-workspace .setup-app > .application-path { color: #b7c2ba; }
+.application-workspace .setup-app-footer { margin-left: auto; }

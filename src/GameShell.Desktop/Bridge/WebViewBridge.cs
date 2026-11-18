@@ -351,6 +351,14 @@ public sealed class WebViewBridge
             ["restoreDisplayTest"] = async _ => await _displayTransitionService.RestorePendingTestAsync(),
             ["restorePreviousDisplayLayout"] = async _ => await _displayTransitionService.RestorePreviousLayoutAsync(),
             ["openDependencyDownloadPage"] = async payload => await OpenDependencyDownloadPageAsync(payload),
+            ["selectProfileExecutable"] = _ => Task.FromResult<object>(SelectProfileExecutable() ?? ""),
+            ["searchProfileFiles"] = async payload => await Task.Run<object>(() => ProfileFileSearch.Search(
+                WebViewPayloadReader.ReadOptionalString(payload, "query") ?? "", null)),
+            ["validateProfileFile"] = payload => {
+                var path = (WebViewPayloadReader.ReadOptionalString(payload, "path") ?? "").Trim().Trim('"');
+                if (!Path.IsPathFullyQualified(path) || !File.Exists(path)) throw new FileNotFoundException("File does not exist.");
+                return Task.FromResult<object>(Path.GetFullPath(path));
+            },
             ["selectDependencyPath"] = async payload => await SelectDependencyPathAsync(payload),
             ["setHotkeyCaptureActive"] = payload => Task.FromResult<object>(SetHotkeyCaptureActive(payload)),
             ["startControllerShortcutCapture"] = payload => Task.FromResult<object>(StartControllerShortcutCapture(payload)),
@@ -518,6 +526,16 @@ public sealed class WebViewBridge
         });
 
         return new DependencyActionResult(true, $"Otwarto stronę pobierania: {dependency.Name}", null);
+    }
+
+    private static string? SelectProfileExecutable()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "All files (*.*)|*.*|Applications (*.exe)|*.exe|Solutions (*.sln;*.slnx)|*.sln;*.slnx",
+            CheckFileExists = true
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
     private async Task<AppSettings> SelectDependencyPathAsync(JsonElement? payload)

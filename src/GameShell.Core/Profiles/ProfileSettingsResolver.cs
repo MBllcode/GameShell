@@ -58,12 +58,16 @@ public sealed class ProfileSettingsResolver
         var profileName = ResolveProfileName(settings.Display, requestedProfileName);
         var configuration = FindConfiguration(settings.Display, profileName);
 
+        var applications = configuration?.Applications ?? [];
+        var behaviour = ResolveBehaviour(settings.Display, settings.Gaming, profileName);
+
         return new AppSettings
         {
             Display = settings.Display,
             Launcher = configuration?.Launcher ?? settings.Launcher,
             GameShell = settings.GameShell,
-            Gaming = ResolveBehaviour(settings.Display, settings.Gaming, profileName),
+            ProfileApplications = applications,
+            Gaming = applications.Count == 0 ? behaviour : behaviour.ProtectProfileApplications(applications),
             WorkMode = settings.WorkMode,
             Controller = settings.Controller,
             Hotkeys = settings.Hotkeys,

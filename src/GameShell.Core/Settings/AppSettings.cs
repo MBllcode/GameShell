@@ -5,6 +5,8 @@ namespace GameShell.Core.Settings;
 public sealed class AppSettings
 {
     public int? SettingsSchemaVersion { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ProfileApplication> ProfileApplications { get; init; } = [];
     public DisplaySettings Display { get; set; } = new();
     public LauncherSettings Launcher { get; set; } = new();
     public GameShellSettings GameShell { get; set; } = new();
@@ -113,9 +115,12 @@ public sealed class GamingProfileConfiguration
     public string ProfileName { get; set; } = string.Empty;
     public GamingSettings Behaviour { get; set; } = new();
     public LauncherSettings Launcher { get; set; } = new();
+    public List<ProfileApplication> Applications { get; set; } = [];
     public GamingProfileHotkeys Hotkeys { get; set; } = new();
     public ControllerShortcutSettings? ControllerShortcut { get; set; }
 }
+
+public sealed record ProfileApplication(string ExecutablePath, string DisplayId, bool RunMinimized);
 
 public sealed class GamingProfileHotkeys
 {
@@ -160,6 +165,14 @@ public class GameShellSettings
 public sealed class GamingSettings : GameShellSettings
 {
     public List<string> GameProcessNames { get; set; } = [];
+
+    public GamingSettings ProtectProfileApplications(IReadOnlyList<ProfileApplication> applications)
+    {
+        var copy = (GamingSettings)MemberwiseClone();
+        copy.ProtectedProcessNames = [.. ProtectedProcessNames,
+            .. applications.Select(app => Path.GetFileNameWithoutExtension(app.ExecutablePath))];
+        return copy;
+    }
 
     public GamingSettings()
     {

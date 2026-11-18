@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Assign multiple apps and files to individual monitors and choose whether each window opens maximized or minimizes without activation.
+- Search common file types across ready drives, paste a path, or select a file directly. Open documents using their Windows file associations.
+- Keep full paths and launch controls visible, with drag and drop and a keyboard-accessible monitor menu.
+- Apply the assigned monitor when programs restore a previous window position. Expand borderless windows to the monitor bounds.
+- Close tracked profile application windows when restoring the default setup if its close-applications option is enabled.
+
 - Group routine Dependabot updates, keep the SDL wrapper/native runtime together, and limit normal update PRs to 3 npm, 3 NuGet and 1 Actions.
 - Keep other major upgrades individual and security updates in separate groups.
 - Document the solo-maintainer branch-protection and dependency review policy.

@@ -19,6 +19,9 @@ export type BridgeCommand =
   | 'restoreDisplayTest'
   | 'restorePreviousDisplayLayout'
   | 'openDependencyDownloadPage'
+  | 'selectProfileExecutable'
+  | 'searchProfileFiles'
+  | 'validateProfileFile'
   | 'selectDependencyPath'
   | 'setHotkeyCaptureActive'
   | 'startControllerShortcutCapture'
@@ -236,7 +239,14 @@ export interface GamingProfileHotkeys {
   enterWorkMode: string;
 }
 
+export interface ProfileApplication {
+  executablePath: string;
+  displayId: string;
+  runMinimized: boolean;
+}
+
 export interface GamingProfileConfiguration {
+  applications?: ProfileApplication[];
   profileName: string;
   behaviour: Partial<AppSettings['gaming']>;
   launcher: AppSettings['launcher'];

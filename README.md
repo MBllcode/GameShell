@@ -1,7 +1,7 @@
 <div align="center">
   <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg"><img src="docs/assets/wordmark-light.svg" width="324" height="88" alt="GameShell"></picture></h1>
   <p><strong>One PC. Your desk. Your TV. Your profiles. One click to switch.</strong></p>
-  <p>Switch displays, optionally launch an application, and prepare your desktop with profiles you control.</p>
+  <p>Switch displays, open apps and files on assigned monitors, and prepare your desktop with profiles you control.</p>
   <p>
     <a href="https://github.com/MBllcode/GameShell/releases/latest/download/GameShell.exe"><strong>Download GameShell.exe</strong></a> ·
     <a href="https://github.com/MBllcode/GameShell/releases/latest/download/GameShell-win-x64.zip">Download ZIP</a> ·
@@ -50,15 +50,15 @@ Add detected screens, drag them into position, and set the primary display, reso
 
 [![Displays page with the profile layout preview and per-monitor settings](docs/screenshots/displays.png)](docs/screenshots/displays.png)
 
-### 2. Choose an application — or none
+### 2. Assign apps and files to monitors
 
-The **Application** page offers **Don't launch anything**, Playnite Fullscreen, Steam Big Picture, and Xbox App. A TV profile can switch displays without opening a launcher; another profile can use that same TV with an application.
+In **Profile applications**, select **Add app or file** under a monitor. Search by name, paste a full path, or choose a file in the Windows picker. Search builds a local index of common file types across ready drives, including executables, Visual Studio solutions, spreadsheets, and PDFs. Documents open in their associated Windows app.
 
-[![Application page with no-application, Playnite, Steam and Xbox choices](docs/screenshots/application.png)](docs/screenshots/application.png)
+Use **Show window** to show a maximized window on its assigned monitor, or **In background** to minimize it without activating it. Move an entry with **Move to another screen** or drag its name to a different monitor. Each card shows the full path and launch mode. Leave the monitor lists empty for a display-only profile.
 
 ### 3. Decide what happens to the desktop
 
-Choose whether to hide desktop icons or the taskbar, move the cursor, or close and minimize windows. Selected applications are brought to the foreground automatically.
+Choose whether to hide desktop icons or the taskbar, move the cursor, or close and minimize windows. Enable the close-applications option in the default setup to request that profile application windows close when you return to it.
 
 [![Profile behaviour page with desktop, window and application actions](docs/screenshots/behaviour.png)](docs/screenshots/behaviour.png)
 

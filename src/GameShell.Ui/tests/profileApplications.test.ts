@@ -55,3 +55,23 @@ test('first run establishes a baseline before offering any profile', () => {
     assert.ok(copy['launcher.noApplication']);
   }
 });
+
+
+test('custom application assignments survive saving and reopening independently per profile', () => {
+  const applications = [
+    { executablePath: 'C:/Apps/audacity.exe', displayId: 'left', runMinimized: false },
+    { executablePath: 'C:/Apps/rekordbox.exe', displayId: 'right', runMinimized: true }
+  ];
+  const state = {
+    settings: null, selectedConsoleDisplay: null, selectedConsoleDisplays: [], gamingLayout: null,
+    gamingProfiles: [createProfile({ name: 'DJ', layout: { displays: [] } }, { applications }), createProfile({ name: 'Work', layout: { displays: [] } })],
+    activeGamingProfileName: 'DJ', gamingProfileBehaviours: {}, gamingProfileLaunchers: {}, gamingProfileHotkeys: {}, gamingProfileControllerShortcuts: {},
+    workModeControllerShortcut: null, workModeLayout: null, gamingBehaviour: {}, consoleBehaviour: {}, launcher: 'None', language: 'pl',
+    hotkeys: { consoleMode: '', gamingMode: '', workMode: '' }, workBehaviour: {}, finishOptions: { startupBehavior: 'AlwaysWorkMode' }
+  } as unknown as BuildSettingsPayloadState;
+  const payload = buildSettingsPayload(state, true);
+  const reopened = profilesFromSettings(JSON.parse(JSON.stringify(payload)));
+  assert.deepEqual(reopened[0].applications, applications);
+  assert.deepEqual(reopened[1].applications, []);
+  assert.equal(reopened[0].application, 'None');
+});
