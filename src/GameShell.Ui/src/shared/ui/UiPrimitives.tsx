@@ -29,7 +29,8 @@ export type UiIconName =
   | 'cursorOff'
   | 'windowClose'
   | 'windowMinimize'
-  | 'foreground';
+  | 'foreground'
+  | 'chevronDown';
 
 const iconPaths: Record<UiIconName, ReactNode> = {
   globe: <><circle cx="12" cy="12" r="8.4" /><path d="M3.9 12h16.2M12 3.6c2.1 2.2 3.1 5 3.1 8.4S14.1 18.2 12 20.4M12 3.6c-2.1 2.2-3.1 5-3.1 8.4s1 6.2 3.1 8.4" /></>,
@@ -46,6 +47,7 @@ const iconPaths: Record<UiIconName, ReactNode> = {
   save: <><path d="M4 3.5h12.5l3.5 3.5v13.5H4Z" /><path d="M7.5 3.5v6h8v-6M8 20.5v-6.2h8v6.2" /></>,
   profile: <><rect x="4" y="5" width="13" height="14" rx="1.4" /><path d="M7 8h7M7 11.5h5M7 15h3" /><path d="M17 8.5h2.2A1.8 1.8 0 0 1 21 10.3v7.2a1.5 1.5 0 0 1-1.5 1.5H9.2" /></>,
   check: <path d="m5.2 12.4 4.3 4.3 9.5-10" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
   plus: <><path d="M12 4v16M4 12h16" /></>,
   play: <path d="m9 5 10 7-10 7V5Z" />,
   trash: <><path d="M4.5 7.5h15M9 7.5V4h6v3.5M7 7.5l.8 12h8.4l.8-12M10 11v5.5M14 11v5.5" /></>,

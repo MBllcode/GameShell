@@ -46,7 +46,7 @@ export function buildSettingsPayload(
   const effectiveGamingProfiles = overrides?.gamingProfiles?.map(profile => {
     const current = state.gamingProfiles.find(candidate =>
       profile.id ? candidate.id === profile.id : candidate.name.toLowerCase() === profile.name.toLowerCase());
-    return current ? { ...profile, application: current.application, behaviour: current.behaviour,
+    return current ? { ...profile, application: current.application, behaviour: current.behaviour, applications: current.applications,
       hotkeys: current.hotkeys, controllerShortcut: current.controllerShortcut } : profile;
   }) ?? state.gamingProfiles;
   const effectiveActiveGamingProfileName = overrides?.activeGamingProfileName ?? state.activeGamingProfileName;
@@ -76,6 +76,7 @@ export function buildSettingsPayload(
         return {
           ...previous,
           profileName: profile.name,
+          applications: profile.applications ?? [],
           behaviour: { ...previous?.behaviour, ...profile.behaviour,
             startLauncher: profile.application !== 'None',
             bringLauncherToForeground: profile.application !== 'None' },

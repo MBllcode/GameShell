@@ -76,6 +76,9 @@ export function useSetupFeature(options: Options): ProfileSetupPageProps {
     displays: {
       displays: displayState.displays,
       profiles: displayState.gamingProfiles,
+      applicationDisplays: setupState.displayProfileDraft.profileName === options.selectedProfileName
+        ? setupState.displayProfileDraft.topology.displays : [],
+      updateProfileApplications: (applications: import('../../../bridge/contracts').ProfileApplication[]) => profileMutations.setProfileApplications(options.selectedProfileName, applications),
       selectedProfileName: options.selectedProfileName,
       displayValidationState: setupState.displayValidationState,
       displayDraftChange: setupState.handleDisplayDraftChange,

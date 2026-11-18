@@ -9,7 +9,7 @@ import {
   type ProfileHotkeysState
 } from '../utils';
 import { tryAssignProfileControllerShortcut, tryAssignProfileHotkey, tryAssignWorkModeControllerShortcut, tryAssignWorkModeHotkey } from '../shortcutAssignment';
-import type { ControllerShortcutSettings } from '../../../bridge/contracts';
+import type { ControllerShortcutSettings, ProfileApplication } from '../../../bridge/contracts';
 import type { LauncherType } from '../profileCommands';
 import { triggerValidationError } from '../../../shared/validation';
 
@@ -81,6 +81,11 @@ export function useProfileMutations({
     setGamingBehaviour(nextBehaviour);
     markUnsavedChanges();
   }, [markUnsavedChanges, setLauncher, setProfiles, profileBehaviours, gamingBehaviour, setGamingBehaviourForProfile, setProfiles, setGamingBehaviour]);
+
+  const setProfileApplications = (profileName: string, applications: ProfileApplication[]) => {
+    setProfiles(current => updateProfile(current, profileName, { applications }));
+    markUnsavedChanges();
+  };
 
   const updateProfileHotkey = useCallback((profileName: string, key: keyof ProfileHotkeysState, value: string): boolean => {
     const normalizedValue = normalizeHotkeyForDisplay(value);
@@ -155,6 +160,7 @@ export function useProfileMutations({
 
   return {
     setProfileLauncher,
+    setProfileApplications,
     updateGamingBehaviourFlag,
     updateProfileHotkey,
     updateProfileControllerShortcut,

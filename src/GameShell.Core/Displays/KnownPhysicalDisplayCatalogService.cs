@@ -260,7 +260,7 @@ public static class KnownPhysicalDisplayCatalogService
             }
 
             if (previous is null
-                || DisplayCapabilityPolicy.IsBetterCapability(DisplayCapabilityPolicy.CreateCapability(current), DisplayCapabilityPolicy.CreateCapability(previous)))
+                || IsPreferredObservation(current, previous))
             {
                 currentMatches[known] = current;
             }
@@ -286,6 +286,25 @@ public static class KnownPhysicalDisplayCatalogService
         {
             DeferredCount = identityMatches.Count(match => string.Equals(match.Result, "Deferred", StringComparison.Ordinal))
         };
+    }
+
+    private static bool IsPreferredObservation(DisplayDeviceInfo candidate, DisplayDeviceInfo existing)
+    {
+        // Windows can enumerate remembered/inactive routes alongside the live
+        // route. Capability alone must never let a stale route hide that target.
+        if (candidate.IsAvailable != existing.IsAvailable)
+        {
+            return candidate.IsAvailable;
+        }
+
+        if (candidate.IsEnabled != existing.IsEnabled)
+        {
+            return candidate.IsEnabled;
+        }
+
+        return DisplayCapabilityPolicy.IsBetterCapability(
+            DisplayCapabilityPolicy.CreateCapability(candidate),
+            DisplayCapabilityPolicy.CreateCapability(existing));
     }
 
     /// <summary>

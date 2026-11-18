@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace GameShell.Windows.Desktop;
 
-public sealed class WindowsWindowManagementService : IWindowsWindowManagementService
+public sealed partial class WindowsWindowManagementService : IWindowsWindowManagementService
 {
     private const int SwHide = 0;
     private const int SwShow = 5;

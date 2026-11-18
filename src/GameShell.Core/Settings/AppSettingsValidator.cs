@@ -308,6 +308,13 @@ public static class AppSettingsValidator
                 ProfileName = profile.Name,
                 Behaviour = behaviour,
                 Launcher = launcher,
+                Applications = existingConfiguration?.Applications?
+                    .Where(app => app is not null
+                        && !string.IsNullOrWhiteSpace(app.ExecutablePath)
+                        && Path.IsPathFullyQualified(app.ExecutablePath)
+                        && !string.IsNullOrWhiteSpace(app.DisplayId))
+                    .DistinctBy(app => app.ExecutablePath, StringComparer.OrdinalIgnoreCase)
+                    .ToList() ?? [],
                 Hotkeys = hotkeys,
                 ControllerShortcut = controllerShortcut
             });

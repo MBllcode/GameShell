@@ -10,6 +10,29 @@ public sealed class ProfileSettingsResolverTests
     private readonly ProfileSettingsResolver _resolver = new();
 
     [Fact]
+    public void EffectiveSettings_ProtectAssignedApplicationsWithoutMutatingSavedBehaviour()
+    {
+        var settings = new AppSettings();
+        var behaviour = new GamingSettings { CloseVisibleWindows = true };
+        var apps = new List<ProfileApplication>
+        {
+            new(@"C:\Apps\audacity.exe", "left", false),
+            new(@"C:\Apps\rekordbox.exe", "right", true)
+        };
+        settings.Display.GamingProfiles = [new DisplayLayoutProfile { Name = "DJ" }];
+        settings.Display.GamingProfileConfigurations =
+        [new GamingProfileConfiguration { ProfileName = "DJ", Behaviour = behaviour, Applications = apps }];
+
+        var effective = _resolver.BuildEffectiveSettings(settings, "DJ");
+
+        Assert.Equal(apps, effective.ProfileApplications);
+        Assert.Contains("audacity", effective.Gaming.ProtectedProcessNames);
+        Assert.Contains("rekordbox", effective.Gaming.ProtectedProcessNames);
+        Assert.DoesNotContain("audacity", behaviour.ProtectedProcessNames);
+        Assert.True(effective.Gaming.CloseVisibleWindows);
+    }
+
+    [Fact]
     public void ResolveProfileName_PrefersRequestedExistingProfile()
     {
         var display = new DisplaySettings

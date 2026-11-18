@@ -11,6 +11,7 @@ namespace GameShell.Windows.Desktop;
 
 public sealed class NativeModeWorkflowService : IModeWorkflowService
 {
+    private readonly HashSet<string> _sessionApplicationPaths = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan LauncherShutdownTimeout = TimeSpan.FromSeconds(2);
     private readonly ILogger<NativeModeWorkflowService> _logger;
     private readonly IRuntimeStateService _runtimeStateService;
@@ -121,6 +122,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     {
         var warnings = new List<string>();
         var behaviour = mode == GameShellMode.GamingProfile ? settings.Gaming : settings.GameShell;
+        var applications = mode == GameShellMode.GamingProfile ? settings.ProfileApplications : [];
         int? launcherProcessId = null;
         ExternalProcessLaunchResult? launcherStartResult = null;
 
@@ -146,7 +148,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             }
         }, cancellationToken);
 
-        if (ProfileApplicationPolicy.ShouldLaunch(settings.Launcher, behaviour) && _displayTransitionStabilityGuard is not null)
+        if ((applications.Count > 0 || ProfileApplicationPolicy.ShouldLaunch(settings.Launcher, behaviour)) && _displayTransitionStabilityGuard is not null)
         {
             var stabilityFailure = await _displayTransitionStabilityGuard.VerifyBeforeLauncherAsync(
                 expectedTargetLayout,
@@ -189,6 +191,23 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
                 await BringLauncherToForegroundAsync(settings, launcherProcessId, cancellationToken);
             }
         }, cancellationToken);
+
+        foreach (var application in applications)
+        {
+            await TryStepAsync($"open {Path.GetFileName(application.ExecutablePath)}", warnings, async () =>
+            {
+                var display = expectedTargetLayout?.Displays.FirstOrDefault(path => path.IsActive
+                    && (string.Equals(path.KnownPhysicalDisplayId, application.DisplayId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(path.Identity.MonitorDevicePath, application.DisplayId, StringComparison.OrdinalIgnoreCase)));
+                if (display is null)
+                {
+                    throw new InvalidOperationException("The assigned display is unavailable.");
+                }
+
+                _sessionApplicationPaths.Add(application.ExecutablePath);
+                await WindowsWindowManagementService.OpenProfileApplicationAsync(application, display, behaviour.HideTaskbar, cancellationToken);
+            }, cancellationToken);
+        }
 
         await TryStepAsync("move cursor", warnings, async () =>
         {
@@ -267,6 +286,20 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         CancellationToken cancellationToken = default)
     {
         var warnings = new List<string>();
+
+        await TryStepAsync("close profile applications", warnings, async () =>
+        {
+            if (settings.WorkMode.CloseLauncher)
+            {
+                foreach (var path in _sessionApplicationPaths)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    WindowsWindowManagementService.CloseProfileApplicationWindows(path);
+                }
+            }
+            _sessionApplicationPaths.Clear();
+            await Task.CompletedTask;
+        }, cancellationToken);
 
         await TryStepAsync("close launcher", warnings, async () =>
         {

@@ -1,5 +1,5 @@
 import { normalizeControllerShortcut } from '../shortcuts/controllers.ts';
-import type { AppSettings, ControllerShortcutSettings, DisplayLayoutProfile } from '../../bridge/contracts';
+import type { AppSettings, ControllerShortcutSettings, DisplayLayoutProfile, ProfileApplication } from '../../bridge/contracts';
 import type { LauncherType } from './profileCommands';
 import { normalizeHotkeyForDisplay } from '../shortcuts/hotkeys.ts';
 import { toLauncherType } from './profileCommands.ts';
@@ -16,6 +16,7 @@ export const DEFAULT_PROFILE_BEHAVIOUR: ProfileBehaviour = {
 // One editable record owns all settings for a profile. Legacy JSON maps are boundary projections.
 export type Profile = DisplayLayoutProfile & {
   application: LauncherType;
+  applications?: ProfileApplication[];
   behaviour: ProfileBehaviour;
   hotkeys: { enterProfile: string };
   controllerShortcut: ControllerShortcutSettings | null;
@@ -39,6 +40,7 @@ export function profilesFromSettings(settings: AppSettings): Profile[] {
     const behaviour = { ...persistedBehaviour, ...toGamingBehaviourState(persistedBehaviour) };
     return createProfile(layout, {
       behaviour,
+      applications: configured?.applications ?? [],
       application: behaviour.startLauncher ? toLauncherType(configured?.launcher?.type ?? settings.launcher.type) : 'None',
       hotkeys: { enterProfile: normalizeHotkeyForDisplay(configured?.hotkeys?.enterProfile ?? settings.hotkeys?.gamingMode ?? '') },
       controllerShortcut: normalizeControllerShortcut(configured?.controllerShortcut ?? settings.controller?.gamingMode ?? null)

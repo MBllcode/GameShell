@@ -6,6 +6,33 @@ namespace GameShell.Core.Tests;
 
 public sealed class KnownPhysicalDisplayCatalogTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Live_route_wins_over_inactive_duplicate_with_higher_capability(bool liveFirst)
+    {
+        var saved = CreateIdentity("TV");
+        var settings = new DisplaySettings
+        {
+            KnownPhysicalDisplays =
+            [new KnownPhysicalDisplay { Id = "tv", PhysicalIdentity = saved }]
+        };
+        var inactive = CreateDisplay(saved, 144, isEnabled: false);
+        var liveIdentity = saved with { AdapterLuid = 99, TargetId = 12 };
+        var live = CreateDisplay(liveIdentity, 60);
+
+        var result = KnownPhysicalDisplayCatalogService.Merge(
+            settings, liveFirst ? [live, inactive] : [inactive, live]);
+
+        var display = Assert.Single(result.Displays);
+        Assert.Equal(1, result.DuplicatesCollapsed);
+        Assert.True(display.IsEnabled);
+        Assert.True(display.IsAvailable);
+        Assert.Equal(liveIdentity, display.CurrentObservation?.Identity);
+        Assert.Equal(liveIdentity.AdapterLuid, display.AdapterLuid);
+        Assert.Equal(liveIdentity.TargetId, display.TargetId);
+    }
+
     [Fact]
     public void Degraded_observation_keeps_canonical_name_and_last_known_good_capability()
     {
