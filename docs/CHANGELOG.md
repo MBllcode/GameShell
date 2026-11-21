@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## [0.2.1] - 2026-11-21
+
+- Keep controller shortcuts active in the Windows tray and scoped to the profile where they were saved.
+- Reconcile duplicate Samsung HDMI display entries in the inventory and saved layouts. Keep the model name, usable resolution and per-display app assignments.
+- Save display positions as whole pixels and use a preferred or remembered resolution when the current one is unavailable.
+- Request normal window closing only for verified session-started apps when restoring Default setup.
+- Update the user guide and profile-applications screenshot.
+
+## [0.2.0] - 2026-11-18
 
 - Assign multiple apps and files to individual monitors and choose whether each window opens maximized or minimizes without activation.
 - Search common file types across ready drives, paste a path, or select a file directly. Open documents using their Windows file associations.

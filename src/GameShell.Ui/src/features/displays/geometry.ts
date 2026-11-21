@@ -70,9 +70,9 @@ export function placeRectNextToTopology(rect: GeometryRect, others: GeometryRect
 
 function alignmentCandidates(desired: GeometryRect, other: GeometryRect, threshold: number) {
   const candidates: GeometryRect[] = [];
-  const verticalAlignments = [other.top, other.top + (other.height - desired.height) / 2, rectBottom(other) - desired.height]
+  const verticalAlignments = [other.top, Math.round(other.top + (other.height - desired.height) / 2), rectBottom(other) - desired.height]
     .filter(top => Math.abs(top - desired.top) <= threshold);
-  const horizontalAlignments = [other.left, other.left + (other.width - desired.width) / 2, rectRight(other) - desired.width]
+  const horizontalAlignments = [other.left, Math.round(other.left + (other.width - desired.width) / 2), rectRight(other) - desired.width]
     .filter(left => Math.abs(left - desired.left) <= threshold);
 
   if (Math.abs(desired.left - rectRight(other)) <= threshold) verticalAlignments.forEach(top => candidates.push({ ...desired, left: rectRight(other), top }));

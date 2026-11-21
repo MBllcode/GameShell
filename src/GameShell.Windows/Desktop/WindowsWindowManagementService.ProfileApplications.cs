@@ -11,6 +11,7 @@ public sealed partial class WindowsWindowManagementService
         ProfileApplication application,
         DisplayPathSnapshot display,
         bool hideTaskbar,
+        SessionApplicationProcesses sessionApplications,
         CancellationToken cancellationToken)
     {
         var workArea = FindApplicationArea(display, hideTaskbar);
@@ -22,6 +23,7 @@ public sealed partial class WindowsWindowManagementService
         cancellationToken.ThrowIfCancellationRequested();
         var isExecutable = string.Equals(Path.GetExtension(application.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase);
         var window = isExecutable ? FindApplicationWindow(application.ExecutablePath) : IntPtr.Zero;
+        var requestedAtUtc = DateTime.UtcNow;
         using var started = window == IntPtr.Zero ? Process.Start(new ProcessStartInfo
         {
             FileName = application.ExecutablePath,
@@ -30,8 +32,13 @@ public sealed partial class WindowsWindowManagementService
             WindowStyle = application.RunMinimized ? ProcessWindowStyle.Minimized : ProcessWindowStyle.Normal
         }) : null;
 
+        if (isExecutable && started is not null)
+        {
+            sessionApplications.Track(started, application.ExecutablePath, requestedAtUtc);
+        }
+
         await StabilizeApplicationWindowAsync(
-            () => isExecutable ? FindApplicationWindow(application.ExecutablePath) : FindDocumentWindow(application.ExecutablePath, started),
+            () => isExecutable ? FindApplicationWindow(application.ExecutablePath) : FindDocumentWindow(application.ExecutablePath),
             candidate => IsOnAssignedDisplay(candidate, display, application.RunMinimized),
             candidate => PlaceProfileApplicationWindow(candidate, application, display, hideTaskbar),
             cancellationToken);
@@ -128,9 +135,7 @@ public sealed partial class WindowsWindowManagementService
         }
     }
 
-    private static readonly Dictionary<string, (IntPtr Window, int ProcessId)> DocumentWindows = new(StringComparer.OrdinalIgnoreCase);
-
-    private static IntPtr FindDocumentWindow(string path, Process? started)
+    private static IntPtr FindDocumentWindow(string path)
     {
         // Shell activation may reuse an existing editor and return no process.
         // Only accept a uniquely matching document title; never move an arbitrary foreground window.
@@ -149,49 +154,7 @@ public sealed partial class WindowsWindowManagementService
                 catch (InvalidOperationException) { }
             }
         }
-        return matches.Count == 1 ? RememberDocumentWindow(path, matches[0]) : IntPtr.Zero;
-    }
-
-    private static IntPtr RememberDocumentWindow(string path, IntPtr window)
-    {
-        GetWindowThreadProcessId(window, out var processId);
-        DocumentWindows[path] = (window, processId);
-        return window;
-    }
-
-    internal static void CloseProfileApplicationWindows(string executablePath)
-    {
-        if (DocumentWindows.Remove(executablePath, out var document))
-        {
-            GetWindowThreadProcessId(document.Window, out var currentProcessId);
-            if (currentProcessId == document.ProcessId) PostMessage(document.Window, WmClose, IntPtr.Zero, IntPtr.Zero);
-            return;
-        }
-        // Match the executable, not just its filename, and close every top-level
-        // window (including minimized ones). WM_CLOSE preserves save prompts.
-        var processes = new HashSet<int>();
-        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executablePath)))
-        {
-            using (process)
-            {
-                try
-                {
-                    if (string.Equals(process.MainModule?.FileName, executablePath, StringComparison.OrdinalIgnoreCase))
-                        processes.Add(process.Id);
-                }
-                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-                {
-                    // Exited or inaccessible process.
-                }
-            }
-        }
-        EnumWindows((window, _) =>
-        {
-            GetWindowThreadProcessId(window, out var processId);
-            if (processes.Contains(processId) && IsWindowVisible(window))
-                PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero);
-            return true;
-        }, IntPtr.Zero);
+        return matches.Count == 1 ? matches[0] : IntPtr.Zero;
     }
 
     internal static bool IsBorderlessApplicationWindow(int style) => (style & 0x00C00000) == 0; // WS_CAPTION

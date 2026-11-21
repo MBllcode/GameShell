@@ -277,7 +277,8 @@ public sealed class SettingsService : ISettingsService
             var knownDisplaysBeforeValidation = (settings.Display?.KnownPhysicalDisplays ?? [])
                 .Select(known => (known.Id, known.CanonicalFriendlyName, known.PhysicalIdentity))
                 .ToList();
-            var validated = AppSettingsValidator.Validate(settings);
+            var validated = AppSettingsValidator.Validate(settings, out var displayReferencesChanged);
+            wasMigrated |= displayReferencesChanged;
             if (wasMigrated && knownDisplaysBeforeValidation.Count > validated.Display.KnownPhysicalDisplays.Count)
             {
                 var remainingIds = validated.Display.KnownPhysicalDisplays

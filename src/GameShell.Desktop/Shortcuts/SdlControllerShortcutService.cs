@@ -197,6 +197,12 @@ public sealed class SdlControllerShortcutService : IDisposable
     {
         try
         {
+            if (!SdlNative.SDL_SetHint(SdlNative.JoystickAllowBackgroundEvents, "1"))
+            {
+                _logger.LogWarning("SDL3 could not enable controller input in the background. Error={Error}.",
+                    SdlNative.Utf8(SdlNative.SDL_GetError()));
+            }
+
             if (!SdlNative.SDL_InitSubSystem(SdlNative.InitFlags.Gamepad))
             {
                 var error = SdlNative.Utf8(SdlNative.SDL_GetError()) ?? "(unknown)";
@@ -365,7 +371,7 @@ public sealed class SdlControllerShortcutService : IDisposable
                 capturedButtonsForLog,
                 controllerId);
         }
-        if (capturePhase == ControllerCapturePhase.Idle)
+        if (capturePhase is ControllerCapturePhase.Idle or ControllerCapturePhase.TimedOut)
         {
             _ = HandleShortcutsAsync(controllerId, pressed, cancellationToken);
         }

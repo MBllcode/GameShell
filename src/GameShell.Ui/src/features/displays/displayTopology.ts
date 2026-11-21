@@ -82,7 +82,13 @@ export function normalizeCanvasTopology(topology: GamingProfileDisplayTopology):
 }
 
 export function profileTargetFromDisplay(display: DisplayDeviceInfo, fallbackModes: DisplayModeInfo[] = []): ProfileDisplayTarget {
-  const mode = fallbackModes.find(candidate => candidate.width === (display.width || display.preferredWidth) && candidate.height === (display.height || display.preferredHeight)) ?? fallbackModes[0];
+  const resolution = [
+    display,
+    { width: display.preferredWidth, height: display.preferredHeight },
+    display.lastKnownGoodCapability,
+    display.lastVerifiedActiveCapability,
+    ...fallbackModes
+  ].find(candidate => candidate && candidate.width > 0 && candidate.height > 0);
   return {
     knownPhysicalDisplayId: display.knownPhysicalDisplayId,
     identity: display.identity,
@@ -90,8 +96,8 @@ export function profileTargetFromDisplay(display: DisplayDeviceInfo, fallbackMod
     isPrimary: true,
     positionX: display.positionX,
     positionY: display.positionY,
-    width: mode?.width ?? display.width ?? display.preferredWidth,
-    height: mode?.height ?? display.height ?? display.preferredHeight,
+    width: resolution?.width ?? 0,
+    height: resolution?.height ?? 0,
     refreshPolicy: 'AutoHighest',
     fixedRefreshRateNumerator: 0,
     fixedRefreshRateDenominator: 0,
@@ -129,7 +135,7 @@ export function topologyToLegacy(topology: GamingProfileDisplayTopology, observe
     id: `${Date.now()}`,
     capturedAt: new Date().toISOString(),
     displays: topology.displays.map((display) => {
-      const observed = observedDisplays.find((candidate) => isSamePhysicalDisplay(candidate.identity, display.identity));
+      const observed = observedDisplays.find((candidate) => isSameProfileDisplay(candidate, display));
       return {
         knownPhysicalDisplayId: display.knownPhysicalDisplayId,
         identity: display.identity,

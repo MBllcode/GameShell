@@ -100,6 +100,11 @@ public static class DisplayIdentityMatcher
 
     public static DisplayIdentityMatchConfidence GetMatchConfidence(DisplayIdentity saved, DisplayIdentity detected)
     {
+        if (IsModelAlias(saved, detected) || IsModelAlias(detected, saved))
+        {
+            return DisplayIdentityMatchConfidence.MonitorPathAlias;
+        }
+
         if (HasConflictingStrongMetadata(saved, detected))
         {
             return DisplayIdentityMatchConfidence.IdentityConflict;
@@ -152,7 +157,8 @@ public static class DisplayIdentityMatcher
             or DisplayIdentityMatchConfidence.HistoricalRouteAlias
             or DisplayIdentityMatchConfidence.ExactMonitorDevicePath
             or DisplayIdentityMatchConfidence.EdidProduct
-            or DisplayIdentityMatchConfidence.EdidProductAndConnector;
+            or DisplayIdentityMatchConfidence.EdidProductAndConnector
+            or DisplayIdentityMatchConfidence.MonitorPathAlias;
     }
 
     public static bool IsSamePhysicalDisplay(DisplayIdentity left, DisplayIdentity right)
@@ -221,10 +227,7 @@ public static class DisplayIdentityMatcher
 
     private static bool IsRawReliableMatch(DisplayIdentityMatchConfidence confidence)
     {
-        return confidence is DisplayIdentityMatchConfidence.AdapterAndTargetRoute
-            or DisplayIdentityMatchConfidence.ExactMonitorDevicePath
-            or DisplayIdentityMatchConfidence.EdidProduct
-            or DisplayIdentityMatchConfidence.EdidProductAndConnector;
+        return IsReliableMatch(confidence) && confidence != DisplayIdentityMatchConfidence.HistoricalRouteAlias;
     }
 
     private static int GetConfidenceRank(DisplayIdentityMatchConfidence confidence)
@@ -235,6 +238,7 @@ public static class DisplayIdentityMatcher
             DisplayIdentityMatchConfidence.EdidProductAndConnector => 4,
             DisplayIdentityMatchConfidence.EdidProduct => 3,
             DisplayIdentityMatchConfidence.AdapterAndTargetRoute => 2,
+            DisplayIdentityMatchConfidence.MonitorPathAlias => 1,
             _ => 0
         };
     }
@@ -244,6 +248,29 @@ public static class DisplayIdentityMatcher
         return identity.AdapterLuid != 0 && identity.TargetId != 0
             || !string.IsNullOrWhiteSpace(identity.MonitorDevicePath)
             || HasValidEdid(identity);
+    }
+
+    internal static bool IsModelAlias(DisplayIdentity generic, DisplayIdentity model)
+    {
+        // Some Samsung TVs report a different EDID product code with the
+        // manufacturer-only name. The Windows device instance and HDMI target
+        // must still match before we treat the two identities as aliases.
+        const uint samsungEdidManufacturer = 0x2D4C;
+        return HasValidEdid(generic)
+            && HasValidEdid(model)
+            && generic.EdidManufacturerId == samsungEdidManufacturer
+            && model.EdidManufacturerId == samsungEdidManufacturer
+            && generic.EdidProductCodeId != model.EdidProductCodeId
+            && string.Equals(generic.FriendlyName?.Trim(), "SAMSUNG", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(model.FriendlyName)
+            && model.FriendlyName.Any(char.IsLetter)
+            && model.FriendlyName.Any(char.IsAsciiDigit)
+            && generic.TargetId != 0
+            && generic.TargetId == model.TargetId
+            && generic.ConnectorInstance == model.ConnectorInstance
+            && string.Equals(generic.OutputTechnology, "HDMI", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(model.OutputTechnology, "HDMI", StringComparison.OrdinalIgnoreCase)
+            && HasSameStableMonitorPath(generic, model);
     }
 
     private static bool IsCompatibleRouteFamily(DisplayIdentity left, DisplayIdentity right)

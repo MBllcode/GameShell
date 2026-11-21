@@ -54,6 +54,8 @@ Before sharing a runtime change, check:
 4. Reconnect a display and confirm stable inventory, identity matching, and available refresh modes.
 5. Resize the main window through intermediate widths/heights; check the footer, last controls, detected displays, and scaled canvas dragging.
 6. Confirm rejected duplicate shortcuts remain local and do not change the persisted binding.
+7. Close the main window to the tray. Use a controller shortcut to activate a profile, then restore Default setup with a separate combination.
+8. Check that display reconciliation keeps saved app assignments. With **Close profile applications** enabled, verify that a session-started app receives a close request and a copy opened before the profile stays open.
 
 For optional LAN control, follow [Remote Control](remote-control.md) and [Home Assistant](home-assistant.md). HTTP acceptance alone does not prove a completed profile transition.
 
@@ -103,7 +105,7 @@ To reproduce assets locally:
 # artifacts\releases\0.1.0\
 ```
 
-The packaging version override is optional; normal developer builds use the version in the desktop project. Release-asset creation checks that the EXE product version matches the requested version. ZIPs contain only the EXE, without local settings, logs, credentials or WebView cache.
+The packaging version override is optional. Normal developer builds use the version in the desktop project. Release-asset creation checks that the EXE product version matches the requested version. The ZIP includes the EXE and license texts.
 
 ## Security and license checks
 

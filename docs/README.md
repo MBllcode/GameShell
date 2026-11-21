@@ -5,7 +5,7 @@
 | Start here | What you will find |
 | --- | --- |
 | [Downloads](https://github.com/MBllcode/GameShell/releases/latest) | Ready-to-run Windows EXE and ZIP |
-| [User guide](user-guide.md) | Save a work layout, create profiles, configure launchers and shortcuts |
+| [User guide](user-guide.md) | Save a work layout, create profiles, assign apps and files to monitors, and configure shortcuts |
 | [Architecture](architecture.md) | Project boundaries, transition pipeline, persistence and native integrations |
 | [Development](development.md) | Prerequisites, build/test/package commands and manual verification |
 | [Remote Control](remote-control.md) | Optional local HTTP API, authentication and endpoints |
@@ -26,4 +26,4 @@ docs/               User/developer guides and screenshots
 .github/workflows/  Windows build and test automation
 ```
 
-Generated bundles, packages, dependency directories and local diagnostics stay outside version control. Screenshots in `screenshots/` are lossless PNG captures of the running app's WebView renderer; they show real configured profiles and connected displays.
+Generated bundles, packages, dependency directories and local diagnostics stay outside version control. Screenshots in `screenshots/` are lossless PNG captures of the interface with example profiles and displays.

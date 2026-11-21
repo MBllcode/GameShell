@@ -43,7 +43,7 @@ export function profilesFromSettings(settings: AppSettings): Profile[] {
       applications: configured?.applications ?? [],
       application: behaviour.startLauncher ? toLauncherType(configured?.launcher?.type ?? settings.launcher.type) : 'None',
       hotkeys: { enterProfile: normalizeHotkeyForDisplay(configured?.hotkeys?.enterProfile ?? settings.hotkeys?.gamingMode ?? '') },
-      controllerShortcut: normalizeControllerShortcut(configured?.controllerShortcut ?? settings.controller?.gamingMode ?? null)
+      controllerShortcut: normalizeControllerShortcut(configured?.controllerShortcut)
     });
   });
 }

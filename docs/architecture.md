@@ -32,7 +32,7 @@ flowchart LR
 1. UI, tray, shortcut, or API resolves a command through `IModeCommandService`.
 2. The session manager serializes lifecycle work and resolves the profile's app assignments, legacy launcher, behaviour, and shortcuts.
 3. Display discovery waits for stable inventory. The transition service applies the requested topology and verifies it.
-4. The Windows workflow applies enabled desktop actions, waits for display stability before launching, and places application windows on the assigned displays. Documents use Windows file associations. The workflow tracks paths during the session for the optional close-applications action on return to the default setup.
+4. The Windows workflow applies enabled desktop actions, waits for display stability before launching, and places application windows on the assigned displays. Documents use Windows file associations. The workflow records the process ID and start time for launches it can verify. Default setup can request a normal close for those processes after checking their identity again.
 5. `ProfileApplicationPolicy` enables game monitoring only for supported applications with launch enabled. Display-only profiles stay `ProfileActive` without monitoring or recovery. Default setup runs the restoration path; transition failures can use the captured rollback layout.
 
 Startup resolves one target from startup preferences and committed runtime state. Default setup reconciliation also restores desktop behaviour when the display topology already matches; matching monitors alone does not imply that the taskbar, cursor, or launcher state is correct.

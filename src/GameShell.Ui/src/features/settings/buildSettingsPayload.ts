@@ -55,7 +55,6 @@ export function buildSettingsPayload(
   const activeProfile = effectiveGamingProfiles.find(profile => profile.name === activeProfileName);
   const savedGamingBehaviour = activeProfile?.behaviour ?? state.gamingBehaviour;
   const savedLauncher = activeProfile?.application ?? state.launcher;
-  const activeProfileControllerShortcut = activeProfile?.controllerShortcut;
   const launcherSettings = getLauncherSettings(savedLauncher);
   const savedHotkeys = activeProfile?.hotkeys ?? { enterProfile: state.hotkeys.gamingMode };
 
@@ -93,7 +92,7 @@ export function buildSettingsPayload(
     gameShell: { ...state.settings?.gameShell, ...state.consoleBehaviour, completionDelaySeconds: state.settings?.gameShell.completionDelaySeconds ?? 5 },
     gaming: { ...state.settings?.gaming, ...savedGamingBehaviour, startLauncher: savedLauncher !== 'None', bringLauncherToForeground: savedLauncher !== 'None', protectedProcessNames: state.settings?.gaming?.protectedProcessNames ?? [], closeOnlyProcessNames: state.settings?.gaming?.closeOnlyProcessNames ?? [], completionDelaySeconds: state.settings?.gaming?.completionDelaySeconds ?? 5 },
     workMode: { ...state.settings?.workMode, ...state.workBehaviour, defaultDisplayLayout: state.workModeLayout, taskbarRestoreDelaySeconds: state.settings?.workMode.taskbarRestoreDelaySeconds ?? 3, desktopIconsDelaySeconds: state.settings?.workMode.desktopIconsDelaySeconds ?? 15, completionDelaySeconds: state.settings?.workMode.completionDelaySeconds ?? 20 },
-    controller: { ...state.settings?.controller, enabled: effectiveGamingProfiles.some(profile => (profile.controllerShortcut?.buttons.length ?? 0) > 0) || (state.workModeControllerShortcut?.buttons.length ?? 0) > 0 || state.settings?.controller?.enabled || false, consoleMode: state.settings?.controller?.consoleMode ?? null, gamingMode: activeProfileName ? normalizeControllerShortcut(activeProfileControllerShortcut) : normalizeControllerShortcut(state.settings?.controller?.gamingMode ?? null), workMode: normalizeControllerShortcut(state.workModeControllerShortcut) },
+    controller: { ...state.settings?.controller, enabled: effectiveGamingProfiles.some(profile => (profile.controllerShortcut?.buttons.length ?? 0) > 0) || (state.workModeControllerShortcut?.buttons.length ?? 0) > 0 || state.settings?.controller?.enabled || false, consoleMode: state.settings?.controller?.consoleMode ?? null, gamingMode: null, workMode: normalizeControllerShortcut(state.workModeControllerShortcut) },
     hotkeys: { ...state.settings?.hotkeys, consoleMode: normalizeHotkeyForDisplay(state.hotkeys.consoleMode), gamingMode: normalizeHotkeyForDisplay(savedHotkeys.enterProfile || state.hotkeys.gamingMode), workMode: normalizeHotkeyForDisplay(state.hotkeys.workMode) },
     startup: { ...state.settings?.startup, startWithWindows: state.finishOptions.startWithWindows, startMinimizedToTray: state.finishOptions.startMinimized, createStartMenuShortcut: state.finishOptions.startMenuShortcut, createDesktopShortcut: state.finishOptions.desktopShortcut, startupBehavior: state.finishOptions.startupBehavior, startupProfileId: state.finishOptions.startupBehavior === 'AlwaysProfile' ? state.finishOptions.startupProfileId : null },
     ui: { ...state.settings?.ui, closeToTray: true, isFirstRunCompleted, language: normalizeLanguageCode(state.language) }

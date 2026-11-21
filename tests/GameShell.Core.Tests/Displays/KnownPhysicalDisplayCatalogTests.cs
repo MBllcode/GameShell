@@ -992,6 +992,122 @@ public sealed class KnownPhysicalDisplayCatalogTests
         Assert.Equal(2, result.Displays.Count(display => display.Name == "S90F"));
     }
 
+    [Fact]
+    public void Samsung_hdmi_model_alias_collapses_both_saved_entries_and_keeps_the_primary_layout()
+    {
+        var generic = new DisplayIdentity
+        {
+            FriendlyName = "SAMSUNG",
+            MonitorDevicePath = @"\\?\DISPLAY#SAM77F2#5&197e7451&1&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+            EdidIdsValid = true,
+            EdidManufacturerId = 11596,
+            EdidProductCodeId = 30706,
+            OutputTechnology = "HDMI",
+            AdapterLuid = 76805,
+            TargetId = 4352
+        };
+        var model = generic with
+        {
+            FriendlyName = "S90F",
+            MonitorDevicePath = generic.MonitorDevicePath.Replace("SAM77F2", "SAM77FC", StringComparison.Ordinal),
+            EdidProductCodeId = 30716,
+            AdapterLuid = 71250
+        };
+        var target = new ProfileDisplayTarget
+        {
+            Identity = generic, KnownPhysicalDisplayId = "saved-tv", Enabled = true, IsPrimary = true,
+            PositionX = 3840, Width = 3840, Height = 2160
+        };
+        var profile = new DisplayLayoutProfile
+        {
+            Name = "CONSOLE",
+            DisplayTopology = new GamingProfileDisplayTopology
+            {
+                Displays =
+                [
+                    target,
+                    new ProfileDisplayTarget
+                    {
+                        Identity = model, KnownPhysicalDisplayId = "model-tv", Enabled = true,
+                        PositionX = 7680, PositionY = 1080
+                    }
+                ]
+            },
+            Layout = new DisplayLayoutSnapshot
+            {
+                Displays =
+                [
+                    new DisplayPathSnapshot
+                    {
+                        Identity = generic, KnownPhysicalDisplayId = "saved-tv", IsActive = true, IsPrimary = true,
+                        PositionX = 3840, Width = 3840, Height = 2160
+                    },
+                    new DisplayPathSnapshot { Identity = model, KnownPhysicalDisplayId = "model-tv", IsActive = true }
+                ]
+            }
+        };
+        var settings = new DisplaySettings
+        {
+            GamingProfiles = [profile],
+            GamingLayout = profile.Layout,
+            GamingProfileConfigurations =
+            [
+                new GamingProfileConfiguration
+                {
+                    ProfileName = "CONSOLE",
+                    Applications =
+                    [
+                        new ProfileApplication(@"C:\Games\Launcher.exe", "MODEL-TV", true),
+                        new ProfileApplication(@"C:\Games\Client.exe", generic.MonitorDevicePath, false),
+                        new ProfileApplication(@"C:\Games\Other.exe", "other-monitor", false)
+                    ]
+                }
+            ],
+            KnownPhysicalDisplays =
+            [
+                new KnownPhysicalDisplay { Id = "saved-tv", CanonicalFriendlyName = "SAMSUNG", PhysicalIdentity = generic },
+                new KnownPhysicalDisplay { Id = "model-tv", CanonicalFriendlyName = "S90F", PhysicalIdentity = model }
+            ]
+        };
+
+        Assert.True(KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings));
+        KnownPhysicalDisplayCatalogService.NormalizeCanonicalNames(settings);
+        var known = Assert.Single(settings.KnownPhysicalDisplays);
+        Assert.Equal("saved-tv", known.Id);
+        Assert.Equal(model, known.PhysicalIdentity);
+        Assert.Equal("S90F", known.CanonicalFriendlyName);
+        Assert.Equal(known.Id, target.KnownPhysicalDisplayId);
+        Assert.Equal(model, target.Identity);
+        Assert.Same(target, Assert.Single(profile.DisplayTopology.Displays));
+        Assert.True(target.IsPrimary);
+        Assert.Equal((3840, 2160, 3840), (target.Width, target.Height, target.PositionX));
+        foreach (var layout in new[] { profile.Layout, settings.GamingLayout! })
+        {
+            var saved = Assert.Single(layout.Displays);
+            Assert.Equal(known.Id, saved.KnownPhysicalDisplayId);
+            Assert.Equal(model, saved.Identity);
+            Assert.True(saved.IsPrimary);
+            Assert.Equal((3840, 2160, 3840), (saved.Width, saved.Height, saved.PositionX));
+        }
+        var apps = Assert.Single(settings.GamingProfileConfigurations).Applications;
+        Assert.Equal(new ProfileApplication(@"C:\Games\Launcher.exe", known.Id, true), apps[0]);
+        Assert.Equal(new ProfileApplication(@"C:\Games\Client.exe", known.Id, false), apps[1]);
+        Assert.Equal("other-monitor", apps[2].DisplayId);
+        Assert.False(KnownPhysicalDisplayCatalogService.NormalizeCanonicalNames(settings));
+
+        var catalog = KnownPhysicalDisplayCatalogService.Merge(settings, [CreateDisplay(generic, 60, isEnabled: false)]);
+        var display = Assert.Single(catalog.Displays);
+        Assert.Equal("S90F", display.Name);
+        Assert.True(display.IsAvailable);
+        Assert.Equal("SAMSUNG", display.CurrentObservation?.CurrentObservedName);
+
+        var differentDevice = model with
+        {
+            MonitorDevicePath = model.MonitorDevicePath.Replace("197e7451", "197e7452", StringComparison.Ordinal)
+        };
+        Assert.False(DisplayIdentityMatcher.IsReliableMatch(generic, differentDevice));
+    }
+
     private static DisplayDeviceInfo CreateDisplay(string name, uint refresh, bool isEnabled = true)
     {
         return CreateDisplay(CreateIdentity(name), refresh, isEnabled);
