@@ -8,7 +8,9 @@ public static class AppSettingsValidator
 {
     public const int CurrentSettingsSchemaVersion = 5;
 
-    public static AppSettings Validate(AppSettings settings)
+    public static AppSettings Validate(AppSettings settings) => Validate(settings, out _);
+
+    internal static AppSettings Validate(AppSettings settings, out bool displayReferencesChanged)
     {
         settings.SettingsSchemaVersion = CurrentSettingsSchemaVersion;
         settings.Display ??= new DisplaySettings();
@@ -52,8 +54,10 @@ public static class AppSettingsValidator
         NormalizeGamingProfiles(settings.Display);
         NormalizeStartupProfileReference(settings);
         KnownPhysicalDisplayCatalogService.MigrateLegacyProfileCapabilities(settings.Display);
-        KnownPhysicalDisplayCatalogService.NormalizeCanonicalNames(settings.Display);
-        NormalizeGamingProfileConfigurations(settings.Display, settings.Gaming, settings.Launcher, settings.Hotkeys);
+        displayReferencesChanged = KnownPhysicalDisplayCatalogService.NormalizeCanonicalNames(settings.Display);
+        NormalizeGamingProfileConfigurations(
+            settings.Display, settings.Gaming, settings.Launcher, settings.Hotkeys,
+            settings.Controller.Enabled ? settings.Controller.GamingMode : null);
         new ShortcutConflictNormalizer().Normalize(settings);
 
         return settings;
@@ -252,7 +256,8 @@ public static class AppSettingsValidator
         DisplaySettings display,
         GamingSettings defaultBehaviour,
         LauncherSettings defaultLauncher,
-        HotkeySettings defaultHotkeys)
+        HotkeySettings defaultHotkeys,
+        ControllerShortcutSettings? legacyGamingShortcut)
     {
         if (display.GamingProfiles.Count == 0)
         {
@@ -263,6 +268,9 @@ public static class AppSettingsValidator
 
         var normalized = new List<GamingProfileConfiguration>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var legacyShortcutOwner = display.GamingProfileConfigurations.Count == 0
+            ? display.ActiveGamingProfileName
+            : null;
 
         foreach (var profile in display.GamingProfiles)
         {
@@ -278,7 +286,9 @@ public static class AppSettingsValidator
                 EnterProfile = defaultHotkeys.GamingMode,
                 EnterWorkMode = defaultHotkeys.WorkMode
             };
-            var controllerShortcut = existingConfiguration?.ControllerShortcut;
+            var controllerShortcut = string.Equals(profile.Name, legacyShortcutOwner, StringComparison.OrdinalIgnoreCase)
+                ? legacyGamingShortcut
+                : existingConfiguration?.ControllerShortcut;
 
             behaviour.CompletionDelaySeconds = Math.Clamp(behaviour.CompletionDelaySeconds, 0, 600);
             behaviour.ProtectedProcessNames ??= [];

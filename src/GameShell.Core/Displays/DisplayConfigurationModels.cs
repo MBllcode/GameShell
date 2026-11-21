@@ -13,6 +13,7 @@ public enum DisplayIdentityMatchConfidence
 {
     None,
     WeakFriendlyName,
+    MonitorPathAlias,
     EdidProduct,
     EdidProductAndConnector,
     AdapterAndTargetRoute,

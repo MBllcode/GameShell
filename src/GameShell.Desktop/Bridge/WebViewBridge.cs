@@ -404,11 +404,12 @@ public sealed class WebViewBridge
 
         LogGamingProfileTopologies(settings);
         await SaveAndApplySettingsAsync(settings);
-        if (settings.Ui.IsFirstRunCompleted)
+        var savedSettings = await _settingsService.LoadAsync();
+        if (savedSettings.Ui.IsFirstRunCompleted)
         {
             await _modeCommandService.GetStatusAsync();
         }
-        return settings;
+        return savedSettings;
     }
 
     private void LogGamingProfileTopologies(AppSettings settings)

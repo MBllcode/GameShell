@@ -106,6 +106,11 @@ internal static class DisplayCatalogIdentity
         }
 
         known.HistoricalIdentities ??= [];
+        if (PromoteModelAlias(known, observedIdentity))
+        {
+            return true;
+        }
+
         if (known.PhysicalIdentity.Equals(observedIdentity)
             || known.HistoricalIdentities.Any(identity => identity.Equals(observedIdentity)))
         {
@@ -113,6 +118,20 @@ internal static class DisplayCatalogIdentity
         }
 
         known.HistoricalIdentities.Add(observedIdentity);
+        return true;
+    }
+
+    internal static bool PromoteModelAlias(KnownPhysicalDisplay known, DisplayIdentity candidate)
+    {
+        var previous = known.PhysicalIdentity;
+        if (!DisplayIdentityMatcher.IsModelAlias(previous, candidate))
+        {
+            return false;
+        }
+
+        known.CanonicalFriendlyName = candidate.FriendlyName;
+        known.PhysicalIdentity = candidate;
+        AddHistoricalIdentity(known, previous);
         return true;
     }
 

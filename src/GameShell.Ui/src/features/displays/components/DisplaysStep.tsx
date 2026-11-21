@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { DisplayDeviceInfo, DisplayLayoutProfile, DisplayLayoutSnapshot, DisplayModeInfo, DisplayModeQueryResult, GamingProfileDisplayTopology, ProfileDisplayTarget } from '../../../bridge/contracts';
 import { normalizeGamingProfileName } from '../../profiles/utils';
 import { computeTopologyBounds, createCanvasTransform, getDockingGuides, rectFromPosition, rectToCanvas, snapAndResolve, type CanvasTransform, type GeometryRect } from '../geometry';
-import { areTopologiesEqual, deduplicatePhysicalDisplays, formatDisplayResolution, getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, hasValidFixedRefresh, isSamePhysicalDisplay, isSameProfileDisplay, normalizeCanvasTopology, normalizeTopologyPrimary, profileTargetForAddition, topologyFromLegacy } from '../displayTopology';
+import { areTopologiesEqual, deduplicatePhysicalDisplays, formatDisplayResolution, getProfileTopology, getRefreshPolicy, getRefreshSelectionState, getTopologyEditorErrors, hasValidFixedRefresh, isSameProfileDisplay, normalizeCanvasTopology, normalizeTopologyPrimary, profileTargetForAddition, topologyFromLegacy } from '../displayTopology';
 import { sendBridgeCommand } from '../../../bridge/webViewBridge';
 import { IconBadge, PageHeader, UiIcon } from '../../../shared/ui/UiPrimitives';
 
@@ -102,7 +102,7 @@ export function DisplaysStep({
 
   useEffect(() => {
     let cancelled = false;
-    const observed = selectedTarget ? logicalDisplays.find((display) => isSamePhysicalDisplay(display.identity, selectedTarget.identity)) : null;
+    const observed = selectedTarget ? logicalDisplays.find((display) => isSameProfileDisplay(display, selectedTarget)) : null;
     if (!selectedTarget || !observed || !observed.isEnabled) {
       setSelectedDisplayModes([]);
       return () => { cancelled = true; };
@@ -113,7 +113,7 @@ export function DisplaysStep({
       if (!cancelled) setSelectedDisplayModes([]);
     });
     return () => { cancelled = true; };
-  }, [logicalDisplays, selectedTarget?.identity, selectedTarget?.width, selectedTarget?.height]);
+  }, [logicalDisplays, selectedTarget?.identity, selectedTarget?.knownPhysicalDisplayId, selectedTarget?.width, selectedTarget?.height]);
 
   function commitTopology(nextTopology: GamingProfileDisplayTopology) {
     setTopology(nextTopology);
@@ -152,6 +152,10 @@ export function DisplaysStep({
       modes = [];
     }
     const target = profileTargetForAddition(display, modes, isFirstDisplay, topology.displays);
+    if (target.width <= 0 || target.height <= 0) {
+      setActionError(t('profile.displayResolutionUnavailable'));
+      return;
+    }
     const nextTopology = normalizeTopologyPrimary({ displays: [...topology.displays, target] });
     setSelectedIdentityKey(identityKey(display.identity));
     commitTopology(nextTopology);
@@ -198,7 +202,7 @@ export function DisplaysStep({
         {displayListError ? <p className="error-line display-error">{displayListError}</p> : null}
         {actionError ? <p className="error-line display-error">{actionError}</p> : null}
         <div className={`display-topology-layout ${topology.displays.length === 0 ? 'is-empty' : ''}`}>
-          <DisplayTopologyCanvas topology={topology} selectedIdentityKey={selectedIdentityKey} resolveDisplayName={(identity) => logicalDisplays.find((display) => isSamePhysicalDisplay(display.identity, identity))?.name || identity.friendlyName} onSelect={setSelectedIdentityKey} onMove={(identity, positionX, positionY) => updateTarget(identity, { positionX, positionY })} />
+          <DisplayTopologyCanvas topology={topology} selectedIdentityKey={selectedIdentityKey} resolveDisplayName={(target) => logicalDisplays.find((display) => isSameProfileDisplay(display, target))?.name || target.identity.friendlyName} onSelect={setSelectedIdentityKey} onMove={(identity, positionX, positionY) => updateTarget(identity, { positionX, positionY })} />
           <DisplayPropertiesPanel target={selectedTarget} observed={selectedTarget ? logicalDisplays.find((display) => isSameProfileDisplay(selectedTarget, { identity: display.identity, knownPhysicalDisplayId: display.knownPhysicalDisplayId })) ?? null : null} modes={selectedDisplayModes} onChange={(patch) => selectedTarget && updateTarget(selectedTarget.identity, patch)} onRemove={() => selectedTarget && commitTopology({ displays: topology.displays.filter((display) => !isSameProfileDisplay(display, selectedTarget)) })} />
         </div>
         {topology.displays.length > 0 ? <DisplayTopologyValidation errors={topologyErrors} showSelectionError={validationState.showSelectionError} /> : null}
@@ -221,7 +225,7 @@ export function DisplaysStep({
   );
 }
 
-function DisplayTopologyCanvas({ topology, selectedIdentityKey, resolveDisplayName, onSelect, onMove }: { topology: GamingProfileDisplayTopology; selectedIdentityKey: string | null; resolveDisplayName: (identity: ProfileDisplayTarget['identity']) => string; onSelect: (key: string) => void; onMove: (identity: ProfileDisplayTarget['identity'], positionX: number, positionY: number) => void }) {
+function DisplayTopologyCanvas({ topology, selectedIdentityKey, resolveDisplayName, onSelect, onMove }: { topology: GamingProfileDisplayTopology; selectedIdentityKey: string | null; resolveDisplayName: (target: ProfileDisplayTarget) => string; onSelect: (key: string) => void; onMove: (identity: ProfileDisplayTarget['identity'], positionX: number, positionY: number) => void }) {
   const { t } = useTranslation();
   const dragRef = useRef<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -304,7 +308,7 @@ function DisplayTopologyCanvas({ topology, selectedIdentityKey, resolveDisplayNa
       const topologyRect = dragPreview?.identityKey === key ? dragPreview.rect : rects[index];
       const visualRect = rectToCanvas(topologyRect, transform);
       return <button className={`display-topology-node ${display.enabled ? '' : 'is-disabled'} ${display.isPrimary ? 'is-primary' : ''} ${selectedIdentityKey === key ? 'is-selected' : ''} ${dragPreview?.identityKey === key ? 'is-dragging' : ''}`} style={{ left: `${visualRect.left}px`, top: `${visualRect.top}px`, width: `${visualRect.width}px`, height: `${visualRect.height}px` }} type="button" key={key} onClick={() => onSelect(key)} onPointerDown={(event) => beginDrag(event, display.identity, index)}>
-        <span className="display-topology-node-number">{index + 1}</span><strong>{resolveDisplayName(display.identity) || t('profile.displayUnknown')}</strong><small>{display.width > 0 ? `${display.width} × ${display.height}` : t('profile.topologyUnknownMode')}</small>{display.isPrimary ? <em>{t('profile.topologyPrimary')}</em> : null}
+        <span className="display-topology-node-number">{index + 1}</span><strong>{resolveDisplayName(display) || t('profile.displayUnknown')}</strong><small>{display.width > 0 ? `${display.width} × ${display.height}` : t('profile.topologyUnknownMode')}</small>{display.isPrimary ? <em>{t('profile.topologyPrimary')}</em> : null}
       </button>;
     })}
     {previewRect ? <><div className="display-topology-preview" aria-hidden="true" style={{ left: `${previewRect.left}px`, top: `${previewRect.top}px`, width: `${previewRect.width}px`, height: `${previewRect.height}px` }} />{dockingGuides.map((guide, index) => guide.orientation === 'vertical'
@@ -333,7 +337,7 @@ function DisplayPropertiesPanel({ target, observed, modes, onChange, onRemove }:
     <div className="display-properties-title"><div><strong>{observed?.name || target.identity.friendlyName || t('profile.displayUnknown')}</strong><span>{observed?.connectionTechnology || t('profile.displayConnectionUnknown')}</span></div><button className="danger-button compact display-remove-button" type="button" onClick={onRemove} title={t('profile.removeDisplay')}><UiIcon name="trash" size={14} />{t('profile.removeDisplay')}</button></div>
     {observed?.catalogState === 'Unavailable' ? <p className="hint-line">{t('profile.displayStateUnavailable')}</p> : null}
     <div className="display-property-section"><span className="display-property-heading"><IconBadge name="display" size={14} /><span>{t('profile.displayStatus')}</span></span><label className="toggle-row"><span>{t('profile.displayUsed')}</span><input type="checkbox" checked={target.enabled} onChange={(event) => onChange({ enabled: event.target.checked, isPrimary: event.target.checked ? target.isPrimary : false })} /></label></div>
-    <div className="display-property-section"><span className="display-property-heading"><IconBadge name="settings" size={14} /><span>{t('profile.displaySettings')}</span></span><label className="toggle-row"><span>{t('profile.displayPrimary')}</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label><div className="display-properties-grid"><label>{t('profile.positionX')}<input className="text-input" type="number" value={target.positionX} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionX: Number(event.target.value) })} /></label><label>{t('profile.positionY')}<input className="text-input" type="number" value={target.positionY} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionY: Number(event.target.value) })} /></label><label>{t('profile.width')}<input className="text-input" type="number" min="1" value={target.width} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ width: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>{t('profile.height')}<input className="text-input" type="number" min="1" value={target.height} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ height: Number(event.target.value), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label></div></div>
+    <div className="display-property-section"><span className="display-property-heading"><IconBadge name="settings" size={14} /><span>{t('profile.displaySettings')}</span></span><label className="toggle-row"><span>{t('profile.displayPrimary')}</span><input type="checkbox" checked={target.isPrimary} disabled={!target.enabled} onChange={(event) => onChange({ isPrimary: event.target.checked })} /></label><div className="display-properties-grid"><label>{t('profile.positionX')}<input className="text-input" type="number" value={target.positionX} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionX: Math.round(Number(event.target.value)) })} /></label><label>{t('profile.positionY')}<input className="text-input" type="number" value={target.positionY} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ positionY: Math.round(Number(event.target.value)) })} /></label><label>{t('profile.width')}<input className="text-input" type="number" min="1" value={target.width} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ width: Math.round(Number(event.target.value)), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label><label>{t('profile.height')}<input className="text-input" type="number" min="1" value={target.height} onFocus={(event) => event.target.select()} onChange={(event) => onChange({ height: Math.round(Number(event.target.value)), fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 })} /></label></div></div>
     <div className="display-property-section"><span className="display-property-heading"><IconBadge name="refresh" size={14} /><span>{t('profile.refresh')}</span></span><div className="display-refresh-field"><div className="display-refresh-select"><select className="text-input" value={resolveRefreshSelectionKey(target, refreshOptions)} disabled={!isAutoHighest && refreshState.disabled} onChange={(event) => { if (event.target.value === 'auto') { onChange({ refreshPolicy: 'AutoHighest', fixedRefreshRateNumerator: 0, fixedRefreshRateDenominator: 0, refreshRateNumerator: 0, refreshRateDenominator: 0 }); return; } const mode = refreshOptions.find((candidate) => modeKey(candidate) === event.target.value); if (mode) onChange({ refreshPolicy: 'Fixed', fixedRefreshRateNumerator: mode.refreshRateNumerator, fixedRefreshRateDenominator: mode.refreshRateDenominator, refreshRateNumerator: 0, refreshRateDenominator: 0 }); }}><option value="auto">{t('profile.refreshAuto')}</option>{refreshOptions.map((mode) => <option key={modeKey(mode)} value={modeKey(mode)}>{formatRefresh(mode.refreshRateHz)}</option>)}{!isAutoHighest && refreshOptions.length === 0 && hasValidFixedRefresh(target) ? <option value={fixedModeKey(target)}>{formatRefresh((target.fixedRefreshRateNumerator ?? 0) / (target.fixedRefreshRateDenominator ?? 1))}</option> : null}{refreshOptions.length === 0 && !hasValidFixedRefresh(target) && !isAutoHighest ? <option value="" disabled>{refreshPlaceholder}</option> : null}</select><span className="display-refresh-chevron" aria-hidden="true" /></div></div>{observed && !observed.isEnabled && getRefreshPolicy(target) === 'Fixed' && hasValidFixedRefresh(target) ? <p className="hint-line">{t('profile.refreshSavedHint')}</p> : null}{!observed ? <p className="hint-line">{t('profile.refreshMissingHint')}</p> : null}</div>
   </aside>;
 }

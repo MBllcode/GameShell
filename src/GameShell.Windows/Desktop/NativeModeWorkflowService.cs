@@ -11,8 +11,7 @@ namespace GameShell.Windows.Desktop;
 
 public sealed class NativeModeWorkflowService : IModeWorkflowService
 {
-    private readonly HashSet<string> _sessionApplicationPaths = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly TimeSpan LauncherShutdownTimeout = TimeSpan.FromSeconds(2);
+    private readonly SessionApplicationProcesses _sessionApplications;
     private readonly ILogger<NativeModeWorkflowService> _logger;
     private readonly IRuntimeStateService _runtimeStateService;
     private readonly IWindowsCursorService _cursorService;
@@ -29,6 +28,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         IDisplayTransitionStabilityGuard? displayTransitionStabilityGuard = null)
     {
         _logger = logger;
+        _sessionApplications = new SessionApplicationProcesses(logger);
         _runtimeStateService = runtimeStateService;
         _cursorService = cursorService;
         _windowManagementService = windowManagementService;
@@ -204,8 +204,8 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
                     throw new InvalidOperationException("The assigned display is unavailable.");
                 }
 
-                _sessionApplicationPaths.Add(application.ExecutablePath);
-                await WindowsWindowManagementService.OpenProfileApplicationAsync(application, display, behaviour.HideTaskbar, cancellationToken);
+                await WindowsWindowManagementService.OpenProfileApplicationAsync(
+                    application, display, behaviour.HideTaskbar, _sessionApplications, cancellationToken);
             }, cancellationToken);
         }
 
@@ -287,26 +287,10 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     {
         var warnings = new List<string>();
 
-        await TryStepAsync("close profile applications", warnings, async () =>
+        await TryStepAsync("close session applications", warnings, () =>
         {
-            if (settings.WorkMode.CloseLauncher)
-            {
-                foreach (var path in _sessionApplicationPaths)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    WindowsWindowManagementService.CloseProfileApplicationWindows(path);
-                }
-            }
-            _sessionApplicationPaths.Clear();
-            await Task.CompletedTask;
-        }, cancellationToken);
-
-        await TryStepAsync("close launcher", warnings, async () =>
-        {
-            if (settings.WorkMode.CloseLauncher)
-            {
-                await CloseLauncherAsync(settings, cancellationToken);
-            }
+            _sessionApplications.EndSession(settings.WorkMode.CloseLauncher, cancellationToken);
+            return Task.CompletedTask;
         }, cancellationToken);
 
         return warnings.Count == 0
@@ -388,7 +372,16 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             return ExternalProcessLaunchResult.Started(processId);
         }
 
-        return _launcherProcessService.StartStandardUser(settings.Launcher);
+        var requestedAtUtc = DateTime.UtcNow;
+        var result = _launcherProcessService.StartStandardUser(settings.Launcher);
+        using var started = result.Success ? GetProcess(result.ProcessId) : null;
+        if (started is not null)
+        {
+            var executable = LauncherProcessRequestFactory.Create(settings.Launcher).ExecutablePath;
+            _sessionApplications.Track(started, executable, requestedAtUtc);
+        }
+
+        return result;
     }
 
     private async Task BringLauncherToForegroundAsync(
@@ -456,21 +449,8 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             .FirstOrDefault(process => processNames.Contains(process.ProcessName));
     }
 
-    private static IEnumerable<string> GetLauncherProcessNames(AppSettings settings, bool includeAllSupported = false)
+    private static IEnumerable<string> GetLauncherProcessNames(AppSettings settings)
     {
-        // Restoration can close any previously active supported application.
-        if (includeAllSupported)
-        {
-            yield return "Playnite.FullscreenApp";
-            yield return "Playnite.DesktopApp";
-            yield return "steam";
-            yield return "Xbox";
-            yield return "XboxPcApp";
-            yield return "XboxPcAppFT";
-            yield return "GamingApp";
-            yield return "GamingServicesUI";
-        }
-
         if (settings.Launcher.Type.Equals("Playnite", StringComparison.OrdinalIgnoreCase))
         {
             yield return "Playnite.FullscreenApp";
@@ -497,105 +477,4 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             yield return fileName;
         }
     }
-
-    private async Task CloseLauncherAsync(AppSettings settings, CancellationToken cancellationToken)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        var processNames = GetLauncherProcessNames(settings, includeAllSupported: true).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        _logger.LogInformation(
-            "WORK MODE [{TransitionId}] Awaiting=LauncherShutdown Timeout={TimeoutMs}ms TokenCanBeCanceled={TokenCanBeCanceled} TokenIsCancellationRequested={TokenIsCancellationRequested}.",
-            WorkModeTransitionContext.CurrentId ?? "-",
-            LauncherShutdownTimeout.TotalMilliseconds,
-            cancellationToken.CanBeCanceled,
-            cancellationToken.IsCancellationRequested);
-
-        foreach (var processName in processNames)
-        {
-            foreach (var process in Process.GetProcessesByName(processName))
-            {
-                try
-                {
-                    if (process.MainWindowHandle != IntPtr.Zero && process.CloseMainWindow())
-                    {
-                        continue;
-                    }
-
-                    process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-        }
-
-        for (var attempt = 0; stopwatch.Elapsed < LauncherShutdownTimeout; attempt++)
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(
-                    "WORK MODE [{TransitionId}] CANCELLATION DETECTED Operation=LauncherShutdown ExceptionType={ExceptionType} CancellationTokenIsCancellationRequested={CancellationTokenIsCancellationRequested} ExternalTokenIsCancellationRequested={ExternalTokenIsCancellationRequested} TimeoutTokenIsCancellationRequested={TimeoutTokenIsCancellationRequested} ElapsedMs={ElapsedMs}.",
-                    WorkModeTransitionContext.CurrentId ?? "-",
-                    typeof(OperationCanceledException).FullName,
-                    cancellationToken.IsCancellationRequested,
-                    cancellationToken.IsCancellationRequested,
-                    false,
-                    stopwatch.ElapsedMilliseconds);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-
-            var remaining = processNames.SelectMany(Process.GetProcessesByName).ToArray();
-            if (remaining.Length == 0)
-            {
-                _logger.LogInformation(
-                    "WORK MODE [{TransitionId}] LauncherShutdown completed. ElapsedMs={ElapsedMs}.",
-                    WorkModeTransitionContext.CurrentId ?? "-",
-                    stopwatch.ElapsedMilliseconds);
-                return;
-            }
-
-            foreach (var process in remaining)
-            {
-                process.Dispose();
-            }
-
-            _logger.LogInformation(
-                "WORK MODE [{TransitionId}] Awaiting=LauncherShutdownPoll Timeout=200ms TokenCanBeCanceled={TokenCanBeCanceled} TokenIsCancellationRequested={TokenIsCancellationRequested}.",
-                WorkModeTransitionContext.CurrentId ?? "-",
-                cancellationToken.CanBeCanceled,
-                cancellationToken.IsCancellationRequested);
-            await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);
-        }
-
-        _logger.LogWarning(
-            "WORK MODE [{TransitionId}] LauncherShutdown timed out as best-effort operation. TimeoutMs={TimeoutMs} ElapsedMs={ElapsedMs}; continuing Work Mode transition.",
-            WorkModeTransitionContext.CurrentId ?? "-",
-            LauncherShutdownTimeout.TotalMilliseconds,
-            stopwatch.ElapsedMilliseconds);
-
-        foreach (var processName in processNames)
-        {
-            foreach (var process in Process.GetProcessesByName(processName))
-            {
-                try
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill(entireProcessTree: true);
-                    }
-                }
-                catch
-                {
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-        }
-    }
-
 }

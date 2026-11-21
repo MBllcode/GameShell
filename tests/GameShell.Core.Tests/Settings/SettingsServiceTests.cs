@@ -530,6 +530,33 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void Validate_MigratesEnabledLegacyControllerShortcutOnlyToActiveProfile()
+    {
+        var shortcut = new ControllerShortcutSettings { Buttons = [ControllerButton.Back, ControllerButton.South] };
+        var settings = new AppSettings
+        {
+            Controller = new ControllerSettings { Enabled = true, GamingMode = shortcut },
+            Display = new DisplaySettings
+            {
+                ActiveGamingProfileName = "Salon",
+                GamingProfiles =
+                [
+                    new DisplayLayoutProfile { Name = "Biurko", Layout = new DisplayLayoutSnapshot() },
+                    new DisplayLayoutProfile { Name = "Salon", Layout = new DisplayLayoutSnapshot() }
+                ]
+            }
+        };
+
+        var configurations = AppSettingsValidator.Validate(settings).Display.GamingProfileConfigurations;
+        Assert.Null(configurations[0].ControllerShortcut);
+        Assert.Same(shortcut, configurations[1].ControllerShortcut);
+
+        configurations[1].ControllerShortcut = null;
+        Assert.All(AppSettingsValidator.Validate(settings).Display.GamingProfileConfigurations,
+            configuration => Assert.Null(configuration.ControllerShortcut));
+    }
+
+    [Fact]
     public void Validate_ClearsDuplicateProfileControllerShortcuts()
     {
         var shortcut = new ControllerShortcutSettings

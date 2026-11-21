@@ -28,6 +28,19 @@ test('renaming one profile preserves its complete settings and leaves other prof
   assert.deepEqual(Object.keys(profileLayout(updated[0])).sort(), ['displayTopology', 'id', 'layout', 'name']);
 });
 
+test('a saved controller shortcut belongs only to the profile that configured it', () => {
+  const settings = baseSettings();
+  const shortcut = { buttons: ['West', 'Back'], holdDurationMs: 700 };
+  settings.controller.gamingMode = shortcut;
+  settings.display.gamingProfiles.push({ id: 'desk', name: 'Desk', layout: { displays: [] } });
+  settings.display.gamingProfileConfigurations[0].controllerShortcut = null;
+  settings.display.gamingProfileConfigurations.push({ profileName: 'Desk', controllerShortcut: shortcut });
+
+  const [tv, desk] = profilesFromSettings(settings);
+  assert.equal(tv.controllerShortcut, null);
+  assert.deepEqual(desk.controllerShortcut, shortcut);
+});
+
 test('new profiles have independent default behaviour objects', () => {
   const a = createProfile({ name: 'A', layout: { displays: [] } });
   const b = createProfile({ name: 'B', layout: { displays: [] } });

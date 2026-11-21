@@ -5,6 +5,7 @@ using GameShell.Core.Settings;
 using GameShell.Windows.Applications;
 using GameShell.Windows.Desktop;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 using Xunit;
 
 namespace GameShell.Core.Tests;
@@ -42,6 +43,45 @@ public sealed class ProfileBehaviourTests
         var wait = NativeModeWorkflowService.WaitForApplicationWindowAsync(() => false, cancellation.Token);
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WorkMode_OnlyRequestsCloseForProcessesStartedByTheSession(bool closeApplications)
+    {
+        var commandPath = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        var startInfo = new ProcessStartInfo(commandPath, "/d /q /c \"echo READY&set /p gameshell_test_wait=\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true
+        };
+        using var unrelated = Process.Start(startInfo)!;
+        using var started = Process.Start(startInfo)!;
+        try
+        {
+            using var readyTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            Assert.Equal("READY", await unrelated.StandardOutput.ReadLineAsync(readyTimeout.Token));
+            Assert.Equal("READY", await started.StandardOutput.ReadLineAsync(readyTimeout.Token));
+            var session = new SessionApplicationProcesses(NullLogger.Instance);
+            Assert.False(session.Track(unrelated, commandPath, unrelated.StartTime.ToUniversalTime().AddSeconds(1)));
+            Assert.True(session.Track(started, commandPath, started.StartTime.ToUniversalTime()));
+
+            var closeRequests = new List<int>();
+            session.EndSession(closeApplications, CancellationToken.None, process => closeRequests.Add(process.Id));
+            session.EndSession(true, CancellationToken.None, process => closeRequests.Add(process.Id));
+            Assert.Equal(closeApplications ? new[] { started.Id } : [], closeRequests);
+            Assert.False(unrelated.HasExited);
+        }
+        finally
+        {
+            unrelated.StandardInput.Close();
+            started.StandardInput.Close();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(unrelated.WaitForExitAsync(timeout.Token), started.WaitForExitAsync(timeout.Token));
+        }
     }
 
     [Theory]

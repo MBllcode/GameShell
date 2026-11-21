@@ -5,6 +5,7 @@ namespace GameShell.Desktop.Shortcuts;
 internal static class SdlNative
 {
     private const string SdlLibrary = "SDL3";
+    internal const string JoystickAllowBackgroundEvents = "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS";
 
     [Flags]
     internal enum InitFlags : uint
@@ -49,6 +50,12 @@ internal static class SdlNative
         LeftX = 0,
         LeftY = 1
     }
+
+    [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    internal static extern bool SDL_SetHint(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
 
     [DllImport(SdlLibrary, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SDL_InitSubSystem")]
     [return: MarshalAs(UnmanagedType.I1)]

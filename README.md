@@ -42,7 +42,7 @@ Later launches open the dashboard; unfinished setup resumes until completed. Set
 
 ## See it in action
 
-Screenshots below are fresh, lossless captures of the running app. Click to view full resolution.
+Click any screenshot to view it at full resolution.
 
 ### 1. Choose your displays
 
@@ -52,19 +52,21 @@ Add detected screens, drag them into position, and set the primary display, reso
 
 ### 2. Assign apps and files to monitors
 
-In **Profile applications**, select **Add app or file** under a monitor. Search by name, paste a full path, or choose a file in the Windows picker. Search builds a local index of common file types across ready drives, including executables, Visual Studio solutions, spreadsheets, and PDFs. Documents open in their associated Windows app.
+In **Profile applications**, select **Add application or file** under a monitor. Search by name, paste a full path, or choose a file in the Windows picker. Search builds a local index of common file types across ready drives, including executables, Visual Studio solutions, spreadsheets, and PDFs. Documents open in their associated Windows app.
 
-Use **Show window** to show a maximized window on its assigned monitor, or **In background** to minimize it without activating it. Move an entry with **Move to another screen** or drag its name to a different monitor. Each card shows the full path and launch mode. Leave the monitor lists empty for a display-only profile.
+Use **Show window** to show a maximized window on its assigned monitor, or **In background** to minimize it without activating it. Move an entry with **Move to another display** or drag its name to a different monitor. Each card shows the full path and launch mode. Leave the monitor lists empty for a display-only profile.
+
+[![Profile applications with a project on the main monitor and Spotify in the background on the side monitor](docs/screenshots/application.png)](docs/screenshots/application.png)
 
 ### 3. Decide what happens to the desktop
 
-Choose whether to hide desktop icons or the taskbar, move the cursor, or close and minimize windows. Enable the close-applications option in the default setup to request that profile application windows close when you return to it.
+Choose whether to hide desktop icons or the taskbar, move the cursor, or close and minimize windows. Enable **Close profile applications** in the default setup to request a normal window close for apps that GameShell can verify it started during the session.
 
 [![Profile behaviour page with desktop, window and application actions](docs/screenshots/behaviour.png)](docs/screenshots/behaviour.png)
 
 ### 4. Switch with a shortcut
 
-Assign keyboard shortcuts or controller combinations to profiles and a separate shortcut to restore your default setup. The tray menu provides the same actions.
+Assign a keyboard shortcut or controller combination to a specific profile and a separate shortcut to restore your default setup. Shortcuts work while GameShell is running in the tray. The tray menu also lets you switch directly.
 
 [![Profile shortcuts page with keyboard and controller configuration](docs/screenshots/shortcuts.png)](docs/screenshots/shortcuts.png)
 
@@ -81,7 +83,7 @@ See [Architecture](docs/architecture.md) for the profile activation pipeline and
 
 [User guide](docs/user-guide.md) · [Architecture](docs/architecture.md) · [Remote Control](docs/remote-control.md) · [Changelog](docs/CHANGELOG.md)
 
-GameShell is under active development. Display modes depend on Windows and connected hardware. Screenshots show real configured profiles; their names are user-defined.
+GameShell is under active development. Display modes depend on Windows and connected hardware. The screenshots show example profiles with user-defined names.
 
 ## License and security
 

@@ -11,9 +11,33 @@ internal static class DisplayCatalogReconciliation
 
         foreach (var profile in settings.GamingProfiles ?? [])
         {
-            foreach (var target in profile.DisplayTopology?.Displays ?? [])
+            if (profile.DisplayTopology is { } topology)
             {
-                changed |= NormalizeTargetReference(settings, target);
+                foreach (var target in topology.Displays)
+                {
+                    changed |= NormalizeTargetReference(settings, target);
+                }
+
+                var displays = CollapseProfileAliases(topology.Displays, display => display.KnownPhysicalDisplayId, group =>
+                {
+                    var retained = group.OrderByDescending(display => display.Enabled && display.IsPrimary)
+                        .ThenByDescending(display => display.Enabled)
+                        .ThenByDescending(display => HasResolution(display.Width, display.Height))
+                        .First();
+                    if (!HasResolution(retained.Width, retained.Height)
+                        && group.FirstOrDefault(display => HasResolution(display.Width, display.Height)) is { } withResolution)
+                    {
+                        retained.Width = withResolution.Width;
+                        retained.Height = withResolution.Height;
+                    }
+
+                    return retained;
+                });
+                if (displays.Count != topology.Displays.Count)
+                {
+                    topology.Displays = displays;
+                    changed = true;
+                }
             }
 
             profile.Layout = NormalizeLayoutNames(settings, profile.Layout, ref changed);
@@ -35,6 +59,7 @@ internal static class DisplayCatalogReconciliation
             changed |= NormalizeIdentityName(settings, current, identity => settings.ConsoleDisplays[index] = identity);
         }
 
+        changed |= RewriteApplicationDisplayIds(settings, id => ResolveApplicationDisplayId(settings, id));
         return changed;
     }
 
@@ -192,6 +217,7 @@ internal static class DisplayCatalogReconciliation
         KnownPhysicalDisplay removed)
     {
         survivor.HistoricalIdentities ??= [];
+        DisplayCatalogIdentity.PromoteModelAlias(survivor, removed.PhysicalIdentity);
         DisplayCatalogIdentity.AddHistoricalIdentity(survivor, removed.PhysicalIdentity);
         foreach (var identity in removed.HistoricalIdentities ?? [])
         {
@@ -240,7 +266,8 @@ internal static class DisplayCatalogReconciliation
             return false;
         }
 
-        var changed = false;
+        var changed = RewriteApplicationDisplayIds(settings, id =>
+            string.Equals(id, duplicateId, StringComparison.OrdinalIgnoreCase) ? replacement.Id : null);
         var canonicalIdentity = DisplayCatalogIdentity.CanonicalIdentity(replacement);
         foreach (var profile in settings.GamingProfiles ?? [])
         {
@@ -268,25 +295,7 @@ internal static class DisplayCatalogReconciliation
 
                     changed = true;
                     layoutChanged = true;
-                    return new DisplayPathSnapshot
-                    {
-                        KnownPhysicalDisplayId = replacement.Id,
-                        Identity = canonicalIdentity,
-                        IsActive = display.IsActive,
-                        IsPrimary = display.IsPrimary,
-                        PositionX = display.PositionX,
-                        PositionY = display.PositionY,
-                        Width = display.Width,
-                        Height = display.Height,
-                        Orientation = display.Orientation,
-                        RefreshRateNumerator = display.RefreshRateNumerator,
-                        RefreshRateDenominator = display.RefreshRateDenominator,
-                        SourceId = display.SourceId,
-                        TargetId = display.TargetId,
-                        AdapterLuid = display.AdapterLuid,
-                        SourceDeviceName = display.SourceDeviceName,
-                        ConnectionTechnology = display.ConnectionTechnology
-                    };
+                    return CopyLayoutDisplay(display, replacement.Id, canonicalIdentity);
                 }).ToList();
                 if (layoutChanged)
                 {
@@ -312,25 +321,7 @@ internal static class DisplayCatalogReconciliation
 
                 changed = true;
                 gamingLayoutChanged = true;
-                return new DisplayPathSnapshot
-                {
-                    KnownPhysicalDisplayId = replacement.Id,
-                    Identity = canonicalIdentity,
-                    IsActive = display.IsActive,
-                    IsPrimary = display.IsPrimary,
-                    PositionX = display.PositionX,
-                    PositionY = display.PositionY,
-                    Width = display.Width,
-                    Height = display.Height,
-                    Orientation = display.Orientation,
-                    RefreshRateNumerator = display.RefreshRateNumerator,
-                    RefreshRateDenominator = display.RefreshRateDenominator,
-                    SourceId = display.SourceId,
-                    TargetId = display.TargetId,
-                    AdapterLuid = display.AdapterLuid,
-                    SourceDeviceName = display.SourceDeviceName,
-                    ConnectionTechnology = display.ConnectionTechnology
-                };
+                return CopyLayoutDisplay(display, replacement.Id, canonicalIdentity);
             }).ToList();
             if (gamingLayoutChanged)
             {
@@ -344,6 +335,46 @@ internal static class DisplayCatalogReconciliation
         }
 
         return changed;
+    }
+
+    private static bool RewriteApplicationDisplayIds(DisplaySettings settings, Func<string, string?> resolveDisplayId)
+    {
+        var changed = false;
+        foreach (var configuration in settings.GamingProfileConfigurations ?? [])
+        {
+            var applications = configuration.Applications;
+            if (applications is null) continue;
+
+            for (var index = 0; index < applications.Count; index++)
+            {
+                var application = applications[index];
+                if (application is null || string.IsNullOrWhiteSpace(application.DisplayId)) continue;
+
+                var replacementId = resolveDisplayId(application.DisplayId);
+                if (replacementId is not null && !string.Equals(replacementId, application.DisplayId, StringComparison.Ordinal))
+                {
+                    applications[index] = application with { DisplayId = replacementId };
+                    changed = true;
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    private static string? ResolveApplicationDisplayId(DisplaySettings settings, string id)
+    {
+        var known = DisplayCatalogIdentity.FindKnownById(settings, id);
+        if (known is not null) return known.Id;
+
+        // Legacy assignments contain the Windows device path, which may now be an alias.
+        var matches = settings.KnownPhysicalDisplays.Where(candidate =>
+            string.Equals(candidate.PhysicalIdentity.MonitorDevicePath, id, StringComparison.OrdinalIgnoreCase)
+            || (candidate.HistoricalIdentities ?? []).Any(identity =>
+                string.Equals(identity.MonitorDevicePath, id, StringComparison.OrdinalIgnoreCase)))
+            .Take(2)
+            .ToList();
+        return matches.Count == 1 ? matches[0].Id : null;
     }
 
     internal static bool NormalizeIdentityName(
@@ -416,27 +447,24 @@ internal static class DisplayCatalogReconciliation
             }
 
             layoutChanged = true;
-            return new DisplayPathSnapshot
-            {
-                KnownPhysicalDisplayId = known.Id,
-                Identity = canonicalIdentity,
-                IsActive = display.IsActive,
-                IsPrimary = display.IsPrimary,
-                PositionX = display.PositionX,
-                PositionY = display.PositionY,
-                Width = display.Width,
-                Height = display.Height,
-                Orientation = display.Orientation,
-                RefreshRateNumerator = display.RefreshRateNumerator,
-                RefreshRateDenominator = display.RefreshRateDenominator,
-                SourceId = display.SourceId,
-                TargetId = display.TargetId,
-                AdapterLuid = display.AdapterLuid,
-                SourceDeviceName = display.SourceDeviceName,
-                ConnectionTechnology = display.ConnectionTechnology
-            };
+            return CopyLayoutDisplay(display, known.Id, canonicalIdentity);
         }).ToList();
 
+        var collapsed = CollapseProfileAliases(displays, display => display.KnownPhysicalDisplayId, group =>
+        {
+            var retained = group.OrderByDescending(display => display.IsActive && display.IsPrimary)
+                .ThenByDescending(display => display.IsActive)
+                .ThenByDescending(display => HasResolution(display.Width, display.Height))
+                .First();
+            var withResolution = group.FirstOrDefault(display => HasResolution(display.Width, display.Height));
+            if (HasResolution(retained.Width, retained.Height) || withResolution is null)
+            {
+                return retained;
+            }
+
+            return CopyLayoutDisplay(retained, retained.KnownPhysicalDisplayId, retained.Identity, withResolution);
+        });
+        layoutChanged |= collapsed.Count != displays.Count;
         changed |= layoutChanged;
 
         return !layoutChanged
@@ -445,7 +473,44 @@ internal static class DisplayCatalogReconciliation
             {
                 Id = layout.Id,
                 CapturedAt = layout.CapturedAt,
-                Displays = displays
+                Displays = collapsed
             };
+    }
+
+    private static List<T> CollapseProfileAliases<T>(
+        List<T> displays, Func<T, string> knownId, Func<IEnumerable<T>, T> choose)
+    {
+        return displays.Select((display, index) => (Display: display, Id: knownId(display), Index: index))
+            .GroupBy(item => string.IsNullOrWhiteSpace(item.Id)
+                ? (Id: string.Empty, item.Index)
+                : (Id: item.Id.ToUpperInvariant(), Index: -1))
+            .Select(group => group.Count() == 1 ? group.First().Display : choose(group.Select(item => item.Display)))
+            .ToList();
+    }
+
+    private static bool HasResolution(int width, int height) => width > 0 && height > 0;
+
+    private static DisplayPathSnapshot CopyLayoutDisplay(
+        DisplayPathSnapshot display, string knownId, DisplayIdentity identity, DisplayPathSnapshot? resolution = null)
+    {
+        return new DisplayPathSnapshot
+        {
+            KnownPhysicalDisplayId = knownId,
+            Identity = identity,
+            IsActive = display.IsActive,
+            IsPrimary = display.IsPrimary,
+            PositionX = display.PositionX,
+            PositionY = display.PositionY,
+            Width = resolution?.Width ?? display.Width,
+            Height = resolution?.Height ?? display.Height,
+            Orientation = display.Orientation,
+            RefreshRateNumerator = display.RefreshRateNumerator,
+            RefreshRateDenominator = display.RefreshRateDenominator,
+            SourceId = display.SourceId,
+            TargetId = display.TargetId,
+            AdapterLuid = display.AdapterLuid,
+            SourceDeviceName = display.SourceDeviceName,
+            ConnectionTechnology = display.ConnectionTechnology
+        };
     }
 }

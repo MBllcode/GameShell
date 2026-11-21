@@ -73,6 +73,32 @@ test('added displays are enabled and only the first display is primary', () => {
   assert.equal(additional.isPrimary, false);
 });
 
+test('adding a display beside an odd-height monitor keeps integer coordinates in the save payload', () => {
+  const anchor = { ...topology(1).displays[0], height: 4319 };
+  const display = {
+    identity: identity('S90F'), width: 3840, height: 2160, positionX: 0, positionY: 0, orientation: 'Identity'
+  } as DisplayDeviceInfo;
+  const added = profileTargetForAddition(display, [], false, [anchor]);
+  const layout = topologyToLegacy({ displays: [anchor, added] }, []);
+  assert.equal(added.positionY, 1080);
+  assert.equal(layout.displays[1].positionY, 1080);
+});
+
+test('an inactive display with zero current dimensions uses its preferred or remembered resolution', () => {
+  const inactive = {
+    identity: identity('S90F'), width: 0, height: 0, preferredWidth: 3840, preferredHeight: 2160,
+    positionX: 0, positionY: 0, orientation: 'Identity'
+  } as DisplayDeviceInfo;
+  const preferred = profileTargetFromDisplay(inactive);
+  assert.deepEqual([preferred.width, preferred.height], [3840, 2160]);
+
+  const remembered = profileTargetFromDisplay({
+    ...inactive, preferredWidth: 0, preferredHeight: 0,
+    lastKnownGoodCapability: { width: 3840, height: 2160, maxRefreshRateNumerator: 60, maxRefreshRateDenominator: 1 }
+  });
+  assert.deepEqual([remembered.width, remembered.height], [3840, 2160]);
+});
+
 test('topology rejects the same physical display under two friendly names', () => {
   const value = topology(2);
   value.displays[1].identity = { ...value.displays[0].identity, friendlyName: 'SAMSUNG' };
