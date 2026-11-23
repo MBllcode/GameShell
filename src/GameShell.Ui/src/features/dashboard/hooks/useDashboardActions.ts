@@ -63,7 +63,9 @@ export function useDashboardActions(options: Options) {
           }
         }
       }
-      if (modeResult?.status === 'NoChanges') {
+      if (modeResult.warning) {
+        setTransientMessage(modeResult.warning, 6500);
+      } else if (modeResult.status === 'NoChanges') {
         setTransientMessage(t('dashboard.profileAlreadyActive'));
       } else if (command === 'enterWorkMode') {
         setTransientMessage(t('dashboard.enterWorkModeCompleted'));

@@ -268,6 +268,7 @@ export interface ModeResult {
   status: string;
   currentState: ModeState;
   message: string;
+  warning?: string | null;
   durationMs: number;
   success: boolean;
 }

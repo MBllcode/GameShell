@@ -48,7 +48,7 @@ For example, `Football` can use the TV on its own, while `Desk` and `Editing` ca
 
 Search by name, paste a full path, or open the Windows file picker. Search covers common file types on ready drives. Documents open in the app associated with their file type in Windows.
 
-- **Show window** opens a maximized window on the assigned display. **In background** minimizes the window without activating it.
+- **Show window** opens the application at its own window size and position. The application can use its own fullscreen mode and choose its display. **In background** minimizes the window without activating it.
 - Drag an app name onto another display or use **Move to another display**. Each entry keeps its full path and launch mode.
 - App assignments from existing profiles follow the display when GameShell reconciles two saved identities for the same screen. If a display is unavailable, the app stays saved and can be reassigned in **Profile applications**.
 - Profiles from older versions can still show their saved legacy launcher. Remove it there if you want to use only the per-display app list.
@@ -60,6 +60,8 @@ Search by name, paste a full path, or open the Windows file picker. Search cover
 Select a profile on the dashboard and click **Run profile**. You can also use its assigned shortcut or the tray menu. GameShell applies the display configuration and enabled desktop/launcher actions.
 
 Return with your Default setup shortcut or **Restore default setup** in the tray menu. Closing the main window normally leaves GameShell running in the tray, where saved keyboard and controller shortcuts still work. Choose **Close GameShell** in the tray to exit completely.
+
+Enable **Close profile applications** in Default setup to request a normal close for apps GameShell started during the profile session. Apps already open when the profile started can stay open. Handle any save prompts in the application itself.
 
 Profiles remain active until you choose another profile or restore the default setup. Profiles without an application do not start game monitoring or launcher recovery. With a supported application enabled, game-session monitoring can return focus to that application after a game exits.
 

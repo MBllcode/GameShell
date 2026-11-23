@@ -194,7 +194,11 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         var stopwatch = Stopwatch.StartNew();
         var displayTransitionSucceeded = false;
         var transitionId = WorkModeTransitionContext.CurrentId ?? "-";
-        var transientTransitionId = _transientOperationStateService?.Begin(
+        var startupTransitionId = transientOperationKind == TransientOperationKind.ExitToWorkMode
+            && _transientOperationStateService?.Current is { Kind: TransientOperationKind.Startup } startup
+            ? startup.TransitionId
+            : null;
+        var transientTransitionId = startupTransitionId ?? _transientOperationStateService?.Begin(
             transientOperationKind,
             transientOperationKind == TransientOperationKind.ExitToWorkMode
                 ? TransientOperationPhase.RestoringDisplays
@@ -203,6 +207,11 @@ public sealed class ModeOrchestrator : IModeOrchestrator
 
         try
         {
+            if (startupTransitionId is not null)
+            {
+                _transientOperationStateService?.SetPhase(startupTransitionId, TransientOperationPhase.RestoringDisplays);
+            }
+
             var settings = await _settingsService.LoadAsync(cancellationToken);
             var runtimeState = await _runtimeStateService.LoadAsync(cancellationToken);
             var wasInWorkMode = _currentMode == GameShellMode.Work
@@ -394,6 +403,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
                 Status = ModeResultStatus.Success,
                 CurrentState = completedState,
                 Message = transitionResult.UserMessage ?? $"{operationName} completed.",
+                Warning = workflowResult.Message,
                 DurationMs = stopwatch.ElapsedMilliseconds
             };
         }
@@ -453,7 +463,7 @@ public sealed class ModeOrchestrator : IModeOrchestrator
         }
         finally
         {
-            if (transientTransitionId is not null)
+            if (transientTransitionId is not null && startupTransitionId is null)
             {
                 _transientOperationStateService?.Clear(transientTransitionId, "CompletedOrFailed");
             }

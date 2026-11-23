@@ -18,7 +18,7 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
 
     'applications.intro': "Choose what opens on each display.",
     'applications.modeVisible': "Show window",
-    'applications.modeVisibleHint': "Shows the window maximized on this monitor.",
+    'applications.modeVisibleHint': "Opens the application with its own window size and placement.",
     'applications.modeBackgroundHint': "Minimizes the window without activating it.",
     'applications.modeBackground': "In background",
     'applications.moveTo': "Assigned display",
@@ -378,7 +378,7 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
 
     'applications.intro': "Wybierz, co otworzy się na każdym ekranie.",
     'applications.modeVisible': "Pokaż okno",
-    'applications.modeVisibleHint': "Pokaże zmaksymalizowane okno na tym monitorze.",
+    'applications.modeVisibleHint': "Otwiera aplikację z jej własnym rozmiarem i położeniem okna.",
     'applications.modeBackgroundHint': "Zminimalizuje okno bez przejmowania fokusu.",
     'applications.modeBackground': "W tle",
     'applications.moveTo': "Przypisany ekran",

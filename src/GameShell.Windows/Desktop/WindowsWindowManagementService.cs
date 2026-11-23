@@ -355,7 +355,7 @@ public sealed partial class WindowsWindowManagementService : IWindowsWindowManag
     private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, IntPtr clipRect, IntPtr data);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct Rect
+    internal struct Rect
     {
         public int Left;
         public int Top;

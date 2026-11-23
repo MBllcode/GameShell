@@ -124,6 +124,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         var behaviour = mode == GameShellMode.GamingProfile ? settings.Gaming : settings.GameShell;
         var applications = mode == GameShellMode.GamingProfile ? settings.ProfileApplications : [];
         int? launcherProcessId = null;
+        IReadOnlySet<int>? existingLauncherProcesses = null;
         ExternalProcessLaunchResult? launcherStartResult = null;
 
         await TryStepAsync("minimize remaining windows after display transition", warnings, async () =>
@@ -166,7 +167,7 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         {
             if (ProfileApplicationPolicy.ShouldLaunch(settings.Launcher, behaviour))
             {
-                launcherStartResult = StartOrFindLauncher(settings);
+                launcherStartResult = StartOrFindLauncher(settings, out existingLauncherProcesses);
                 if (!launcherStartResult.Success)
                 {
                     throw new InvalidOperationException(launcherStartResult.FailureReason ?? "Launcher process could not be started.");
@@ -188,24 +189,24 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         {
             if (ProfileApplicationPolicy.ShouldLaunch(settings.Launcher, behaviour))
             {
-                await BringLauncherToForegroundAsync(settings, launcherProcessId, cancellationToken);
+                await BringLauncherToForegroundAsync(settings, launcherProcessId, existingLauncherProcesses, cancellationToken);
             }
         }, cancellationToken);
 
+        var placedWindows = new List<(string App, IntPtr Window)>();
         foreach (var application in applications)
         {
             await TryStepAsync($"open {Path.GetFileName(application.ExecutablePath)}", warnings, async () =>
             {
-                var display = expectedTargetLayout?.Displays.FirstOrDefault(path => path.IsActive
+                var display = !application.RunMinimized ? null : expectedTargetLayout?.Displays.FirstOrDefault(path => path.IsActive
                     && (string.Equals(path.KnownPhysicalDisplayId, application.DisplayId, StringComparison.OrdinalIgnoreCase)
                         || string.Equals(path.Identity.MonitorDevicePath, application.DisplayId, StringComparison.OrdinalIgnoreCase)));
-                if (display is null)
+                var window = await WindowsWindowManagementService.OpenProfileApplicationAsync(
+                    application, display, behaviour.HideTaskbar, _sessionApplications, _logger, cancellationToken);
+                if (window != IntPtr.Zero)
                 {
-                    throw new InvalidOperationException("The assigned display is unavailable.");
+                    placedWindows.Add((Path.GetFileName(application.ExecutablePath), window));
                 }
-
-                await WindowsWindowManagementService.OpenProfileApplicationAsync(
-                    application, display, behaviour.HideTaskbar, _sessionApplications, cancellationToken);
             }, cancellationToken);
         }
 
@@ -228,6 +229,11 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
 
             await Task.CompletedTask;
         }, cancellationToken);
+
+        foreach (var (app, window) in placedWindows)
+        {
+            _ = WindowsWindowManagementService.ObserveProfileWindowAfterSetupAsync(_logger, app, window, cancellationToken);
+        }
 
         return warnings.Count == 0
             ? ModeWorkflowResult.Ok()
@@ -362,8 +368,9 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
         return false;
     }
 
-    private ExternalProcessLaunchResult StartOrFindLauncher(AppSettings settings)
+    private ExternalProcessLaunchResult StartOrFindLauncher(AppSettings settings, out IReadOnlySet<int>? existingProcessIds)
     {
+        existingProcessIds = null;
         var existing = FindLauncherProcess(settings);
         if (existing is not null)
         {
@@ -372,13 +379,13 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
             return ExternalProcessLaunchResult.Started(processId);
         }
 
-        var requestedAtUtc = DateTime.UtcNow;
+        var executable = LauncherProcessRequestFactory.Create(settings.Launcher).ExecutablePath;
+        existingProcessIds = SessionApplicationProcesses.CaptureExistingProcesses(executable);
         var result = _launcherProcessService.StartStandardUser(settings.Launcher);
         using var started = result.Success ? GetProcess(result.ProcessId) : null;
         if (started is not null)
         {
-            var executable = LauncherProcessRequestFactory.Create(settings.Launcher).ExecutablePath;
-            _sessionApplications.Track(started, executable, requestedAtUtc);
+            _sessionApplications.Track(started, executable, existingProcessIds);
         }
 
         return result;
@@ -387,8 +394,10 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
     private async Task BringLauncherToForegroundAsync(
         AppSettings settings,
         int? launcherProcessId,
+        IReadOnlySet<int>? existingProcessIds,
         CancellationToken cancellationToken)
     {
+        var executable = LauncherProcessRequestFactory.Create(settings.Launcher).ExecutablePath;
         var focused = await WaitForApplicationWindowAsync(() =>
         {
             // Xbox activation returns the shell PID; find the application's own window.
@@ -398,6 +407,11 @@ public sealed class NativeModeWorkflowService : IModeWorkflowService
                 ? FindLauncherProcess(settings) : null;
             var target = discovered ?? launched;
             if (target is null || target.HasExited || target.MainWindowHandle == IntPtr.Zero) return false;
+
+            if (existingProcessIds is not null)
+            {
+                _sessionApplications.Track(target, executable, existingProcessIds, target.MainWindowHandle);
+            }
 
             if (settings.Launcher.Type.Equals("XboxApp", StringComparison.OrdinalIgnoreCase))
                 _windowManagementService.MoveWindowToPrimaryDisplay(target.MainWindowHandle);

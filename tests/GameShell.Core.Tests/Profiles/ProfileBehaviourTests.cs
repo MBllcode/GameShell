@@ -59,6 +59,7 @@ public sealed class ProfileBehaviourTests
             RedirectStandardOutput = true
         };
         using var unrelated = Process.Start(startInfo)!;
+        var existingProcessIds = SessionApplicationProcesses.CaptureExistingProcesses(commandPath);
         using var started = Process.Start(startInfo)!;
         try
         {
@@ -66,13 +67,22 @@ public sealed class ProfileBehaviourTests
             Assert.Equal("READY", await unrelated.StandardOutput.ReadLineAsync(readyTimeout.Token));
             Assert.Equal("READY", await started.StandardOutput.ReadLineAsync(readyTimeout.Token));
             var session = new SessionApplicationProcesses(NullLogger.Instance);
-            Assert.False(session.Track(unrelated, commandPath, unrelated.StartTime.ToUniversalTime().AddSeconds(1)));
-            Assert.True(session.Track(started, commandPath, started.StartTime.ToUniversalTime()));
+            var initialWindow = new IntPtr(1);
+            var finalWindow = new IntPtr(2);
+            Assert.False(session.Track(unrelated, commandPath, existingProcessIds, initialWindow));
+            Assert.True(session.Track(started, commandPath, existingProcessIds));
+            Assert.True(session.Track(started, commandPath, existingProcessIds, initialWindow));
+            Assert.True(session.Track(started, commandPath, existingProcessIds, finalWindow));
 
-            var closeRequests = new List<int>();
-            session.EndSession(closeApplications, CancellationToken.None, process => closeRequests.Add(process.Id));
-            session.EndSession(true, CancellationToken.None, process => closeRequests.Add(process.Id));
-            Assert.Equal(closeApplications ? new[] { started.Id } : [], closeRequests);
+            var closeRequests = new List<(int ProcessId, IntPtr Window)>();
+            bool RecordClose(Process process, IntPtr window)
+            {
+                closeRequests.Add((process.Id, window));
+                return true;
+            }
+            session.EndSession(closeApplications, CancellationToken.None, RecordClose);
+            session.EndSession(true, CancellationToken.None, RecordClose);
+            Assert.Equal(closeApplications ? new[] { (started.Id, finalWindow) } : [], closeRequests);
             Assert.False(unrelated.HasExited);
         }
         finally
