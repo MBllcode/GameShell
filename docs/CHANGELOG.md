@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-11-23
+
+- **Show window** opens applications with their own window size and placement, including apps that start in fullscreen. **In background** minimizes the window without activating it.
+- Improve tracking of session-started applications so Default setup can close them when **Close profile applications** is enabled. Improve shutdown handling for Playnite's desktop and fullscreen modes.
+- Keep the startup indicator in sync while restoring Default setup, and surface warnings when a profile activates with an incomplete action.
+
 ## [0.2.1] - 2026-11-21
 
 - Keep controller shortcuts active in the Windows tray and scoped to the profile where they were saved.

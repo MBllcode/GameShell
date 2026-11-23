@@ -4,6 +4,18 @@ using Xunit;
 namespace GameShell.Core.Tests;
 public sealed class ProfileWindowPlacementTests
 {
+    [Theory]
+    [InlineData("Playnite.DesktopApp.exe", "Playnite.FullscreenApp.exe")]
+    [InlineData("Playnite.FullscreenApp.exe", "Playnite.DesktopApp.exe")]
+    [InlineData("Audacity.exe", null)]
+    public void PlayniteWindowLookupUsesBothModesFromTheSameInstallation(string configured, string? alternate)
+    {
+        const string installation = @"D:\Games\Playnite";
+        var executable = Path.Combine(installation, configured);
+        Assert.Equal(alternate is null ? null : Path.Combine(installation, alternate),
+            PlayniteSessionApplication.GetAlternateExecutable(executable));
+    }
+
     [Fact]
     public async Task StartupReplacesEarlyWindowAndOverridesRestoredMonitor()
     {
@@ -24,7 +36,22 @@ public sealed class ProfileWindowPlacementTests
     [Fact]
     public async Task MissingFinalWindowReportsFailure()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => WindowsWindowManagementService.StabilizeApplicationWindowAsync(
-            () => IntPtr.Zero, _ => false, _ => { }, CancellationToken.None, () => Task.CompletedTask));
+        var ticks = 0;
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => WindowsWindowManagementService.StabilizeApplicationWindowAsync(
+            () => IntPtr.Zero, _ => false, _ => { }, CancellationToken.None, () => { ticks++; return Task.CompletedTask; }));
+        Assert.Contains("No application window", exception.Message);
+        Assert.Equal(50, ticks);
+    }
+
+    [Fact]
+    public async Task ReusedWindowNeedsOnlyTwoStableSamplesAfterPlacement()
+    {
+        var ticks = 0;
+        var placements = 0;
+        await WindowsWindowManagementService.StabilizeApplicationWindowAsync(
+            () => new IntPtr(1), _ => true, _ => placements++, CancellationToken.None,
+            () => { ticks++; return Task.CompletedTask; }, observeStartup: false);
+        Assert.Equal(1, placements);
+        Assert.Equal(2, ticks);
     }
 }

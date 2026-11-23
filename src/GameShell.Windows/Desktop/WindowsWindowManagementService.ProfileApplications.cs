@@ -2,59 +2,150 @@ using GameShell.Core.Displays;
 using GameShell.Core.Settings;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 
 namespace GameShell.Windows.Desktop;
 
 public sealed partial class WindowsWindowManagementService
 {
-    internal static async Task OpenProfileApplicationAsync(
+    internal static async Task<IntPtr> OpenProfileApplicationAsync(
         ProfileApplication application,
-        DisplayPathSnapshot display,
+        DisplayPathSnapshot? display,
         bool hideTaskbar,
         SessionApplicationProcesses sessionApplications,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
-        var workArea = FindApplicationArea(display, hideTaskbar);
-        if (workArea is null)
+        if (application.RunMinimized && (display is null || FindApplicationArea(display, hideTaskbar) is null))
         {
             throw new InvalidOperationException("Windows could not locate the assigned display.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         var isExecutable = string.Equals(Path.GetExtension(application.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase);
-        var window = isExecutable ? FindApplicationWindow(application.ExecutablePath) : IntPtr.Zero;
-        var requestedAtUtc = DateTime.UtcNow;
+        var alternateExecutable = application.RunMinimized
+            ? PlayniteSessionApplication.GetAlternateExecutable(application.ExecutablePath)
+            : null;
+        var window = isExecutable ? FindWindowForExecutable() : IntPtr.Zero;
+        var observeStartup = window == IntPtr.Zero;
+        var existingProcessIds = isExecutable && window == IntPtr.Zero
+            ? SessionApplicationProcesses.CaptureExistingProcesses(application.ExecutablePath)
+            : null;
         using var started = window == IntPtr.Zero ? Process.Start(new ProcessStartInfo
         {
             FileName = application.ExecutablePath,
             WorkingDirectory = Path.GetDirectoryName(application.ExecutablePath)!,
             UseShellExecute = true,
+            Arguments = alternateExecutable is null ? string.Empty : "--hidesplashscreen",
             WindowStyle = application.RunMinimized ? ProcessWindowStyle.Minimized : ProcessWindowStyle.Normal
         }) : null;
 
-        if (isExecutable && started is not null)
+        if (existingProcessIds is not null && started is not null)
         {
-            sessionApplications.Track(started, application.ExecutablePath, requestedAtUtc);
+            sessionApplications.Track(started, application.ExecutablePath, existingProcessIds);
         }
 
+        var applicationName = Path.GetFileName(application.ExecutablePath);
+        if (!application.RunMinimized)
+        {
+            if (window != IntPtr.Zero)
+            {
+                if (IsIconicProfileWindow(window)) ShowWindow(window, 9); // SW_RESTORE
+                SetForegroundWindow(window);
+            }
+            logger.LogInformation("[PROFILE APPLICATION WINDOW] App={Application} Stage=DefaultWindow", applicationName);
+            return IntPtr.Zero;
+        }
+
+        var assignedDisplay = display ?? throw new InvalidOperationException("The assigned display is unavailable.");
+        var measuredWindows = new HashSet<IntPtr>();
         await StabilizeApplicationWindowAsync(
-            () => isExecutable ? FindApplicationWindow(application.ExecutablePath) : FindDocumentWindow(application.ExecutablePath),
-            candidate => IsOnAssignedDisplay(candidate, display, application.RunMinimized),
-            candidate => PlaceProfileApplicationWindow(candidate, application, display, hideTaskbar),
-            cancellationToken);
+            () =>
+            {
+                var candidate = isExecutable ? FindWindowForExecutable() : FindDocumentWindow(application.ExecutablePath);
+                if (existingProcessIds is not null && candidate != IntPtr.Zero && candidate != window)
+                {
+                    TrackLaunchedApplicationWindow(candidate, application.ExecutablePath, alternateExecutable, existingProcessIds, sessionApplications);
+                }
+
+                window = candidate;
+                return candidate;
+            },
+            IsIconicProfileWindow,
+            candidate =>
+            {
+                var firstPlacement = measuredWindows.Add(candidate);
+                if (firstPlacement) LogProfileWindowGeometry(logger, applicationName, "BeforePlacement", candidate);
+                PlaceMinimizedProfileApplicationWindow(candidate, assignedDisplay, hideTaskbar);
+                if (firstPlacement) LogProfileWindowGeometry(logger, applicationName, "AfterPlacement", candidate);
+            },
+            cancellationToken,
+            observeStartup: observeStartup && alternateExecutable is null);
+        LogProfileWindowGeometry(logger, applicationName, "Settled", window);
+        return window;
+
+        IntPtr FindWindowForExecutable()
+        {
+            var primaryWindow = FindApplicationWindow(application.ExecutablePath);
+            return primaryWindow != IntPtr.Zero || alternateExecutable is null
+                ? primaryWindow
+                : FindApplicationWindow(alternateExecutable);
+        }
+    }
+
+    private static void TrackLaunchedApplicationWindow(
+        IntPtr window, string executablePath, string? alternateExecutable,
+        IReadOnlySet<int> existingProcessIds, SessionApplicationProcesses sessionApplications)
+    {
+        if (GetWindowThreadProcessId(window, out var processId) == 0) return;
+
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            var actualPath = process.MainModule?.FileName;
+            if (actualPath is not null
+                && (string.Equals(actualPath, executablePath, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(actualPath, alternateExecutable, StringComparison.OrdinalIgnoreCase)))
+            {
+                sessionApplications.Track(process, actualPath, existingProcessIds, window);
+            }
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // A splash window can disappear between enumeration and lookup.
+        }
+    }
+
+    internal static bool RequestSessionApplicationClose(Process process, IntPtr window)
+    {
+        if (window != IntPtr.Zero && IsWindowVisible(window)
+            && GetWindowThreadProcessId(window, out var processId) != 0 && processId == process.Id
+            && PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero))
+        {
+            return true;
+        }
+
+        return process.CloseMainWindow();
     }
 
     internal static async Task StabilizeApplicationWindowAsync(
         Func<IntPtr> findWindow, Func<IntPtr, bool> correctlyPlaced, Action<IntPtr> place,
-        CancellationToken cancellationToken, Func<Task>? wait = null)
+        CancellationToken cancellationToken, Func<Task>? wait = null, bool observeStartup = true)
     {
+        const int maximumSamples = 51;
+        const int startupSamples = 16;
+        const int stableSamplesAfterLaunch = 6;
+        const int stableSamplesForExistingWindow = 2;
+        var requiredStableSamples = observeStartup ? stableSamplesAfterLaunch : stableSamplesForExistingWindow;
         wait ??= () => Task.Delay(500, cancellationToken);
         var lastWindow = IntPtr.Zero;
         var stableSamples = 0;
-        for (var attempt = 0; attempt < 120; attempt++)
+        var sawWindow = false;
+        for (var sample = 0; sample < maximumSamples; sample++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidate = findWindow();
+            sawWindow |= candidate != IntPtr.Zero;
             if (candidate == IntPtr.Zero) { stableSamples = 0; lastWindow = IntPtr.Zero; }
             else if (candidate != lastWindow || !correctlyPlaced(candidate))
             {
@@ -63,23 +154,12 @@ public sealed partial class WindowsWindowManagementService
                 stableSamples = 0;
             }
             else stableSamples++;
-            // Observe startup for at least eight seconds, and require three seconds
-            // without a replacement HWND or an application restoring its old position.
-            if (attempt >= 16 && stableSamples >= 6) return;
-            await wait();
+            if ((!observeStartup || sample >= startupSamples) && stableSamples >= requiredStableSamples) return;
+            if (sample + 1 < maximumSamples) await wait();
         }
-        throw new InvalidOperationException("The application's final window did not settle on its assigned display.");
-    }
-
-    private static bool IsOnAssignedDisplay(IntPtr window, DisplayPathSnapshot display, bool minimized)
-    {
-        if (minimized) return IsIconicProfileWindow(window);
-        if (!GetWindowRect(window, out var bounds) || IsIconicProfileWindow(window)) return false;
-        var monitor = MonitorFromProfileWindow(window, 2);
-        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        return GetMonitorInfo(monitor, ref info)
-            && info.MonitorArea.Left == display.PositionX && info.MonitorArea.Top == display.PositionY
-            && bounds.Width >= info.WorkArea.Width - 16 && bounds.Height >= info.WorkArea.Height - 16;
+        throw new InvalidOperationException(sawWindow
+            ? "The application's window did not settle on its assigned display within 25 seconds."
+            : "No application window was found within 25 seconds.");
     }
 
     [DllImport("user32.dll", EntryPoint = "MonitorFromWindow")]
@@ -87,20 +167,16 @@ public sealed partial class WindowsWindowManagementService
     [DllImport("user32.dll", EntryPoint = "IsIconic")]
     private static extern bool IsIconicProfileWindow(IntPtr window);
 
-    private static void PlaceProfileApplicationWindow(IntPtr window, ProfileApplication application, DisplayPathSnapshot display, bool hideTaskbar)
+    private static void PlaceMinimizedProfileApplicationWindow(IntPtr window, DisplayPathSnapshot display, bool hideTaskbar)
     {
-        var workArea = FindApplicationArea(display, hideTaskbar)
+        var area = FindApplicationArea(display, hideTaskbar)
             ?? throw new InvalidOperationException("The assigned display is unavailable.");
-        ShowWindow(window, application.RunMinimized ? 4 : 9); // SW_SHOWNOACTIVATE / SW_RESTORE
+        ShowWindow(window, 4); // SW_SHOWNOACTIVATE
         if (!GetWindowRect(window, out var bounds))
         {
             throw new InvalidOperationException("The application window is unavailable.");
         }
 
-        var borderless = IsBorderlessApplicationWindow(GetApplicationWindowStyle(window, -16));
-        var area = borderless && !application.RunMinimized
-            ? FindApplicationArea(display, true) ?? workArea
-            : workArea;
         var width = Math.Clamp(bounds.Width, 1, area.Width);
         var height = Math.Clamp(bounds.Height, 1, area.Height);
         if (!SetWindowPos(window, IntPtr.Zero, area.Left + (area.Width - width) / 2,
@@ -109,30 +185,7 @@ public sealed partial class WindowsWindowManagementService
             throw new InvalidOperationException("Windows could not move the application window.");
         }
 
-        if (application.RunMinimized)
-        {
-            ShowWindow(window, 7); // SW_SHOWMINNOACTIVE
-        }
-        else
-        {
-            SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0, SwpNoSize | 0x0002 | SwpNoActivate);
-            // Maximizing a borderless fullscreen game constrains its render surface to
-            // rcWork (e.g. 3440x1380), even though its monitor is 3440x1440.
-            // Keep it restored and size it directly to rcMonitor instead.
-            if (!borderless) ShowWindow(window, 3);
-            if (hideTaskbar || borderless)
-            {
-                // Hiding Shell_TrayWnd does not release the shell's reserved work area.
-                // SW_MAXIMIZE alone therefore leaves a taskbar-sized gap. Explicitly
-                // expand the maximized window to the physical monitor bounds.
-                if (!SetWindowPos(window, IntPtr.Zero, area.Left, area.Top, area.Width, area.Height,
-                    SwpNoZOrder | SwpNoActivate | 0x0020)) // SWP_FRAMECHANGED
-                {
-                    throw new InvalidOperationException("Windows could not expand the application to the full display.");
-                }
-            }
-            SetForegroundWindow(window);
-        }
+        ShowWindow(window, 7); // SW_SHOWMINNOACTIVE
     }
 
     private static IntPtr FindDocumentWindow(string path)
@@ -156,8 +209,6 @@ public sealed partial class WindowsWindowManagementService
         }
         return matches.Count == 1 ? matches[0] : IntPtr.Zero;
     }
-
-    internal static bool IsBorderlessApplicationWindow(int style) => (style & 0x00C00000) == 0; // WS_CAPTION
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetApplicationWindowStyle(IntPtr window, int index);

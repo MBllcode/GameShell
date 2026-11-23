@@ -54,7 +54,7 @@ Add detected screens, drag them into position, and set the primary display, reso
 
 In **Profile applications**, select **Add application or file** under a monitor. Search by name, paste a full path, or choose a file in the Windows picker. Search builds a local index of common file types across ready drives, including executables, Visual Studio solutions, spreadsheets, and PDFs. Documents open in their associated Windows app.
 
-Use **Show window** to show a maximized window on its assigned monitor, or **In background** to minimize it without activating it. Move an entry with **Move to another display** or drag its name to a different monitor. Each card shows the full path and launch mode. Leave the monitor lists empty for a display-only profile.
+Use **Show window** to open the application at its own window size and position, or **In background** to minimize it without activating it. Move an entry with **Move to another display** or drag its name to a different monitor. Each card shows the full path and launch mode. Leave the monitor lists empty for a display-only profile.
 
 [![Profile applications with a project on the main monitor and Spotify in the background on the side monitor](docs/screenshots/application.png)](docs/screenshots/application.png)
 

@@ -38,6 +38,40 @@ public sealed class ModeOrchestratorTests
     }
 
     [Fact]
+    public async Task StartupWorkTransitionUsesTheExistingProgressOwner()
+    {
+        var progress = new TransientOperationStateService(NullLogger<TransientOperationStateService>.Instance);
+        var startupId = progress.Begin(TransientOperationKind.Startup, TransientOperationPhase.SynchronizingDisplays);
+        var orchestrator = new ModeOrchestrator(
+            new FakeSettingsService(new AppSettings()), new FakeModeWorkflowService(), new FakeDisplayTransitionService(),
+            new FakeRuntimeStateService(new RuntimeState()), null, NullLogger<ModeOrchestrator>.Instance,
+            transientOperationStateService: progress);
+
+        var result = await orchestrator.EnterWorkModeAsync();
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(TransientOperationKind.Startup, progress.Current.Kind);
+        Assert.Equal(startupId, progress.Current.TransitionId);
+        Assert.Equal(TransientOperationPhase.RestoringDesktop, progress.Current.Phase);
+    }
+
+    [Fact]
+    public async Task ProfileActivationReportsApplicationWarningsWithoutFailingTheDisplaySwitch()
+    {
+        var settings = new AppSettings();
+        settings.Display.GamingProfiles.Add(new DisplayLayoutProfile { Name = "TV" });
+        const string warning = "Application window was not found.";
+        var workflow = new FakeModeWorkflowService { PostGamingResult = ModeWorkflowResult.Ok(warning) };
+        var orchestrator = new ModeOrchestrator(new FakeSettingsService(settings), workflow, new FakeDisplayTransitionService(),
+            new FakeRuntimeStateService(new RuntimeState()), NullLogger<ModeOrchestrator>.Instance);
+
+        var result = await orchestrator.EnterGameShellWithDisplayProfileAsync("TV");
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(warning, result.Warning);
+    }
+
+    [Fact]
     public async Task EnterProfile_DoesNotWaitForLegacyCompletionDelay()
     {
         var settings = new AppSettings();
@@ -584,6 +618,7 @@ public sealed class ModeOrchestratorTests
         }
 
         public Action? OnCompleteGaming { get; init; }
+        public ModeWorkflowResult PostGamingResult { get; init; } = ModeWorkflowResult.Ok();
 
         public ModeWorkflowResult PostWorkResult { get; init; } = ModeWorkflowResult.Ok();
 
@@ -609,7 +644,7 @@ public sealed class ModeOrchestratorTests
             CancellationToken cancellationToken = default)
         {
             OnCompleteGaming?.Invoke();
-            return Task.FromResult(ModeWorkflowResult.Ok());
+            return Task.FromResult(PostGamingResult);
         }
 
         public Task<ModeWorkflowResult> RunGamingWorkflowAsync(
